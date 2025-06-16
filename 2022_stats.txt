@@ -1,0 +1,29 @@
+<h2><span class='bold'>Alex's Flight Log (2022)</span></h2><p>Total Distance Flown: <span class='bold'>88,374</span>mi
+<br>Total Time in Air: <span class='bold'>7 days, 4:03:00</span>
+<br>Total Flights: <span class='bold'>35</span>
+<br>Number of Airlines: <span class='bold'>6</span>, Countries: <span class='bold'>8</span>, Airports: <span class='bold'>22</span>
+<p>Longest interval between flights: <span class='bold'>157 days 18:22:00</span> (2016-07-10 to 2016-12-15)
+<br>Month with most flying: <span class='bold'>2021-06</span> (10 flights, 38h 32m) or <span class='bold'>2024-01</span> (8 flights, 47h 10m)
+<p>Shortest flight: <span class='bold'>IAH</span> to <span class='bold'>AUS</span> (140mi, 31min)
+<br>Longest flight: <span class='bold'>SFO</span> to <span class='bold'>SIN</span> (8,446mi, 16h 9m)</p>
+<p>Airport distribution (top countries): <span class='bold'>United States</span>: 12, <span class='bold'>New Zealand</span>: 3, <span class='bold'>Germany</span>: 2, <span class='bold'>Costa Rica</span>: 1, <span class='bold'>Dominican Republic</span>: 1
+<br>Airports by total visits: <span class='bold'>SFO</span>: 21, <span class='bold'>AKL</span>: 4, <span class='bold'>SIN</span>: 4, <span class='bold'>EWR</span>: 3, <span class='bold'>IAH</span>: 3
+<br>Top routes: <span class='bold'>EWR</span> to <span class='bold'>SFO</span>: 3, <span class='bold'>IAH</span> to <span class='bold'>SJO</span>: 2, <span class='bold'>IAH</span> to <span class='bold'>SFO</span>: 2, <span class='bold'>SFO</span> to <span class='bold'>SLC</span>: 2, <span class='bold'>SFO</span> to <span class='bold'>SIN</span>: 2
+<br>Top airlines: <span class='bold'>United</span>: 23, <span class='bold'>Lufthansa</span>: 5, <span class='bold'>Air New Zealand</span>: 3, <span class='bold'>Alaska</span>: 2, <span class='bold'>JetStar</span>: 1
+<p>Early arrivals: <span class='bold'>24</span> (69%)
+<br>On-time arrivals (within 15min): <span class='bold'>3</span> (9%)
+<br>Late arrivals (up to 1hr delay): <span class='bold'>7</span> (20%)
+<br>Really late arrivals (>1hr delay): <span class='bold'>1</span> (3%)
+</p>
+<p>Morning flights (5am-12p): <span class='bold'>12</span> (34%)
+<br>Afternoon flights (12p-6p): <span class='bold'>10</span> (29%)
+<br>Evening flights (6p-11p): <span class='bold'>10</span> (29%)
+<br>Late night flights (11p-5a): <span class='bold'>3</span> (9%)
+</p>
+<p><span class='bold'>Domestic</span>: 28,627mi, 20 flights
+<br><span class='bold'>International</span>: 59,747mi, 15 flights</p>
+<p><span class='bold'>Economy</span>: 58,251mi, 22 flights
+<br><span class='bold'>International First</span>: 5,699mi, 1 flights
+<br><span class='bold'>Lie-flat Business</span>: 9,081mi, 2 flights
+<br><span class='bold'>Premium Economy</span>: 7,529mi, 3 flights
+<br><span class='bold'>Recliner First</span>: 7,814mi, 7 flights</p>

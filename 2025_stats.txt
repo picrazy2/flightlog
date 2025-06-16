@@ -1,0 +1,25 @@
+<h2><span class='bold'>Alex's Flight Log (2025)</span></h2><p>Total Distance Flown: <span class='bold'>33,333</span>mi
+<br>Total Time in Air: <span class='bold'>3 days, 6:14:00</span>
+<br>Total Flights: <span class='bold'>23</span>
+<br>Number of Airlines: <span class='bold'>10</span>, Countries: <span class='bold'>12</span>, Airports: <span class='bold'>24</span>
+<p>Longest interval between flights: <span class='bold'>157 days 18:22:00</span> (2016-07-10 to 2016-12-15)
+<br>Month with most flying: <span class='bold'>2021-06</span> (10 flights, 38h 32m) or <span class='bold'>2024-01</span> (8 flights, 47h 10m)
+<p>Shortest flight: <span class='bold'>AMS</span> to <span class='bold'>LCY</span> (209mi, 44min)
+<br>Longest flight: <span class='bold'>PVG</span> to <span class='bold'>ATH</span> (5,329mi, 11h 38m)</p>
+<p>Airport distribution (top countries): <span class='bold'>United Kingdom</span>: 5, <span class='bold'>United States</span>: 4, <span class='bold'>Spain</span>: 3, <span class='bold'>China</span>: 2, <span class='bold'>France</span>: 2
+<br>Airports by total visits: <span class='bold'>STN</span>: 5, <span class='bold'>LHR</span>: 4, <span class='bold'>LGW</span>: 2, <span class='bold'>TBS</span>: 2, <span class='bold'>ATH</span>: 2
+<br>Top routes: <span class='bold'>CDG</span> to <span class='bold'>SEN</span>: 2, <span class='bold'>MLA</span> to <span class='bold'>STN</span>: 2, <span class='bold'>AGA</span> to <span class='bold'>TFS</span>: 1, <span class='bold'>SAW</span> to <span class='bold'>STN</span>: 1, <span class='bold'>OZZ</span> to <span class='bold'>STN</span>: 1
+<br>Top airlines: <span class='bold'>Ryanair</span>: 5, <span class='bold'>British Airways</span>: 4, <span class='bold'>EasyJet</span>: 3, <span class='bold'>Juneyao</span>: 2, <span class='bold'>Pegasus</span>: 2
+<p>Early arrivals: <span class='bold'>5</span> (22%)
+<br>On-time arrivals (within 15min): <span class='bold'>11</span> (48%)
+<br>Late arrivals (up to 1hr delay): <span class='bold'>5</span> (22%)
+<br>Really late arrivals (>1hr delay): <span class='bold'>2</span> (9%)
+</p>
+<p>Morning flights (5am-12p): <span class='bold'>5</span> (22%)
+<br>Afternoon flights (12p-6p): <span class='bold'>9</span> (39%)
+<br>Evening flights (6p-11p): <span class='bold'>7</span> (30%)
+<br>Late night flights (11p-5a): <span class='bold'>2</span> (9%)
+</p>
+<p><span class='bold'>Domestic</span>: 6,513mi, 4 flights
+<br><span class='bold'>International</span>: 26,820mi, 19 flights</p>
+<p><span class='bold'>Economy</span>: 33,333mi, 23 flights</p>

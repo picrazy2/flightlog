@@ -1,0 +1,26 @@
+<h2><span class='bold'>Alex's Flight Log (2024)</span></h2><p>Total Distance Flown: <span class='bold'>106,414</span>mi
+<br>Total Time in Air: <span class='bold'>9 days, 6:00:00</span>
+<br>Total Flights: <span class='bold'>46</span>
+<br>Number of Airlines: <span class='bold'>18</span>, Countries: <span class='bold'>14</span>, Airports: <span class='bold'>30</span>
+<p>Longest interval between flights: <span class='bold'>157 days 18:22:00</span> (2016-07-10 to 2016-12-15)
+<br>Month with most flying: <span class='bold'>2021-06</span> (10 flights, 38h 32m) or <span class='bold'>2024-01</span> (8 flights, 47h 10m)
+<p>Shortest flight: <span class='bold'>HNL</span> to <span class='bold'>LIH</span> (102mi, 24min)
+<br>Longest flight: <span class='bold'>SFO</span> to <span class='bold'>TPE</span> (6,469mi, 13h 23m)</p>
+<p>Airport distribution (top countries): <span class='bold'>China</span>: 9, <span class='bold'>United States</span>: 6, <span class='bold'>United Kingdom</span>: 3, <span class='bold'>Peru</span>: 2, <span class='bold'>Canada</span>: 1
+<br>Airports by total visits: <span class='bold'>PEK</span>: 14, <span class='bold'>SFO</span>: 11, <span class='bold'>LHR</span>: 7, <span class='bold'>PKX</span>: 5, <span class='bold'>EWR</span>: 3
+<br>Top routes: <span class='bold'>KJI</span> to <span class='bold'>URC</span>: 2, <span class='bold'>CUZ</span> to <span class='bold'>LIM</span>: 2, <span class='bold'>PEK</span> to <span class='bold'>UBN</span>: 2, <span class='bold'>NRT</span> to <span class='bold'>PEK</span>: 2, <span class='bold'>LHR</span> to <span class='bold'>SFO</span>: 2
+<br>Top airlines: <span class='bold'>Air China</span>: 10, <span class='bold'>United</span>: 9, <span class='bold'>Etihad</span>: 4, <span class='bold'>China Southern</span>: 3, <span class='bold'>Ryanair</span>: 2
+<p>Early arrivals: <span class='bold'>23</span> (50%)
+<br>On-time arrivals (within 15min): <span class='bold'>13</span> (28%)
+<br>Late arrivals (up to 1hr delay): <span class='bold'>7</span> (15%)
+<br>Really late arrivals (>1hr delay): <span class='bold'>3</span> (7%)
+</p>
+<p>Morning flights (5am-12p): <span class='bold'>11</span> (24%)
+<br>Afternoon flights (12p-6p): <span class='bold'>15</span> (33%)
+<br>Evening flights (6p-11p): <span class='bold'>15</span> (33%)
+<br>Late night flights (11p-5a): <span class='bold'>5</span> (11%)
+</p>
+<p><span class='bold'>Domestic</span>: 15,307mi, 16 flights
+<br><span class='bold'>International</span>: 91,107mi, 30 flights</p>
+<p><span class='bold'>Economy</span>: 94,821mi, 44 flights
+<br><span class='bold'>Lie-flat Business</span>: 11,593mi, 2 flights</p>

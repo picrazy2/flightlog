@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Flight Log</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v1.10.0/mapbox-gl.js'></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-1.7.1.min.js"></script>
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v1.10.0/mapbox-gl.css' rel='stylesheet' />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      h2,
+      h3 {
+        margin: 10px;
+        font-size: 1.2em;
+        font-family: 'open_sansbold';
+      }
+
+      h3 {
+        font-size: 1em;
+        font-family: 'open_sansbold';
+      }
+
+      p {
+        font-size: 0.85em;
+        margin: 10px;
+        text-align: left;
+        font-family: 'open_sansregular';
+      }
+
+      @font-face {
+          font-family: 'open_sansbold';
+          src: url('fonts/opensans-bold-webfont.woff2') format('woff2'),
+               url('fonts/opensans-bold-webfont.woff') format('woff');
+          font-weight: normal;
+          font-style: normal;
+      }
+      
+      @font-face {
+          font-family: 'open_sansregular';
+          src: url('fonts/opensans-regular-webfont.woff2') format('woff2'),
+               url('fonts/opensans-regular-webfont.woff') format('woff');
+          font-weight: normal;
+          font-style: normal;
+      }
+
+      /* MAPPPPPP */
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+
+
+      /* LAYERS: top left */
+      #menu {
+            background: #fff;
+            position: absolute;
+            z-index: 1;
+            top: 20px;
+            left: 20px;
+            border-radius: 3px;
+            width: 100px;
+            border: 1px solid rgba(0, 0, 0, 0.4);
+            font-family: 'open_sansregular', sans-serif;
+        }
+        #menu a {
+            font-size: 13px;
+            color: #404040;
+            display: block;
+            margin: 0;
+            padding: 0;
+            padding: 10px;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+            text-align: center;
+        }
+        #menu a:last-child {
+            border: none;
+        }
+        #menu a:hover {
+            background-color: #f8f8f8;
+            color: #404040;
+        }
+        #menu a.active {
+            background-color: #3887be;
+            color: #ffffff;
+        }
+        #menu a.active:hover {
+            background: #3074a4;
+        }
+
+
+
+
+      /*INFO: top right */
+      .map-overlay {
+        position: absolute;
+/*        bottom: 0;
+*/        background: rgba(255, 255, 255, 0.8);
+        margin-right: 20px;
+        font-family: 'open_sansregular', sans-serif;
+        overflow: auto;
+        border-radius: 3px;
+      }
+
+      #city {
+        top: 0;
+        right: 0;
+        height: 650px;
+        margin-top: 20px;
+        width: 360px;
+      }
+
+      #features {
+/*        top: 200;
+*/        right: 0;
+        height: 330px;
+        margin-top: 510px;
+        width: 350px;
+        visibility: hidden;
+      }
+
+
+
+      /* LEGEND: bottom left */
+      #legend {
+        padding: 10px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+/*        line-height: 20px;
+*/        bottom: 40px;
+        left: 20px;
+        font-family: 'open_sansregular', sans-serif;
+      }
+      .legend-key {
+        display: inline-block;
+        border-radius: 20%;
+        width: 18px;
+        height: 18px;
+        margin-right: 5px;
+      }
+      .legend-key-circle {
+        display: inline-block;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        margin-right: 5px;
+      }
+
+
+      .bold {font-family: 'open_sansbold';}
+
+
+
+
+        #play-button {
+          position: absolute;
+          top: 40px;
+          right: 20px;
+          display: inline-block;
+          background: #f08080;
+          border-radius: 3px;
+          border: none;
+          color: white;
+          margin: 0;
+          padding: 0 12px;
+          width: 60px;
+          cursor: pointer;
+          height: 30px;
+        }
+
+        #play-button:hover {
+          background-color: #696969;
+        }    
+        
+        .ticks {
+          font-size: 15px;
+        }
+
+        .track,
+        .track-inset,
+        .track-overlay {
+          stroke-linecap: round;
+        }
+
+        .track {
+          stroke: #000;
+          stroke-opacity: 0.3;
+          stroke-width: 10px;
+        }
+
+        .track-inset {
+          stroke: #dcdcdc;
+          stroke-width: 8px;
+        }
+
+        .track-overlay {
+          pointer-events: stroke;
+          stroke-width: 50px;
+          stroke: transparent;
+          cursor: crosshair;
+        }
+
+        .handle {
+          fill: #fff;
+          stroke: #000;
+          stroke-opacity: 0.5;
+          stroke-width: 1.25px;
+        }
+
+
+    </style>
+  </head>
+  <body>
+    <nav id='menu'></nav>
+    <div id='map'></div>
+    <div class='map-overlay' id='city'>
+      <div id='stats'>
+      </div>
+    </div>
+    <div class='map-overlay' id='features'>
+      <div id='pd'>
+      </div>
+    </div>
+    <div class='map-overlay' id='legend'>
+      <div id="vis"></div><button id="play-button">Play</button>
+    </div>
+
+  </body>
+</html>
+
+<script>
+
+
+
+  // TO MAKE THE MAP APPEAR YOU MUST
+  // ADD YOUR ACCESS TOKEN FROM
+  // https://account.mapbox.com
+  mapboxgl.accessToken = 'pk.eyJ1IjoicGljcmF6eTIiLCJhIjoiY2thMG1vdDQ0MHMxajNtcXI1ZnpiYnFpZiJ9.iYJgxRpR27z5rtZGoGXl2g';
+  // mapboxgl.accessToken = 'pk.eyJ1IjoicGljcmF6eTIiLCJhIjoiY2thMG1xMnR2MDMxeDNtazBjYjVrcjAxZSJ9.Ku2z0w2wiQ9RmhN8oTbbYQ'
+
+  var ranges_raw = read_stats('month_range');
+  var years_raw = ranges_raw.split('\n')[0].split(',');
+  var years = []
+  for(var i = 0; i <years_raw.length; i++) {
+    years.push(parseInt(years_raw[i]))
+  }
+
+  var first_month = ranges_raw.split('\n')[1].split(',')[0];
+  var last_month = ranges_raw.split('\n')[1].split(',')[1];
+
+  var route_year_ids = []
+  var airport_year_ids = []
+
+  for(var i = 0; i < years.length; i++) {
+    route_year_ids.push('routes_' + years[i])
+    airport_year_ids.push('airports_' + years[i])
+  }
+
+
+  function get_time(minutes) {
+    return [Math.trunc(Math.floor(minutes/60)), Math.trunc(minutes % 60)]
+  }
+  function get_time_str(minutes) {
+    if(get_time(minutes)[0] == 0) {
+      return get_time(minutes)[1] + 'min'
+    } else {
+      return get_time(minutes)[0] + 'h ' + get_time(minutes)[1] + 'm'           
+    }
+  }
+
+  // read stats
+
+  function read_stats(file_name){
+      var rawFile = new XMLHttpRequest();
+      var text;
+      rawFile.open("GET", "https://picrazy2.github.io/flightlog/" + file_name + ".txt", false);
+      rawFile.onreadystatechange = function ()
+      {
+          if(rawFile.readyState === 4)
+          {
+              if(rawFile.status === 200 || rawFile.status == 0)
+              {
+                  text = rawFile.responseText;
+              }
+          }
+      }
+      rawFile.send(null);
+      return text;
+  }
+
+  
+  var all_stats = read_stats('all_stats')
+
+  var year_stats = []
+  for(var i = 0; i < years.length; i++) {
+    year_stats.push(read_stats(years[i] + '_stats'))
+  }
+
+  document.getElementById('stats').innerHTML = all_stats
+
+
+  var map = new mapboxgl.Map({
+    container: 'map', // container id
+    style: 'mapbox://styles/picrazy2/cka8a1z1r0d591io0ebssgmz3',
+    center: [-100, 45],
+    zoom: 1.3
+  });
+
+
+  map.on('load', function() {
+
+
+    map.moveLayer('admin-1-boundary-bg', 'settlement-subdivision-label')
+    map.moveLayer('admin-0-boundary-bg', 'settlement-subdivision-label')
+    map.moveLayer('admin-1-boundary', 'settlement-subdivision-label')
+    map.moveLayer('admin-0-boundary', 'settlement-subdivision-label')
+    map.moveLayer('admin-0-boundary-disputed', 'settlement-subdivision-label')
+
+
+    function add_routes(file_name, visibility, opacity) {
+      map.addSource(file_name, {
+        'type': 'geojson',
+        'data': 'https://picrazy2.github.io/flightlog/' + file_name + '.geojson'
+      });
+
+      map.addLayer({
+        'id': file_name,
+        'source': file_name,
+        'type': 'line',
+        'layout': {
+          'visibility': visibility
+        },
+        'paint': {
+          'line-color': ["match",["get", "domint"],['Domestic'],'#087E8B','#FF5A5F'],
+          'line-width': [
+            "interpolate",
+            ["linear"],
+            ["get", "count"],
+            1,
+            2,
+            19,
+            19
+          ],
+          'line-opacity': opacity
+
+        }
+      }, 'admin-1-boundary-bg');      
+    }
+
+
+    function add_airports(file_name, visibility, opacity) {
+      map.addSource(file_name, {
+        'type': 'geojson',
+        'data': 'https://picrazy2.github.io/flightlog/' + file_name + '.geojson'
+      });
+
+      map.addLayer({
+        'id': file_name,
+        'source': file_name,
+        'type': 'symbol',
+        'layout': {
+          'icon-image': "airport-15",
+          'icon-allow-overlap': true,
+          'icon-size': [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            0,
+            [
+              "interpolate",
+              ["linear"],
+              ["get", "total"],
+              0,
+              0.2,
+              60,
+              0.8
+            ],
+            22,
+            [
+              "interpolate",
+              ["linear"],
+              ["get", "total"],
+              0,
+              5,
+              60,
+              20
+            ]
+          ],
+          'visibility': visibility
+        },
+        'paint': {'icon-opacity': opacity}
+      }, 'admin-1-boundary-bg');
+    }
+
+
+    function add_s(num, s) {
+      if(num == 1) {
+        return s
+      } else {
+        return s + 's'
+      }
+    }
+
+    function parse_hist(hist, s) {
+      var hist_split = hist.split(';')
+      var hist_str = ''
+      for(var i = 0; i < hist_split.length; i++) {
+        var further_split = hist_split[i].split(',')
+        if(i > 0) {
+          hist_str += ', '
+        }
+        hist_str += further_split[0] + ': <span class=\'bold\'>' + further_split[1] + '</span> ' + add_s(further_split[1], s)
+      }
+      return hist_str 
+    }
+
+    function hover_routes(name) {
+      var path_popups = []
+      map.on('mouseenter', name, function(e) {
+        if(path_popups.length == 0) {
+          var start = e.features[0].properties.start_iata
+          var end = e.features[0].properties.end_iata
+          var origin_hist_split = e.features[0].properties.origin_hist.split(';')
+          var origin_hist_str = ''
+          for(var i = 0; i < origin_hist_split.length; i++) {
+            var further_split = origin_hist_split[i].split(',')
+            if(i > 0) {
+              origin_hist_str += ', '
+            }
+            if(further_split[0] == start) {
+              origin_hist_str += start + '-' + end + ': <span class=\'bold\'>' + further_split[1] + '</span> ' + add_s(further_split[1], 'time')
+            } else {
+              origin_hist_str += end + '-' + start + ': <span class=\'bold\'>' + further_split[1] + '</span> ' + add_s(further_split[1], 'time')
+            }
+          }
+
+          path_popups.push(new mapboxgl.Popup({closeButton: false})
+            .setLngLat(e.lngLat)
+            .setHTML(
+              '<p style=\'font-size:15px\'>Between <span class=\'bold\'>' + start + '</span> and <span class=\'bold\'>' + end + '</span>'
+              +'<br>' + e.features[0].properties.start_city_country.split(',')[0] + ' and ' + e.features[0].properties.end_city_country.split(',')[0] + '</p>'
+              +'<p style=\'font-size:13px\'>' + e.features[0].properties.domint + ', <span class=\'bold\'>' + Math.trunc(e.features[0].properties.dist) + '</span>mi, ' + get_time_str(e.features[0].properties.dur)
+              +'<br> Flown <span class=\'bold\'>' + e.features[0].properties.count + '</span> ' + add_s(e.features[0].properties.count, 'time') + ' (' +  origin_hist_str + ')'
+              +'<br>' + parse_hist(e.features[0].properties.class_hist, 'time') 
+              +'<br>' + parse_hist(e.features[0].properties.airline_hist, 'time')  
+              +'<br>First time: <span class=\'bold\'>' + e.features[0].properties.earliest_date + '</span>'
+              +'<br>Last time: <span class=\'bold\'>' + e.features[0].properties.latest_date + '</span>'
+              +'</p>'
+              )
+            .addTo(map));
+        }
+      });
+
+      map.on('mouseleave', name, function() {
+        for(var i = 0; i < path_popups.length; i++) {
+          path_popups[i].remove()
+        }
+        path_popups = []
+
+      });     
+    }
+
+
+
+    function click_airports(name) {
+      map.on('click', name, function(e) {
+        var dest_set = new Set()
+        var dep_hist = e.features[0].properties.dep_dest_hist.split(';')
+        var arr_hist = e.features[0].properties.arr_dest_hist.split(';')
+        for(var i = 0; i < dep_hist.length; i++) {
+          dest_set.add(dep_hist[i].split(',')[0])
+        }
+        for(var i = 0; i < arr_hist.length; i++) {
+          dest_set.add(arr_hist[i].split(',')[0])
+        }
+
+        var dest_str = ''
+        console.log()
+        for(var i = 0; i < Array.from(dest_set).length; i++) {
+          dest_str += Array.from(dest_set)[i]
+          if(i < Array.from(dest_set).length - 1) {
+            dest_str += ', '
+          }
+        }
+
+        new mapboxgl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(
+            '<p style=\'font-size:14px\'><span class=\'bold\'>' + e.features[0].properties.IATA + ' ' + e.features[0].properties.Name + '</span>'
+            + '<br>' + e.features[0].properties.City + ', ' + e.features[0].properties.Country + '</p>'
+
+            + '<p style=\'font-size:13px\'>Departures: <span class=\'bold\'>' + e.features[0].properties.dep_count+ '</span>'
+            + '<br>Arrivals: <span class=\'bold\'>' + e.features[0].properties.arr_count + '</span>'
+            + '<br>Connections: <span class=\'bold\'>' + e.features[0].properties.arr_conn_count+ '</span>'
+            + '<br>Flown from/to: ' + dest_str
+            + '<br>' + parse_hist(e.features[0].properties.full_year_hist, 'visit')
+            + '</p>'
+            )
+          .addTo(map);
+      });
+         
+        // Change the cursor to a pointer when the mouse is over the states layer.
+      map.on('mouseenter', name, function() {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+         
+        // Change it back to a pointer when it leaves.
+      map.on('mouseleave', name, function() {
+        map.getCanvas().style.cursor = '';
+      });
+
+    }
+
+
+
+
+
+    add_routes('routes_all', 'visible', 1)
+    add_airports('airports_all', 'visible', 1)
+
+    hover_routes('routes_all');
+    click_airports('airports_all');
+
+    for(var i = 0; i < years.length; i++) {
+      add_routes('routes_' + years[i], 'none', 1)
+      add_airports('airports_' + years[i], 'none', 1)
+      hover_routes('routes_' + years[i])
+      click_airports('airports_' + years[i])  
+
+      for(var j = 1; j < 13; j++) {
+        if(i == 0 && j < first_month) {
+          continue;
+        }
+        if(i == years.length-1 && j > last_month) {
+          continue;
+        }
+        add_routes('routes_cum_' + years[i] + '_' + j, 'none', 1)
+        add_airports('airports_cum_' + years[i] + '_' + j, 'none', 1)
+        // add_routes('routes_cum_' + years[i] + '_' + j, 'visible', 0.00001)
+        // add_airports('airports_cum_' + years[i] + '_' + j, 'visible', 0.00001)
+        hover_routes('routes_cum_' + years[i] + '_' + j)
+        click_airports('airports_cum_' + years[i] + '_' + j)  
+      } 
+
+    }
+
+
+
+    var yearIds = ['all'].concat(years);
+    var toggleableLayerLabels = ['All Years'].concat(years);
+
+    var links = []
+
+    for (var i = 0; i < yearIds.length; i++) {
+          var link = document.createElement('a');
+          link.href = '#';
+          if (i == 0) {        
+            link.className = 'active';
+      } else {
+        link.className = '';
+      }
+      link.id = yearIds[i]
+          link.textContent = toggleableLayerLabels[i];
+
+          var layers = document.getElementById('menu');
+          layers.appendChild(link);
+          links.push(link)
+      }
+
+      for (var i = 0; i < yearIds.length; i++) {
+          links[i].onclick = function(e) {
+              var clickedLayer = this.id;
+              e.preventDefault();
+              e.stopPropagation();
+
+              for(var i = 0; i < years.length; i++) {
+          for(var j = 1; j < 13; j++) {
+            if(i == 0 && j < first_month) {
+              continue;
+            }
+            if(i == years.length-1 && j > last_month) {
+              continue;
+            }
+            var vis = map.getLayoutProperty('routes_cum_' + years[i] + '_' + j, 'visibility');
+            // var op = map.getPaintProperty('routes_cum_' + years[i] + '_' + j, 'line-opacity');
+            if(vis == 'visible') {
+            // if(op == 1) {
+                    map.setLayoutProperty('routes_cum_' + years[i] + '_' + j, 'visibility', 'none');
+                    map.setLayoutProperty('airports_cum_' + years[i] + '_' + j, 'visibility', 'none');  
+                    // map.setPaintProperty('routes_cum_' + years[i] + '_' + j, 'line-opacity', 0.00001);
+                    // map.setPaintProperty('airports_cum_' + years[i] + '_' + j, 'icon-opacity', 0.00001);     
+            }
+          } 
+
+        }
+
+              var visibility = map.getLayoutProperty('routes_' + clickedLayer, 'visibility');
+
+              if (visibility === 'visible') {
+                  map.setLayoutProperty('routes_' + clickedLayer, 'visibility', 'none');
+                  map.setLayoutProperty('airports_' + clickedLayer, 'visibility', 'none');
+                  this.className = '';
+              } else {
+                  this.className = 'active';
+                  map.setLayoutProperty('routes_' + clickedLayer, 'visibility', 'visible');
+                  map.setLayoutProperty('airports_' + clickedLayer, 'visibility', 'visible');
+                  for (var j = 0; j <  yearIds.length; j++) {
+                  if (this.id == links[j].id) {
+                    if(j == 0) {
+                  document.getElementById('stats').innerHTML = all_stats
+                    } else {
+                  document.getElementById('stats').innerHTML = year_stats[j-1]
+                }
+              }
+                }
+              }
+
+              if (visibility !== 'visible') {
+          for (var j = 0; j <  yearIds.length; j++) {
+                  if (this.id !== links[j].id) {
+                    var clicked = links[j].id;
+                    var vis = map.getLayoutProperty('routes_' + clicked, 'visibility');
+                    if (vis == 'visible') {
+                        map.setLayoutProperty('routes_' + clicked, 'visibility', 'none');
+                        map.setLayoutProperty('airports_' + clicked, 'visibility', 'none');
+
+                        links[j].className = '';
+                    }
+                  }
+                }
+              } 
+
+          };
+      }
+
+
+    var formatDateIntoYear = d3.timeFormat("%Y");
+    var formatDate = d3.timeFormat("%b %Y");
+    var getMonth = d3.timeFormat("%m");
+    var getYear = d3.timeFormat("%Y");
+    var parseDate = d3.timeParse("%m/%d/%y");
+
+    var startDate = new Date(years[0], first_month-1, 1),
+        endDate = new Date(years[years.length-1], last_month-1, 30);
+
+    var margin = {top:-150, right:100, bottom:0, left:40},
+        width = 600 - margin.left - margin.right,
+        height = 80 - margin.top - margin.bottom;
+
+    var svg = d3.select("#vis")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)  
+        .attr("display", 'inline-block');  
+
+    ////////// slider //////////
+
+    var moving = false;
+    var currentValue = 0;
+    var targetValue = width;
+
+    var playButton = d3.select("#play-button");
+        
+    var x = d3.scaleTime()
+        .domain([startDate, endDate])
+        .range([0, targetValue])
+        .clamp(true);
+
+    var slider = svg.append("g")
+        .attr("class", "slider")
+        .attr("transform", "translate(" + margin.left + "," + height/5 + ")");
+
+    slider.append("line")
+        .attr("class", "track")
+        .attr("x1", x.range()[0])
+        .attr("x2", x.range()[1])
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-inset")
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-overlay")
+        .call(d3.drag()
+            .on("start.interrupt", function() { slider.interrupt(); })
+            .on("start drag", function() {
+              currentValue = d3.event.x;
+              update(x.invert(currentValue)); 
+            })
+        );
+
+    slider.insert("g", ".track-overlay")
+        .attr("class", "ticks")
+        .attr("transform", "translate(0," + 15 + ")")
+      .selectAll("text")
+        .data(x.ticks(10))
+        .enter()
+        .append("text")
+        .attr("x", x)
+        .attr("y", 10)
+        .attr("text-anchor", "middle")
+        .text(function(d) { return formatDateIntoYear(d); });
+
+    var handle = slider.insert("circle", ".track-overlay")
+        .attr("class", "handle")
+        .attr("r", 9)
+        .attr("cx", x(endDate));
+
+    var label = slider.append("text")  
+        .attr("class", "label")
+        .attr("text-anchor", "middle")
+        .text(formatDate(endDate))
+        .attr("transform", "translate(0," + (-25) + ")")
+        .attr("x", x(endDate));
+
+    ////////// plot //////////
+
+    playButton
+        .on("click", function() {
+        var button = d3.select(this);
+        if (button.text() == "Pause") {
+          moving = false;
+          clearInterval(timer);
+          // timer = 0;
+          button.text("Play");
+        } else {
+          moving = true;
+          timer = setInterval(step, 100);
+          button.text("Pause");
+        }
+        console.log("Slider moving: " + moving);
+       })
+
+    function step() {
+      update(x.invert(currentValue));
+      currentValue = currentValue + (targetValue/80);
+      if (currentValue > targetValue) {
+        moving = false;
+        currentValue = 0;
+        clearInterval(timer);
+        playButton.text("Play");
+        console.log("Slider moving: " + moving);
+      }
+    }
+
+
+    function update(h) {
+      // update position and text of label according to slider scale
+      map.setLayoutProperty('routes_cum_' + getYear(h) + '_' + parseInt(getMonth(h)), 'visibility', 'visible');
+      map.setLayoutProperty('airports_cum_' + getYear(h) + '_' + parseInt(getMonth(h)), 'visibility', 'visible'); 
+      // map.setPaintProperty('routes_cum_' + getYear(h) + '_' + parseInt(getMonth(h)), 'line-opacity', 1);
+      // map.setPaintProperty('airports_cum_' + getYear(h) + '_' + parseInt(getMonth(h)), 'icon-opacity', 1);       
+      console.log(getYear(h) + ' ' + getMonth(h))
+      handle.attr("cx", x(h));
+      label
+      .attr("x", x(h))
+      .text(formatDate(h));
+
+      for(var i = 0; i < yearIds.length; i++) {
+        layer_id = links[i].id;
+              map.setLayoutProperty('routes_' + layer_id, 'visibility', 'none');
+              map.setLayoutProperty('airports_' + layer_id, 'visibility', 'none');
+              links[i].className = '';    
+      }
+
+      for(var i = 0; i < years.length; i++) {
+        for(var j = 1; j < 13; j++) {
+          if(i == 0 && j < first_month) {
+            continue;
+          }
+          if(i == years.length-1 && j > last_month) {
+            continue;
+          }
+          if(years[i] != getYear(h) || j != getMonth(h)) {
+            var vis = map.getLayoutProperty('routes_cum_' + years[i] + '_' + j, 'visibility');
+            // var op = map.getPaintProperty('routes_cum_' + years[i] + '_' + j, 'line-opacity');
+            if(vis == 'visible') {
+            // if(op == 1) {
+                    map.setLayoutProperty('routes_cum_' + years[i] + '_' + j, 'visibility', 'none');
+                    map.setLayoutProperty('airports_cum_' + years[i] + '_' + j, 'visibility', 'none');
+                    // map.setPaintProperty('routes_cum_' + years[i] + '_' + j, 'line-opacity', 0.00001);
+                    // map.setPaintProperty('airports_cum_' + years[i] + '_' + j, 'icon-opacity', 0.00001);
+                    break     
+            }
+          }
+        } 
+
+      }
+
+    }
+
+   });
+
+
+
+
+</script>
+ 
+
+</html>
