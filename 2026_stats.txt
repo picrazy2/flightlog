@@ -1,25 +1,26 @@
-<h2><span class='bold'>Alex's Flight Log (2026)</span></h2><p>Total Distance Flown: <span class='bold'>7,255</span>mi
-<br>Total Time in Air: <span class='bold'>18:00:00</span>
-<br>Total Flights: <span class='bold'>4</span>
-<br>Number of Airlines: <span class='bold'>3</span>, Countries: <span class='bold'>3</span>, Airports: <span class='bold'>5</span>
-<p>Longest interval between flights: <span class='bold'>199 days 08:04:00</span> (2025-06-09 to 2025-12-25)
+<h2><span class='bold'>Alex's Flight Log (2026)</span></h2><p>Total Distance Flown: <span class='bold'>14,483</span>mi
+<br>Total Time in Air: <span class='bold'>1 day, 11:55:00</span>
+<br>Total Flights: <span class='bold'>7</span>
+<br>Number of Airlines: <span class='bold'>6</span>, Countries: <span class='bold'>5</span>, Airports: <span class='bold'>8</span>
+<p>Longest interval between flights: <span class='bold'>186 days 09:59:00</span> (2025-06-09 to 2025-12-12)
 <br>Month with most flying: <span class='bold'>2021-06</span> (10 flights, 38h 32m) or <span class='bold'>2024-01</span> (8 flights, 47h 10m)
-<p>Shortest flight: <span class='bold'>SYD</span> to <span class='bold'>MEL</span> (439mi, 1h 35m)
-<br>Longest flight: <span class='bold'>MEL</span> to <span class='bold'>PEK</span> (5,642mi, 11h 40m)</p>
-<p>Airport distribution (top countries): <span class='bold'>Australia</span>: 2, <span class='bold'>China</span>: 2, <span class='bold'>Japan</span>: 1
-<br>Airports by total visits: <span class='bold'>MEL</span>: 2, <span class='bold'>PEK</span>: 2, <span class='bold'>OKA</span>: 1, <span class='bold'>PVG</span>: 1, <span class='bold'>SYD</span>: 1
-<br>Top routes: <span class='bold'>MEL</span> to <span class='bold'>PEK</span>: 1, <span class='bold'>MEL</span> to <span class='bold'>SYD</span>: 1, <span class='bold'>OKA</span> to <span class='bold'>PVG</span>: 1, <span class='bold'>PEK</span> to <span class='bold'>PVG</span>: 1
-<br>Top airlines: <span class='bold'>Air China</span>: 2, <span class='bold'>Spring</span>: 1, <span class='bold'>Virgin Australia</span>: 1
+<p>Shortest flight: <span class='bold'>CDG</span> to <span class='bold'>LHR</span> (216mi, 1h 15m)
+<br>Longest flight: <span class='bold'>HND</span> to <span class='bold'>CDG</span> (6,046mi, 14h 30m)</p>
+<p>Airport distribution (top countries): <span class='bold'>Australia</span>: 2, <span class='bold'>China</span>: 2, <span class='bold'>Japan</span>: 2, <span class='bold'>France</span>: 1, <span class='bold'>United Kingdom</span>: 1
+<br>Airports by total visits: <span class='bold'>MEL</span>: 2, <span class='bold'>OKA</span>: 2, <span class='bold'>PEK</span>: 2, <span class='bold'>CDG</span>: 1, <span class='bold'>HND</span>: 1
+<br>Top routes: <span class='bold'>CDG</span> to <span class='bold'>HND</span>: 1, <span class='bold'>CDG</span> to <span class='bold'>LHR</span>: 1, <span class='bold'>HND</span> to <span class='bold'>OKA</span>: 1, <span class='bold'>MEL</span> to <span class='bold'>PEK</span>: 1, <span class='bold'>MEL</span> to <span class='bold'>SYD</span>: 1
+<br>Top airlines: <span class='bold'>Air China</span>: 2, <span class='bold'>British Airways</span>: 1, <span class='bold'>Japan</span>: 1, <span class='bold'>Solaseed</span>: 1, <span class='bold'>Spring</span>: 1
 <p>Early arrivals: <span class='bold'>0</span> (0%)
-<br>On-time arrivals (within 15min): <span class='bold'>4</span> (100%)
+<br>On-time arrivals (within 15min): <span class='bold'>7</span> (100%)
 <br>Late arrivals (up to 1hr delay): <span class='bold'>0</span> (0%)
 <br>Really late arrivals (>1hr delay): <span class='bold'>0</span> (0%)
 </p>
-<p>Morning flights (5am-12p): <span class='bold'>1</span> (25%)
+<p>Morning flights (5am-12p): <span class='bold'>2</span> (29%)
 <br>Afternoon flights (12p-6p): <span class='bold'>0</span> (0%)
-<br>Evening flights (6p-11p): <span class='bold'>3</span> (75%)
+<br>Evening flights (6p-11p): <span class='bold'>5</span> (71%)
 <br>Late night flights (11p-5a): <span class='bold'>0</span> (0%)
 </p>
-<p><span class='bold'>Domestic</span>: 1,121mi, 2 flights
-<br><span class='bold'>International</span>: 6,134mi, 2 flights</p>
-<p><span class='bold'>Economy</span>: 7,255mi, 4 flights</p>
+<p><span class='bold'>Domestic</span>: 2,087mi, 3 flights
+<br><span class='bold'>International</span>: 12,396mi, 4 flights</p>
+<p><span class='bold'>Economy</span>: 8,437mi, 6 flights
+<br><span class='bold'>Lie-flat Business</span>: 6,046mi, 1 flights</p>

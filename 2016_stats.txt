@@ -2,7 +2,7 @@
 <br>Total Time in Air: <span class='bold'>4 days, 20:49:00</span>
 <br>Total Flights: <span class='bold'>22</span>
 <br>Number of Airlines: <span class='bold'>10</span>, Countries: <span class='bold'>5</span>, Airports: <span class='bold'>17</span>
-<p>Longest interval between flights: <span class='bold'>199 days 08:04:00</span> (2025-06-09 to 2025-12-25)
+<p>Longest interval between flights: <span class='bold'>186 days 09:59:00</span> (2025-06-09 to 2025-12-12)
 <br>Month with most flying: <span class='bold'>2021-06</span> (10 flights, 38h 32m) or <span class='bold'>2024-01</span> (8 flights, 47h 10m)
 <p>Shortest flight: <span class='bold'>BOS</span> to <span class='bold'>EWR</span> (201mi, 41min)
 <br>Longest flight: <span class='bold'>BOS</span> to <span class='bold'>PEK</span> (6,737mi, 13h 29m)</p>
