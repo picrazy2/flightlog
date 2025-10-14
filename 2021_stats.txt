@@ -2,7 +2,7 @@
 <br>Total Time in Air: <span class='bold'>5 days, 3:24:00</span>
 <br>Total Flights: <span class='bold'>33</span>
 <br>Number of Airlines: <span class='bold'>5</span>, Countries: <span class='bold'>10</span>, Airports: <span class='bold'>20</span>
-<p>Longest interval between flights: <span class='bold'>186 days 09:59:00</span> (2025-06-09 to 2025-12-12)
+<p>Longest interval between flights: <span class='bold'>157 days 18:22:00</span> (2016-07-10 to 2016-12-15)
 <br>Month with most flying: <span class='bold'>2021-06</span> (10 flights, 38h 32m) or <span class='bold'>2024-01</span> (8 flights, 47h 10m)
 <p>Shortest flight: <span class='bold'>EWR</span> to <span class='bold'>BOS</span> (201mi, 42min)
 <br>Longest flight: <span class='bold'>LIS</span> to <span class='bold'>SFO</span> (5,681mi, 11h 31m)</p>
