@@ -13,9 +13,10 @@ The current project is a static site driven by a manual pipeline:
 `flightlog.csv` → Jupyter notebook → GeoJSON/stats files → `index.html`.
 
 The redesign replaces that with a proper application: real backend, real database,
-server-side provider integrations, and a frontend that reads from live data. All existing
-files (notebook, GeoJSON, figures, `index.html`) are archived in the repo root and are
-not part of the new build.
+server-side provider integrations, and a frontend that reads from live data. All legacy
+files (notebook, GeoJSON, figures, `index.html`, fonts, exported stats) now live outside
+this repo at `/Users/alexanderguo/Documents/github/flightlog-legacy-archive` and are not
+part of the new build.
 
 ---
 
@@ -71,8 +72,9 @@ A modern, mobile-friendly personal flight log that:
 └── ...config files
 ```
 
-Legacy files (notebook, GeoJSON, `index.html`, figures) remain in the repo root as an
-archive and are excluded from the build.
+Legacy files are stored outside the repo at
+`/Users/alexanderguo/Documents/github/flightlog-legacy-archive`. They are retained for
+reference and migration work, but are excluded from the new build.
 
 ---
 
@@ -187,12 +189,20 @@ All reference tables live in Supabase. The frontend queries them directly for au
 | `airlines` | `npow/airline-codes` (GitHub, syncs weekly from OpenFlights) | Quarterly cron |
 | `airlines.alliance` | Wikidata SPARQL | Quarterly cron (same job as airlines) |
 | `countries` | OurAirports `countries.csv` | Quarterly cron |
+| `aircraft_types` | Scraped from `doc8643.com`, keyed by ICAO aircraft type designator | Quarterly cron + on-demand if an aircraft type code is missing |
 | `aircraft` | AeroDataBox free tier (600 calls/month, API.Market) | On demand per new registration, cached permanently |
 | `airports.boundary_geojson` | OpenStreetMap Overpass API | On demand per airport when first needed, cached permanently |
 
 **On-demand refresh**: if `create-flight` or `import-csv` encounters an IATA code not in
 the `airports` table, it triggers `refresh-reference-data` before failing. Same pattern
-for airline IATA codes.
+for airline IATA codes and aircraft type codes.
+
+**Aircraft type metadata** is normalized into `aircraft_types`, keyed by ICAO aircraft
+type designator (e.g. `B77W`, `A20N`), and sourced by scraping `doc8643.com`. The scraper
+supports both quarterly full refreshes and on-demand fetches for unknown type codes.
+Scrapes are best-effort: if parsing fails or the upstream site is unavailable, the system
+logs the failure and retains the current cached table contents rather than deleting or
+blocking on the refresh itself.
 
 **Aircraft metadata** (`year_manufactured`, `operator_iata`) comes from AeroDataBox.
 **Country of registration** is derived from the tail number prefix via a static ICAO
@@ -210,6 +220,20 @@ lookup table bundled with the backend (e.g. N→USA, G→UK, VH→Australia). No
 
 ## Schema
 
+The initial schema uses Postgres enums for genuinely closed sets:
+
+- `flight_status`: `scheduled`, `completed`, `cancelled`
+- `flight_source`: `manual`, `aeroapi`, `fr24api`, `csv_import`, `gmail`
+- `cabin_class`: `economy`, `premium_economy`, `lie_flat_business`, `recliner_first`, `international_first`
+- `airline_alliance`: `star_alliance`, `skyteam`, `oneworld`
+- `continent_code`: `NA`, `EU`, `AS`, `AF`, `OC`, `SA`, `AN`
+- `aircraft_source`: `aerodatabox`, `opensky`
+- `track_source`: `fr24api`, `aeroapi`
+
+`booking_platform`, `iso_region`, and aircraft type codes remain plain text in the
+database because those vocabularies are expected to evolve or are already maintained by
+external standards.
+
 ### `flights`
 
 | Column | Notes |
@@ -217,23 +241,23 @@ lookup table bundled with the backend (e.g. N→USA, G→UK, VH→Australia). No
 | `id` | |
 | `user_id` | Nullable — exists from day one for multi-user migration |
 | `flight_date` | |
-| `airline_iata` | FK → `airlines` |
-| `flight_number` | |
-| `dep_iata` | FK → `airports` |
-| `arr_iata` | FK → `airports` |
+| `airline_iata` | Required FK → `airlines` |
+| `flight_number` | Required numeric/string suffix only, e.g. `123` rather than `UA123` |
+| `dep_iata` | Required FK → `airports` |
+| `arr_iata` | Required FK → `airports` |
 | `sched_dep` | Timestamptz |
 | `sched_arr` | Timestamptz |
 | `actual_dep` | Gate departure (pushback), nullable |
 | `actual_takeoff` | Wheels off, nullable |
 | `actual_landing` | Wheels on, nullable |
 | `actual_arr` | Gate arrival (blocks on), nullable |
-| `aircraft_type` | e.g. B77W |
-| `registration` | Tail number, nullable; FK → `aircraft` if record exists |
-| `cabin_class` | Economy, Premium Economy, Lie-flat Business, Recliner First, International First |
+| `aircraft_type_code` | Nullable FK → `aircraft_types`, e.g. `B77W` |
+| `registration` | Tail number, nullable text; no FK in v1 because the flight may exist before aircraft enrichment |
+| `cabin_class` | Enum: Economy, Premium Economy, Lie-flat Business, Recliner First, International First |
 | `distance_mi` | Stored — requires haversine, worth pre-computing once |
 | `booking_id` | Nullable FK → `bookings` |
-| `status` | scheduled, completed, cancelled |
-| `source` | manual, aeroapi, fr24api, csv_import, gmail |
+| `status` | Enum: scheduled, completed, cancelled |
+| `source` | Enum: manual, aeroapi, fr24api, csv_import, gmail |
 | `raw_provider` | JSONB — raw provider response |
 | `created_at` | |
 | `updated_at` | Auto-updated by Postgres trigger |
@@ -245,6 +269,9 @@ compute in under a millisecond for the full dataset.
 Connecting flights (multi-leg itineraries) are stored as separate individual `flights`
 rows, one per leg, each with its own `booking_id` pointing to the same `bookings` row.
 
+The initial migration includes a duplicate-prevention unique index covering the flight's
+core identity: user, date, airline, flight number, and departure/arrival airports.
+
 ### `bookings`
 
 One row per booking confirmation. Covers cost and PNR data that apply to one or more
@@ -254,7 +281,7 @@ flight legs (e.g. a round trip has one cost and one airline PNR but two flight r
 |--------|-------|
 | `id` | |
 | `user_id` | Nullable — future-proof for multi-user |
-| `booking_ref_airline` | Airline PNR, nullable |
+| `booking_refs_airline` | JSONB array of airline PNR objects, nullable; supports multiple airlines on one booking |
 | `booking_ref_platform` | OTA confirmation code, nullable — OTAs issue their own code in addition to the airline PNR |
 | `booking_platform` | direct, expedia, google_flights, chase_travel, etc., nullable |
 | `cost_cash` | Nullable decimal |
@@ -274,7 +301,7 @@ flight legs (e.g. a round trip has one cost and one airline PNR but two flight r
 | `name` | |
 | `city` | |
 | `country` | ISO 2-letter code |
-| `continent` | NA, EU, AS, AF, OC, SA, AN |
+| `continent` | Enum: NA, EU, AS, AF, OC, SA, AN |
 | `iso_region` | e.g. US-CA |
 | `latitude` | |
 | `longitude` | |
@@ -291,7 +318,7 @@ All columns except `boundary_geojson` come from the OurAirports CSV.
 | `icao` | Nullable |
 | `name` | |
 | `country` | |
-| `alliance` | star_alliance, skyteam, oneworld, or null |
+| `alliance` | Enum: star_alliance, skyteam, oneworld, or null |
 
 ### `countries`
 
@@ -300,29 +327,44 @@ All columns except `boundary_geojson` come from the OurAirports CSV.
 | `iso2` | Primary key |
 | `iso3` | |
 | `name` | e.g. "United States" |
-| `continent` | NA, EU, AS, AF, OC, SA, AN |
+| `continent` | Enum: NA, EU, AS, AF, OC, SA, AN |
+
+### `aircraft_types`
+
+| Column | Notes |
+|--------|-------|
+| `code` | Primary key; ICAO aircraft type designator, e.g. `B77W` |
+| `name` | Human-readable type name, e.g. "Boeing 777-300ER" |
+| `manufacturer` | Nullable |
+| `family` | Nullable grouping for charts, e.g. `777`, `A320neo family` |
+| `image_url` | Nullable — optional image for charts or detail views |
+| `created_at` | |
+| `updated_at` | Auto-updated by Postgres trigger |
 
 ### `aircraft`
 
 | Column | Notes |
 |--------|-------|
 | `registration` | Primary key |
-| `aircraft_type` | e.g. B77W |
+| `aircraft_type_code` | Nullable FK → `aircraft_types` |
 | `year_manufactured` | Nullable |
 | `country_of_registration` | Derived from ICAO tail prefix table, nullable |
 | `operator_iata` | Nullable, FK → `airlines` |
-| `source` | aerodatabox, opensky |
+| `source` | Enum: aerodatabox, opensky |
 | `fetched_at` | |
+| `created_at` | |
+| `updated_at` | Auto-updated by Postgres trigger |
 
 ### `tracks`
 
 | Column | Notes |
 |--------|-------|
 | `id` | |
-| `flight_id` | FK → `flights` |
+| `flight_id` | FK → `flights`, unique — one current track per flight |
 | `geojson` | JSONB LineString |
-| `source` | fr24api, aeroapi |
+| `source` | Enum: fr24api, aeroapi |
 | `recorded_at` | |
+| `updated_at` | Auto-updated by Postgres trigger |
 
 Actual flown paths from providers. Great-circle routes are not stored here — computed
 client-side from airport coordinates.
@@ -335,9 +377,12 @@ client-side from airport coordinates.
 | `user_id` | Nullable — future-proof for per-user sync state |
 | `key` | e.g. `gmail_last_history_id`, `gmail_processed_ids` |
 | `value` | text |
+| `created_at` | |
 | `updated_at` | |
 
 Used by `watch-gmail` to track polling position and processed message IDs.
+Uniqueness is enforced per `(user_id, key)`, using a null-safe index so single-user
+pre-auth mode still behaves correctly.
 
 ---
 
@@ -369,9 +414,13 @@ SELECT
   c_arr.name             AS arr_country_name,
   al.name                AS airline_name,
   al.alliance,
+  at.name                AS aircraft_type_name,
+  at.manufacturer        AS aircraft_type_manufacturer,
+  at.family              AS aircraft_type_family,
+  at.image_url           AS aircraft_type_image_url,
   ac.year_manufactured,
   ac.country_of_registration,
-  b.booking_ref_airline,
+  b.booking_refs_airline,
   b.booking_ref_platform,
   b.booking_platform,
   b.cost_cash,
@@ -379,11 +428,12 @@ SELECT
   b.cost_points,
   b.points_program
 FROM flights f
-JOIN  airports dep     ON f.dep_iata    = dep.iata
-JOIN  airports arr     ON f.arr_iata    = arr.iata
-JOIN  countries c_dep  ON dep.country   = c_dep.iso2
-JOIN  countries c_arr  ON arr.country   = c_arr.iso2
-JOIN  airlines al      ON f.airline_iata = al.iata
+LEFT JOIN airports dep       ON f.dep_iata           = dep.iata
+LEFT JOIN airports arr       ON f.arr_iata           = arr.iata
+LEFT JOIN countries c_dep    ON dep.country          = c_dep.iso2
+LEFT JOIN countries c_arr    ON arr.country          = c_arr.iso2
+LEFT JOIN airlines al        ON f.airline_iata       = al.iata
+LEFT JOIN aircraft_types at  ON f.aircraft_type_code = at.code
 LEFT JOIN aircraft ac  ON f.registration = ac.registration
 LEFT JOIN bookings b   ON f.booking_id  = b.id
 ```
@@ -391,7 +441,8 @@ LEFT JOIN bookings b   ON f.booking_id  = b.id
 The frontend fetches all rows on load, caches with TanStack Query, and applies the global
 date filter (all-time / year / quarter / custom) as an in-memory array filter. No database
 round-trip on filter change. All stats, charts, and map layers are derived from this
-dataset in JavaScript.
+dataset in JavaScript. `LEFT JOIN`s are used intentionally so incomplete reference data
+does not hide a flight row from the frontend.
 
 ---
 
@@ -405,7 +456,7 @@ dataset in JavaScript.
 | `delete-flight` | Remove a flight record. |
 | `import-csv` | Bulk-create flights from a CSV upload. |
 | `refresh-recent` | Batch job: fetches actuals and track data from FR24 for all eligible recently-landed flights and writes results directly to the DB. Not built on `enrich-flight` — no preview step. |
-| `refresh-reference-data` | Refresh `airports`, `airlines`, `countries` from OurAirports and OpenFlights/Wikidata. Triggered by quarterly cron and on demand when a flight join fails to match an IATA code. Does not touch `aircraft` or `boundary_geojson`. |
+| `refresh-reference-data` | Refresh `airports`, `airlines`, `airline alliances`, `countries`, and `aircraft_types` from OurAirports, OpenFlights/Wikidata, and `doc8643.com`. Triggered by quarterly cron and on demand when a flight join fails to match an IATA code or aircraft type code. Does not touch `aircraft` or `boundary_geojson`. |
 | `watch-gmail` | Poll Gmail for new emails, pre-filter with a Gmail search query, parse matches with Gemini 2.5 Flash, call `create-flight` for confirmed booking emails. |
 
 All Edge Functions validate `Authorization: Bearer <secret>` before executing.
@@ -418,7 +469,7 @@ All Edge Functions validate `Authorization: Bearer <secret>` before executing.
 |-----|----------|-------------|
 | `refresh-recent` | Every 60 min | Enriches recently-landed flights with FR24 actuals |
 | `watch-gmail` | Every 15–30 min | Checks for new booking confirmation emails |
-| `refresh-reference-data` | Quarterly | Refreshes airports, airlines, countries, airline logos |
+| `refresh-reference-data` | Quarterly | Refreshes airports, airlines, airline alliances, countries, and aircraft types |
 
 ### `refresh-recent` eligibility
 
