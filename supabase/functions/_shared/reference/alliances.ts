@@ -68,4 +68,51 @@ export async function refreshAirlineAlliances(
   const batchSize = 500;
   const rows = Array.from(updates.values());
   for (let index = 0; index < rows.length; index += batchSize) {
-    cons
+    const batch = rows.slice(index, index + batchSize);
+    const airlineIatas = batch.map((row) => row.iata);
+    const { data: existingRows, error: selectError } = await supabase
+      .from("airlines")
+      .select("iata, icao, name, country")
+      .in("iata", airlineIatas);
+
+    if (selectError) {
+      throw new Error(`Failed to load existing airlines for alliance updates: ${selectError.message}`);
+    }
+
+    const existingByIata = new Map(
+      (existingRows ?? []).map((row) => [row.iata, row]),
+    );
+    const mergedBatch = batch.flatMap((row) => {
+      const existing = existingByIata.get(row.iata);
+      if (!existing?.name) {
+        return [];
+      }
+
+      return [{
+        iata: row.iata,
+        icao: existing.icao ?? null,
+        name: existing.name,
+        country: existing.country ?? null,
+        alliance: row.alliance,
+      }];
+    });
+
+    if (mergedBatch.length === 0) {
+      continue;
+    }
+
+    const { error } = await supabase
+      .from("airlines")
+      .upsert(mergedBatch, { onConflict: "iata" });
+
+    if (error) {
+      throw new Error(`Failed to update airline alliances: ${error.message}`);
+    }
+  }
+
+  return {
+    source: "wikidata",
+    airline_alliances_updated: rows.length,
+    airline_iata: targetAirline,
+  };
+}

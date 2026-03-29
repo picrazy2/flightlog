@@ -194,4 +194,53 @@ async function upsertInBatches(
   rows: Array<Record<string, unknown>>,
   onConflict: string,
 ) {
-  for (
+  for (let index = 0; index < rows.length; index += UPSERT_BATCH_SIZE) {
+    const batch = rows.slice(index, index + UPSERT_BATCH_SIZE);
+    const { error } = await supabase
+      .from(table)
+      .upsert(batch, { onConflict });
+
+    if (error) {
+      throw new Error(`Failed to upsert ${table}: ${error.message}`);
+    }
+  }
+}
+
+function cleanString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseContinent(value: unknown): string | null {
+  const continent = cleanString(value)?.toUpperCase();
+  return continent && CONTINENT_CODES.has(continent) ? continent : null;
+}
+
+function parseNumber(value: unknown): number | null {
+  const raw = cleanString(value);
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function deriveTimezone(
+  latitude: number | null,
+  longitude: number | null,
+): string | null {
+  if (latitude === null || longitude === null) {
+    return null;
+  }
+
+  try {
+    return tzLookup(latitude, longitude);
+  } catch {
+    return null;
+  }
+}

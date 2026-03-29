@@ -190,4 +190,22 @@ function selectBoundaryFeature(
   return scored[0]?.feature ?? null;
 }
 
-function scoreFeature(feature: GeoJso
+function scoreFeature(feature: GeoJsonFeature, airport: AirportRecord): number {
+  const properties = feature.properties ?? {};
+  const iata = stringValue(properties.iata);
+  const icao = stringValue(properties.icao);
+  const name = stringValue(properties.name);
+  const aeroway = stringValue(properties.aeroway);
+
+  let score = 0;
+  if (aeroway === "aerodrome") score += 10;
+  if (iata && iata.toUpperCase() === airport.iata) score += 100;
+  if (icao && airport.icao && icao.toUpperCase() === airport.icao.toUpperCase()) score += 80;
+  if (name && name.toLowerCase() === airport.name.toLowerCase()) score += 50;
+
+  return score;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}

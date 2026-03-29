@@ -81,4 +81,79 @@ async function fetchAirlineRows(): Promise<AirlineRecord[]> {
     },
   });
 
-  if (!response.o
+  if (!response.ok) {
+    throw new Error(`Failed to fetch OpenFlights airlines.dat: ${response.status}`);
+  }
+
+  const raw = await response.text();
+  const withHeader =
+    "airline_id,name,alias,iata,icao,callsign,country,active\n" + raw;
+
+  const parsed = Papa.parse<AirlineRecord>(withHeader, {
+    header: true,
+    skipEmptyLines: true,
+    transform: (value) => value.trim(),
+  });
+
+  if (parsed.errors.length > 0) {
+    throw new Error(
+      `Failed to parse OpenFlights airlines.dat: ${parsed.errors[0]?.message ?? "unknown error"}`,
+    );
+  }
+
+  return parsed.data;
+}
+
+async function upsertInBatches(
+  supabase: SupabaseClient,
+  table: string,
+  rows: Array<Record<string, unknown>>,
+  onConflict: string,
+) {
+  for (let index = 0; index < rows.length; index += UPSERT_BATCH_SIZE) {
+    const batch = rows.slice(index, index + UPSERT_BATCH_SIZE);
+    const { error } = await supabase
+      .from(table)
+      .upsert(batch, { onConflict });
+
+    if (error) {
+      throw new Error(`Failed to upsert ${table}: ${error.message}`);
+    }
+  }
+}
+
+function cleanString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed === "\\N") {
+    return null;
+  }
+
+  return trimmed;
+}
+
+function cleanCode(value: unknown, expectedLength: number): string | null {
+  const cleaned = cleanString(value)?.toUpperCase();
+  if (!cleaned || cleaned === "\\N" || cleaned.length !== expectedLength) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+function isBetterAirlineRecord(
+  candidate: Record<string, unknown>,
+  existing: Record<string, unknown>,
+): boolean {
+  return scoreAirlineRecord(candidate) > scoreAirlineRecord(existing);
+}
+
+function scoreAirlineRecord(record: Record<string, unknown>): number {
+  let score = 0;
+  if (record.icao) score += 2;
+  if (record.country) score += 1;
+  return score;
+}
