@@ -186,16 +186,18 @@ All reference tables live in Supabase. The frontend queries them directly for au
 | Table | Source | Refresh |
 |-------|--------|---------|
 | `airports` | OurAirports CSV | Quarterly cron + on-demand if IATA join fails |
-| `airlines` | `npow/airline-codes` (GitHub, syncs weekly from OpenFlights) | Quarterly cron |
+| `airlines` | OpenFlights `airlines.dat` | Quarterly cron + targeted on-demand refresh by IATA when airline lookup fails |
 | `airlines.alliance` | Wikidata SPARQL | Quarterly cron (same job as airlines) |
 | `countries` | OurAirports `countries.csv` | Quarterly cron |
-| `aircraft_types` | Scraped from `doc8643.com`, keyed by ICAO aircraft type designator | Quarterly cron + on-demand if an aircraft type code is missing |
+| `aircraft_types` | Scraped from `doc8643.com`, keyed by ICAO aircraft type designator | Quarterly cron in paged batches + on-demand if an aircraft type code is missing |
 | `aircraft` | AeroDataBox free tier (600 calls/month, API.Market) | On demand per new registration, cached permanently |
 | `airports.boundary_geojson` | OpenStreetMap Overpass API | On demand per airport when first needed, cached permanently |
 
 **On-demand refresh**: if `create-flight` or `import-csv` encounters an IATA code not in
 the `airports` table, it triggers `refresh-reference-data` before failing. Same pattern
-for airline IATA codes and aircraft type codes.
+for airline IATA codes and aircraft type codes. Airport boundaries are fetched through a
+separate targeted `refresh-reference-data` scope when a specific airport boundary is
+needed, not as part of the quarterly baseline refresh.
 
 **Aircraft type metadata** is normalized into `aircraft_types`, keyed by ICAO aircraft
 type designator (e.g. `B77W`, `A20N`), and sourced by scraping `doc8643.com`. The scraper
@@ -207,6 +209,8 @@ blocking on the refresh itself.
 **Aircraft metadata** (`year_manufactured`, `operator_iata`) comes from AeroDataBox.
 **Country of registration** is derived from the tail number prefix via a static ICAO
 lookup table bundled with the backend (e.g. N→USA, G→UK, VH→Australia). No API needed.
+`aircraft` enrichment is intentionally not part of the quarterly reference-data refresh;
+it is resolved on demand by registration from runtime flows such as `create-flight`.
 
 ### Static assets (no table needed)
 
@@ -315,7 +319,7 @@ All columns except `boundary_geojson` come from the OurAirports CSV.
 | Column | Notes |
 |--------|-------|
 | `iata` | Primary key |
-| `icao` | Nullable |
+| `icao` | Nullable; not unique because real airline datasets contain collisions |
 | `name` | |
 | `country` | |
 | `alliance` | Enum: star_alliance, skyteam, oneworld, or null |
@@ -337,6 +341,8 @@ All columns except `boundary_geojson` come from the OurAirports CSV.
 | `name` | Human-readable type name, e.g. "Boeing 777-300ER" |
 | `manufacturer` | Nullable |
 | `family` | Nullable grouping for charts, e.g. `777`, `A320neo family` |
+| `body_class` | Nullable; `narrowbody` or `widebody`, derived heuristically from scraped technical data |
+| `deck_count` | `1` or `2`; hardcoded to `2` for `B74x` and `A38x`, otherwise `1` |
 | `image_url` | Nullable — optional image for charts or detail views |
 | `created_at` | |
 | `updated_at` | Auto-updated by Postgres trigger |
@@ -384,6 +390,23 @@ Used by `watch-gmail` to track polling position and processed message IDs.
 Uniqueness is enforced per `(user_id, key)`, using a null-safe index so single-user
 pre-auth mode still behaves correctly.
 
+### `reference_refresh_runs`
+
+Persistent run log for `refresh-reference-data`.
+
+| Column | Notes |
+|--------|-------|
+| `id` | |
+| `scope` | Refresh scope invoked, e.g. `all`, `aircraft_types`, `airport_boundaries` |
+| `status` | `running`, `success`, `partial_success`, `failed` |
+| `request_params` | JSONB request payload passed to the function |
+| `results` | JSONB per-step results returned by the function |
+| `error_text` | Concatenated error summary for failed steps |
+| `started_at` | |
+| `finished_at` | Nullable |
+| `created_at` | |
+| `updated_at` | Auto-updated by Postgres trigger |
+
 ---
 
 ## The View: `v_flights_with_airports`
@@ -394,8 +417,11 @@ flight — no joins needed by the frontend.
 ```sql
 SELECT
   f.*,
-  CASE WHEN dep.country = arr.country THEN 'domestic' ELSE 'international' END
-                         AS trip_type,
+  CASE
+    WHEN dep.country IS NULL OR arr.country IS NULL THEN NULL
+    WHEN dep.country = arr.country THEN 'domestic'
+    ELSE 'international'
+  END                    AS trip_type,
   dep.name               AS dep_name,
   dep.city               AS dep_city,
   dep.country            AS dep_country,
@@ -417,6 +443,8 @@ SELECT
   at.name                AS aircraft_type_name,
   at.manufacturer        AS aircraft_type_manufacturer,
   at.family              AS aircraft_type_family,
+  at.body_class          AS aircraft_type_body_class,
+  at.deck_count          AS aircraft_type_deck_count,
   at.image_url           AS aircraft_type_image_url,
   ac.year_manufactured,
   ac.country_of_registration,
@@ -456,7 +484,7 @@ does not hide a flight row from the frontend.
 | `delete-flight` | Remove a flight record. |
 | `import-csv` | Bulk-create flights from a CSV upload. |
 | `refresh-recent` | Batch job: fetches actuals and track data from FR24 for all eligible recently-landed flights and writes results directly to the DB. Not built on `enrich-flight` — no preview step. |
-| `refresh-reference-data` | Refresh `airports`, `airlines`, `airline alliances`, `countries`, and `aircraft_types` from OurAirports, OpenFlights/Wikidata, and `doc8643.com`. Triggered by quarterly cron and on demand when a flight join fails to match an IATA code or aircraft type code. Does not touch `aircraft` or `boundary_geojson`. |
+| `refresh-reference-data` | Refresh `countries`, `airports`, `airlines`, `airline alliances`, and `aircraft_types` from OurAirports, OpenFlights/Wikidata, and `doc8643.com`. Supports targeted scopes for one country, airport, airline, aircraft type, or airport boundary. Logs every run to `reference_refresh_runs`. Does not touch `aircraft`, which remains an on-demand registration lookup. |
 | `watch-gmail` | Poll Gmail for new emails, pre-filter with a Gmail search query, parse matches with Gemini 2.5 Flash, call `create-flight` for confirmed booking emails. |
 
 All Edge Functions validate `Authorization: Bearer <secret>` before executing.
@@ -469,7 +497,7 @@ All Edge Functions validate `Authorization: Bearer <secret>` before executing.
 |-----|----------|-------------|
 | `refresh-recent` | Every 60 min | Enriches recently-landed flights with FR24 actuals |
 | `watch-gmail` | Every 15–30 min | Checks for new booking confirmation emails |
-| `refresh-reference-data` | Quarterly | Refreshes airports, airlines, airline alliances, countries, and aircraft types |
+| `refresh-reference-data` | Quarterly | Refreshes countries, airports, airlines, and airline alliances; `aircraft_types` runs in paged batches rather than one monolithic job |
 
 ### `refresh-recent` eligibility
 

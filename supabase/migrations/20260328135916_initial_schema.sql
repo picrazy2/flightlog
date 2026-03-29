@@ -98,9 +98,15 @@ create table public.aircraft_types (
   name text not null,
   manufacturer text,
   family text,
+  body_class text,
+  deck_count integer,
   image_url text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint aircraft_types_body_class_check
+    check (body_class is null or body_class in ('narrowbody', 'widebody')),
+  constraint aircraft_types_deck_count_check
+    check (deck_count is null or deck_count in (1, 2))
 );
 
 create table public.aircraft (
@@ -327,6 +333,8 @@ select
   at.name as aircraft_type_name,
   at.manufacturer as aircraft_type_manufacturer,
   at.family as aircraft_type_family,
+  at.body_class as aircraft_type_body_class,
+  at.deck_count as aircraft_type_deck_count,
   at.image_url as aircraft_type_image_url,
   ac.year_manufactured,
   ac.country_of_registration,
