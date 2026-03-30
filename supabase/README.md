@@ -145,3 +145,53 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/refresh-reference-d
   -H "Content-Type: application/json" \
   -d '{"scope":"all"}'
 ```
+
+## Quarterly scheduling
+
+Quarterly scheduling is defined in:
+
+- `migrations/20260330193000_schedule_reference_refresh_jobs.sql`
+
+The migration creates:
+
+- a helper function `public.invoke_refresh_reference_data(jsonb)`
+- a helper function `public.sync_reference_refresh_schedule(...)` that rebuilds the cron jobs
+- one quarterly baseline job for `{"scope":"all"}`
+- generated staggered quarterly `aircraft_types` chunk jobs up to a configured max page
+
+The quarterly jobs run on January 1, April 1, July 1, and October 1 in UTC, starting at
+`03:00 UTC` for the baseline refresh and then every 5 minutes for the `aircraft_types`
+chunks. The migration currently seeds that schedule with:
+
+- `max_aircraft_type_page = 100`
+- `aircraft_type_chunk_size = 5`
+- `aircraft_type_interval_minutes = 5`
+
+If `doc8643` grows, you can regenerate the jobs without editing the migration by running:
+
+```sql
+select public.sync_reference_refresh_schedule(150, 5, 5);
+```
+
+Before applying that migration in a hosted project, add these Vault secrets:
+
+```sql
+select vault.create_secret('https://<project-ref>.supabase.co', 'project_url');
+select vault.create_secret('<EDGE_FUNCTION_SECRET>', 'edge_function_secret');
+```
+
+The migration does not attempt to create the `vault` extension. It assumes the hosted
+project already exposes the `vault` schema/functions used above.
+
+You can inspect or troubleshoot scheduled runs with:
+
+```sql
+select jobname, schedule, active
+from cron.job
+order by jobname;
+
+select *
+from cron.job_run_details
+order by start_time desc
+limit 20;
+```
