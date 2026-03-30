@@ -17,6 +17,10 @@ code for the Flight Log app.
   reference-data refreshes.
 - `functions/create-flight/index.ts` Edge Function entrypoint for validated
   flight creation, booking persistence, and best-effort aircraft enrichment.
+- `functions/update-flight/index.ts` Edge Function entrypoint for validated
+  flight edits and manual corrections.
+- `functions/delete-flight/index.ts` Edge Function entrypoint for flight
+  deletion by id.
 - `functions/_shared/reference/*.ts` Source-specific importers and enrichment
   helpers.
 
@@ -102,6 +106,44 @@ The function returns:
 - `flight` The inserted denormalized row from `v_flights_with_airports`
 - `warnings` Non-fatal enrichment warnings, such as aircraft lookup failures
 
+## update-flight
+
+The deployed function path is:
+
+- `/functions/v1/update-flight`
+
+The function expects:
+
+- `Authorization: Bearer <EDGE_FUNCTION_SECRET>`
+- `Content-Type: application/json`
+
+### Responsibilities
+
+- require a flight `id`
+- merge incoming changes over the existing row
+- re-run the same validation and reference-resolution logic as `create-flight`
+- allow booking changes via: `booking` omitted keeps the existing booking,
+  `booking: null` clears `booking_id`, and a booking object creates or updates
+  the linked booking
+- return the updated row from `v_flights_with_airports`
+
+## delete-flight
+
+The deployed function path is:
+
+- `/functions/v1/delete-flight`
+
+The function expects:
+
+- `Authorization: Bearer <EDGE_FUNCTION_SECRET>`
+- `Content-Type: application/json`
+
+### Responsibilities
+
+- require a flight `id`
+- delete the underlying `flights` row
+- return the deleted denormalized row from `v_flights_with_airports`
+
 ## aircraft_types chunking
 
 Full `aircraft_types` refresh is chunked by page range because the full scrape
@@ -160,6 +202,18 @@ Deploy the create-flight function:
 
 ```bash
 supabase functions deploy create-flight --no-verify-jwt
+```
+
+Deploy the update-flight function:
+
+```bash
+supabase functions deploy update-flight --no-verify-jwt
+```
+
+Deploy the delete-flight function:
+
+```bash
+supabase functions deploy delete-flight --no-verify-jwt
 ```
 
 Run the baseline hosted refresh:
