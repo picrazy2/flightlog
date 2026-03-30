@@ -175,8 +175,8 @@ async function fetchCsv<T>(url: string): Promise<T[]> {
   const parsed = Papa.parse<T>(csv, {
     header: true,
     skipEmptyLines: true,
-    transformHeader: (value) => value.trim(),
-    transform: (value) => value.trim(),
+    transformHeader: (value: string) => value.trim(),
+    transform: (value: string) => value.trim(),
   });
 
   if (parsed.errors.length > 0) {

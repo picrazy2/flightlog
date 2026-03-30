@@ -82,7 +82,9 @@ async function fetchAirlineRows(): Promise<AirlineRecord[]> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch OpenFlights airlines.dat: ${response.status}`);
+    throw new Error(
+      `Failed to fetch OpenFlights airlines.dat: ${response.status}`,
+    );
   }
 
   const raw = await response.text();
@@ -92,12 +94,14 @@ async function fetchAirlineRows(): Promise<AirlineRecord[]> {
   const parsed = Papa.parse<AirlineRecord>(withHeader, {
     header: true,
     skipEmptyLines: true,
-    transform: (value) => value.trim(),
+    transform: (value: string) => value.trim(),
   });
 
   if (parsed.errors.length > 0) {
     throw new Error(
-      `Failed to parse OpenFlights airlines.dat: ${parsed.errors[0]?.message ?? "unknown error"}`,
+      `Failed to parse OpenFlights airlines.dat: ${
+        parsed.errors[0]?.message ?? "unknown error"
+      }`,
     );
   }
 
