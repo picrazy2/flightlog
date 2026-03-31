@@ -1,11 +1,11 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-
 import { HttpError, toHttpError } from "../_shared/flights/http.ts";
 import { enrichFlight } from "../_shared/flights/enrich.ts";
 import { createAeroApiProvider } from "../_shared/flights/providers/aeroapi.ts";
 import { createFR24Provider } from "../_shared/flights/providers/fr24api.ts";
-import { createFlight } from "../_shared/flights/service.ts";
-import type { CreateFlightRequest } from "../_shared/flights/types.ts";
+import type {
+  EnrichFlightRequest,
+  FlightInput,
+} from "../_shared/flights/types.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,18 +14,20 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type CreateFlightResult = {
+type EnrichFlightHttpResult = {
   ok: true;
-  flight: Record<string, unknown>;
+  found: boolean;
+  provider: string | null;
+  flight: FlightInput | null;
   track: Record<string, unknown> | null;
   warnings: string[];
 };
 
-export async function handleCreateFlightRequest(
+export async function handleEnrichFlightRequest(
   request: Request,
-  dependencies?: {
-    supabase?: ReturnType<typeof createAdminClient>;
-  },
+  dependencies: {
+    enrichFlight?: typeof enrichFlight;
+  } = {},
 ) {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -34,17 +36,24 @@ export async function handleCreateFlightRequest(
   try {
     requireAuthorizedRequest(request);
     const body = await parseRequest(request);
-    const supabase = dependencies?.supabase ?? createAdminClient();
-    const result = await createFlight(supabase, body, {
-      enrichFlight: (req) => enrichFlight(req, buildProviders()),
-    });
+    const fn = dependencies.enrichFlight ?? enrichFlight;
+    const result = await fn(body, buildProviders());
 
-    return jsonResponse<CreateFlightResult>({
+    return jsonResponse<EnrichFlightHttpResult>({
       ok: true,
+      found: result.found,
+      provider: result.provider,
       flight: result.flight,
-      track: result.track,
+      track:
+        result.track?.geojson && result.track.source && result.track.recorded_at
+          ? {
+            geojson: result.track.geojson,
+            source: result.track.source,
+            recorded_at: result.track.recorded_at,
+          }
+          : null,
       warnings: result.warnings,
-    }, 201);
+    });
   } catch (error) {
     const httpError = toHttpError(error);
     return jsonResponse(
@@ -58,7 +67,7 @@ export async function handleCreateFlightRequest(
 }
 
 if (import.meta.main) {
-  Deno.serve((request) => handleCreateFlightRequest(request));
+  Deno.serve((request) => handleEnrichFlightRequest(request));
 }
 
 function buildProviders() {
@@ -68,25 +77,6 @@ function buildProviders() {
     aeroapi: aeroApiKey ? createAeroApiProvider(aeroApiKey) : undefined,
     fr24api: fr24ApiKey ? createFR24Provider(fr24ApiKey) : undefined,
   };
-}
-
-function createAdminClient() {
-  const url = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-  if (!url || !serviceRoleKey) {
-    throw new HttpError(
-      500,
-      "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
-    );
-  }
-
-  return createClient(url, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
 }
 
 function requireAuthorizedRequest(request: Request) {
@@ -101,7 +91,7 @@ function requireAuthorizedRequest(request: Request) {
   }
 }
 
-async function parseRequest(request: Request): Promise<CreateFlightRequest> {
+async function parseRequest(request: Request): Promise<EnrichFlightRequest> {
   if (request.method !== "POST") {
     throw new HttpError(405, "Only POST is supported");
   }
@@ -111,7 +101,7 @@ async function parseRequest(request: Request): Promise<CreateFlightRequest> {
     throw new HttpError(400, "Content-Type must be application/json");
   }
 
-  return await request.json() as CreateFlightRequest;
+  return await request.json() as EnrichFlightRequest;
 }
 
 function jsonResponse<T>(payload: T, status = 200) {

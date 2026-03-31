@@ -2,6 +2,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import { HttpError } from "./http.ts";
 import { ensureAircraftTypeExists } from "./references.ts";
+import { fetchAircraftRecordByRegistration } from "../reference/aircraft.ts";
 import type { AircraftRow } from "./types.ts";
 
 export async function maybeEnrichAircraft(
@@ -35,9 +36,6 @@ export async function maybeEnrichAircraft(
   }
 
   try {
-    const { fetchAircraftRecordByRegistration } = await import(
-      "../reference/aircraft.ts"
-    );
     const aircraftRecord = await fetchAircraftRecordByRegistration(
       registration,
     ) as AircraftRow | null;

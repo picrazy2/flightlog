@@ -7,6 +7,9 @@ import {
   FLIGHT_STATUS_VALUES,
   type FlightStatus,
   type NormalizedFlightInput,
+  type NormalizedTrackInput,
+  TRACK_SOURCE_VALUES,
+  type TrackInput,
 } from "./types.ts";
 
 export function normalizeFlightInput(
@@ -71,6 +74,36 @@ export function normalizeFlightInput(
     source: parseOptionalEnum(request.source, FLIGHT_SOURCE_VALUES, "source") ??
       "manual",
     raw_provider: request.raw_provider ?? null,
+  };
+}
+
+export function normalizeTrackInput(
+  track: TrackInput | null | undefined,
+): NormalizedTrackInput | null {
+  if (track === null || track === undefined) {
+    return null;
+  }
+
+  if (
+    !track.geojson || typeof track.geojson !== "object" ||
+    Array.isArray(track.geojson)
+  ) {
+    throw new HttpError(400, "track.geojson must be a GeoJSON object");
+  }
+
+  const source = parseOptionalEnum(
+    track.source,
+    TRACK_SOURCE_VALUES,
+    "track.source",
+  );
+  if (!source) {
+    throw new HttpError(400, "track.source is required");
+  }
+
+  return {
+    geojson: track.geojson as Record<string, unknown>,
+    source,
+    recorded_at: requireTimestamp(track.recorded_at, "track.recorded_at"),
   };
 }
 

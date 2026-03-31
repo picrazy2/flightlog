@@ -110,21 +110,28 @@ Sufficient for a single-user personal app before Supabase Auth is wired up.
 ## Data Flow
 
 1. Frontend loads → fetches all rows from `v_flights_with_airports` via Supabase JS anon
-   key → cached by TanStack Query.
+   key → cached by TanStack Query. This view includes lightweight track metadata
+   (`has_track`, `track_source`, `track_recorded_at`) but not full GeoJSON.
 2. All stats, charts, and map data are derived in-memory from that cached dataset. The
    global date filter (all-time / year / quarter / custom) is an in-memory array filter.
-   No round-trip on filter change.
-3. User adds a flight via one of four paths:
-   - **Search-assisted**: enter flight number + date (or dep/arr + date) → `enrich-flight`
-     Edge Function calls the relevant provider → returns preview → user confirms →
-     `create-flight` persists the record.
-   - **Manual entry**: user fills in the form directly → `create-flight`.
-   - **CSV import**: user uploads a CSV → `import-csv` Edge Function bulk-creates records.
+   No round-trip on filter change. Full track geometry is fetched separately from
+   `v_flight_tracks` only when needed for route rendering or a flight detail view.
+3. User adds a flight via three paths:
+   - **Search-assisted**: enter flight number + date → frontend calls `enrich-flight`,
+     which fetches actuals and track geometry from the relevant provider in one call and
+     returns a preview. User confirms → frontend calls `create-flight` with the enriched
+     payload (actuals + track). No second provider call in `create-flight`.
+   - **CSV import**: user uploads a CSV → `import-csv` bulk-creates records with no
+     per-row provider enrichment. `refresh-recent` subsequently enriches any imported
+     flights within the 30-day FR24 window.
    - **Gmail auto-import**: `watch-gmail` detects a booking confirmation email → Gemini
-     parses it → `create-flight` is called automatically.
+     parses it → `create-flight` is called, which invokes the shared `enrich()` module
+     internally to fetch actuals and track before persisting.
 4. After any write, TanStack Query invalidates the cache and refetches.
-5. `refresh-recent` cron job periodically enriches flights that have now landed with
-   actuals and track data from FR24.
+5. `refresh-recent` cron job runs every 60 minutes. Its primary purpose is to
+   automatically enrich future flights after they land — the most common add flow is
+   entering a future flight at booking time and letting the system fill in actuals
+   post-landing. It also catches CSV-imported flights within the 30-day FR24 window.
 
 **Frontend never calls providers directly.** All provider interactions go through Edge
 Functions which hold the API keys.
@@ -172,9 +179,44 @@ The app uses Explorer. The 30-day window matches the `refresh-recent` eligibilit
 | Flight date | Provider called |
 |-------------|----------------|
 | Future (≤2 days out) | AeroAPI Personal |
-| Future (>2 days out) | None — manual entry |
+| Future (>2 days out) | None — no affordable API covers far-future schedules |
 | Past ≤30 days | FR24 API |
-| Past >30 days | AeroAPI Standard (backfill period only) or manual |
+| Past >30 days | AeroAPI Standard (backfill period only) or none |
+
+### Enrichment architecture
+
+All provider-calling logic lives in `_shared/flights/enrich.ts`. The `enrich-flight`
+Edge Function is a thin HTTP wrapper over this module. `create-flight` imports the
+same module directly for flows that need enrichment without a preview step.
+
+A single call to `enrich()` fetches both actuals (dep/arr/takeoff/landing times,
+aircraft registration) and track geometry from the provider in one request. This
+avoids a second provider call when `create-flight` stores the result.
+
+`create-flight` follows a simple contract:
+
+- If the request already contains enriched flight fields and an optional track,
+  `create-flight` validates and persists them without calling a provider.
+- If the request does not contain enriched data and `enrichment_mode = "try_now"`,
+  `create-flight` calls `enrich()` and merges the result before persisting.
+- If the request does not contain enriched data and `enrichment_mode = "none"` (or
+  the field is omitted), `create-flight` stores only the provided payload.
+
+This keeps the frontend search-confirm flow to one provider call while still allowing
+Gmail and scheduled jobs to reuse the same enrichment logic.
+
+**Enrichment by flow:**
+
+| Flow | When enrichment runs | Provider call |
+|------|---------------------|---------------|
+| Search-assisted add | Frontend calls `enrich-flight` for preview; confirmed payload passed to `create-flight` | One call at preview time |
+| Gmail auto-import | `create-flight` calls `enrich()` internally | One call per flight at import time |
+| CSV import | No enrichment at import time | `refresh-recent` backfills unenriched flights (window depends on active subscription) |
+| Future flight (added at booking time) | No provider covers far-future schedules | `refresh-recent` enriches after landing |
+
+When `enrich()` finds no applicable provider (future >2 days, past >30 days outside
+backfill window), it returns null and the flight is stored with only what the user
+or the import source provided.
 
 ---
 
@@ -375,6 +417,10 @@ All columns except `boundary_geojson` come from the OurAirports CSV.
 Actual flown paths from providers. Great-circle routes are not stored here — computed
 client-side from airport coordinates.
 
+The table remains minimal by design. It stores only the canonical full-geometry record:
+`flight_id`, `geojson`, `source`, and `recorded_at` (plus row metadata). Any derived
+flags or convenience fields for the frontend belong in read models, not in the base table.
+
 ### `sync_state`
 
 | Column | Notes |
@@ -412,7 +458,9 @@ Persistent run log for `refresh-reference-data`.
 ## The View: `v_flights_with_airports`
 
 The single database view the frontend consumes. Returns one fully denormalized row per
-flight — no joins needed by the frontend.
+flight — no joins needed by the frontend for the main dataset. This view intentionally
+does not include full track GeoJSON because that payload is too heavy to ship on every
+app load.
 
 ```sql
 SELECT
@@ -448,6 +496,9 @@ SELECT
   at.image_url           AS aircraft_type_image_url,
   ac.year_manufactured,
   ac.country_of_registration,
+  CASE WHEN t.flight_id IS NULL THEN FALSE ELSE TRUE END AS has_track,
+  t.source               AS track_source,
+  t.recorded_at          AS track_recorded_at,
   b.booking_refs_airline,
   b.booking_ref_platform,
   b.booking_platform,
@@ -462,8 +513,9 @@ LEFT JOIN countries c_dep    ON dep.country          = c_dep.iso2
 LEFT JOIN countries c_arr    ON arr.country          = c_arr.iso2
 LEFT JOIN airlines al        ON f.airline_iata       = al.iata
 LEFT JOIN aircraft_types at  ON f.aircraft_type_code = at.code
-LEFT JOIN aircraft ac  ON f.registration = ac.registration
-LEFT JOIN bookings b   ON f.booking_id  = b.id
+LEFT JOIN aircraft ac        ON f.registration       = ac.registration
+LEFT JOIN tracks t           ON f.id                 = t.flight_id
+LEFT JOIN bookings b         ON f.booking_id         = b.id
 ```
 
 The frontend fetches all rows on load, caches with TanStack Query, and applies the global
@@ -472,18 +524,48 @@ round-trip on filter change. All stats, charts, and map layers are derived from 
 dataset in JavaScript. `LEFT JOIN`s are used intentionally so incomplete reference data
 does not hide a flight row from the frontend.
 
+Only lightweight track metadata is exposed here:
+
+- `has_track`
+- `track_source`
+- `track_recorded_at`
+
+The frontend uses these fields to know whether a stored path exists and whether it should
+request geometry separately.
+
+## The View: `v_flight_tracks`
+
+Full track geometry is exposed through a separate read model rather than directly from the
+base `tracks` table. This keeps the frontend on stable read contracts and avoids coupling
+UI queries to the storage schema.
+
+`v_flight_tracks` returns one row per tracked flight:
+
+```sql
+SELECT
+  t.flight_id,
+  t.geojson,
+  t.source,
+  t.recorded_at
+FROM tracks t
+```
+
+The frontend reads from `v_flight_tracks` only when it needs to render an actual flown path
+for one or more specific flights. It does not fetch this view as part of the initial
+all-flights load.
+
 ---
 
 ## Edge Functions
 
 | Function | Purpose |
 |----------|---------|
-| `enrich-flight` | Call the relevant provider for a given flight number + date, normalize the result, return a preview payload. **Does not write to the database.** Used for the preview-before-save flow. |
-| `create-flight` | Persist a flight record. Accepts manual input or the normalized payload from `enrich-flight`. Also triggers aircraft metadata lookup if the registration is new. |
+| `enrich-flight` | Thin HTTP wrapper over `_shared/flights/enrich.ts`. Calls the relevant provider for a given flight number + date, fetches actuals and track geometry in one provider call, and returns a normalized preview payload. **Does not write to the database.** Used by the frontend for the preview-before-save flow. |
+| `create-flight` | Persist a flight record. Accepts either an already-enriched payload (`flight` plus optional `track`) or a raw payload. If `enrichment_mode = "try_now"` and enriched data is not already present, it calls `enrich()` internally before persisting. If the request already contains enriched data, no provider call is made. Also triggers aircraft metadata lookup if the registration is new. |
 | `update-flight` | Edit an existing flight record. Supports corrections and manual overrides. |
 | `delete-flight` | Remove a flight record. |
-| `import-csv` | Bulk-create flights from a CSV upload. |
-| `refresh-recent` | Batch job: fetches actuals and track data from FR24 for all eligible recently-landed flights and writes results directly to the DB. Not built on `enrich-flight` — no preview step. |
+| `import-csv` | Bulk-create flights from a CSV upload. No per-row provider enrichment — `refresh-recent` backfills actuals and tracks for any imported flights within the 30-day FR24 window. |
+| `refresh-recent` | Cron batch job. Primary purpose: auto-enrich future flights after they land with actuals and track data. Also backfills CSV-imported flights that haven't been enriched. Uses the same provider routing as `enrich()` — AeroAPI Standard during the backfill month (no practical age limit on historical flights), FR24 otherwise (30-day window). Writes directly to `flights` and `tracks`. |
 | `refresh-reference-data` | Refresh `countries`, `airports`, `airlines`, `airline alliances`, and `aircraft_types` from OurAirports, OpenFlights/Wikidata, and `doc8643.com`. Supports targeted scopes for one country, airport, airline, aircraft type, or airport boundary. Logs every run to `reference_refresh_runs`. Does not touch `aircraft`, which remains an on-demand registration lookup. |
 | `watch-gmail` | Poll Gmail for new emails, pre-filter with a Gmail search query, parse matches with Gemini 2.5 Flash, call `create-flight` for confirmed booking emails. |
 
@@ -495,18 +577,21 @@ All Edge Functions validate `Authorization: Bearer <secret>` before executing.
 
 | Job | Schedule | What it does |
 |-----|----------|-------------|
-| `refresh-recent` | Every 60 min | Enriches recently-landed flights with FR24 actuals |
+| `refresh-recent` | Every 60 min | Auto-enriches landed flights with actuals and track data |
 | `watch-gmail` | Every 15–30 min | Checks for new booking confirmation emails |
 | `refresh-reference-data` | Quarterly | Refreshes countries, airports, airlines, and airline alliances; `aircraft_types` runs in paged batches rather than one monolithic job |
 
 ### `refresh-recent` eligibility
 
 A flight is eligible if:
+- `actual_arr IS NULL` (not yet enriched with actuals)
 - `sched_arr <= now() - interval '30 minutes'` (should have landed, with buffer)
-- `actual_arr IS NULL` (not yet enriched)
-- `sched_arr >= now() - interval '30 days'` (within FR24 Explorer window)
 
-Flights outside the 30-day window that were never enriched retain whatever data was
+The provider used depends on which subscription is active:
+- **AeroAPI Standard active (backfill month)**: all eligible flights regardless of age.
+- **Steady state (FR24 only)**: additionally requires `sched_arr >= now() - interval '30 days'`.
+
+Flights outside the applicable window that were never enriched retain whatever data was
 available at entry time and will not be automatically retried.
 
 ---
@@ -522,8 +607,9 @@ Flight booking confirmation emails are automatically detected and imported.
 3. Matching emails are sent to **Gemini 2.5 Flash** with a structured extraction prompt.
    Gemini returns airline IATA, flight number, date, dep/arr IATA, scheduled times, and
    cabin class — or null if not a flight confirmation.
-4. Valid results call `create-flight`. The booking cost/PNR fields are also extracted from
-   the email and stored in `bookings`.
+4. Valid results call `create-flight`, which invokes `enrich()` internally to fetch
+   actuals and track from the relevant provider before persisting. The booking cost/PNR
+   fields extracted from the email are stored in `bookings`.
 5. Airline and airport fields are resolved from the local tables — Gemini only returns
    codes.
 

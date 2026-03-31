@@ -2,8 +2,13 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import { maybeEnrichAircraft } from "./aircraft-enrichment.ts";
 import { resolveUpdatedBookingId, upsertBookingIfPresent } from "./bookings.ts";
+import { enrichFlight as defaultEnrichFlight } from "./enrich.ts";
 import { HttpError } from "./http.ts";
-import { normalizeFlightInput, requireUuid } from "./normalize.ts";
+import {
+  normalizeFlightInput,
+  normalizeTrackInput,
+  requireUuid,
+} from "./normalize.ts";
 import {
   ensureAircraftTypeExists,
   ensureAirlineExists,
@@ -13,16 +18,31 @@ import type {
   AirportRow,
   CreateFlightRequest,
   CreateLikeFlightRequest,
+  EnrichFlightResult,
+  FlightInput,
   StoredFlightRow,
+  StoredTrackRow,
+  TrackInput,
   UpdateFlightRequest,
 } from "./types.ts";
 
 export async function createFlight(
   supabase: SupabaseClient,
   request: CreateFlightRequest,
+  dependencies: {
+    enrichFlight?: (
+      request: FlightInput,
+    ) => Promise<EnrichFlightResult>;
+  } = {},
 ) {
   const warnings: string[] = [];
-  const input = normalizeFlightInput(request);
+  const prepared = await prepareCreateFlightPayload(
+    request,
+    warnings,
+    dependencies.enrichFlight ?? defaultEnrichFlight,
+  );
+  const input = normalizeFlightInput(prepared.flight);
+  const track = normalizeTrackInput(prepared.track);
 
   const airports = await ensureAirportsExist(supabase, [
     input.dep_iata,
@@ -71,12 +91,14 @@ export async function createFlight(
     throw mapSupabaseWriteError(insertError, "create");
   }
 
+  const flightId = insertedFlight.id as string;
+  const storedTrack = track
+    ? await upsertTrack(supabase, flightId, track)
+    : null;
+
   return {
-    flight: await loadFlightViewById(
-      supabase,
-      insertedFlight.id as string,
-      "created",
-    ),
+    flight: await loadFlightViewById(supabase, flightId, "created"),
+    track: storedTrack,
     warnings,
   };
 }
@@ -163,6 +185,102 @@ export async function deleteFlight(
   return deletedFlight;
 }
 
+async function prepareCreateFlightPayload(
+  request: CreateFlightRequest,
+  warnings: string[],
+  enrichFlight: (request: FlightInput) => Promise<EnrichFlightResult>,
+) {
+  let flight = extractCreateFlightInput(request);
+  let track = request.track ?? null;
+
+  if (
+    !hasEnrichedPayload(flight, track) &&
+    parseEnrichmentMode(request.enrichment_mode) === "try_now"
+  ) {
+    const enrichment = await enrichFlight(flight);
+    warnings.push(...enrichment.warnings);
+
+    if (enrichment.flight) {
+      flight = mergeEnrichedFlightInput(flight, enrichment.flight);
+    }
+
+    if (!track && enrichment.track) {
+      track = enrichment.track;
+    }
+  }
+
+  return { flight, track };
+}
+
+function extractCreateFlightInput(
+  request: CreateFlightRequest,
+): CreateLikeFlightRequest {
+  const source = request.flight ?? request;
+
+  return {
+    user_id: source.user_id,
+    flight_date: source.flight_date,
+    airline_iata: source.airline_iata,
+    flight_number: source.flight_number,
+    dep_iata: source.dep_iata,
+    arr_iata: source.arr_iata,
+    sched_dep: source.sched_dep,
+    sched_arr: source.sched_arr,
+    actual_dep: source.actual_dep,
+    actual_takeoff: source.actual_takeoff,
+    actual_landing: source.actual_landing,
+    actual_arr: source.actual_arr,
+    aircraft_type_code: source.aircraft_type_code,
+    registration: source.registration,
+    cabin_class: source.cabin_class,
+    status: source.status,
+    source: source.source,
+    raw_provider: source.raw_provider,
+  };
+}
+
+function hasEnrichedPayload(
+  flight: FlightInput,
+  track: TrackInput | null,
+) {
+  return Boolean(
+    track ||
+      flight.raw_provider !== undefined ||
+      flight.source === "aeroapi" ||
+      flight.source === "fr24api",
+  );
+}
+
+function parseEnrichmentMode(mode: string | null | undefined) {
+  const normalized = mode?.trim().toLowerCase();
+  if (!normalized || normalized === "none") {
+    return "none";
+  }
+
+  if (normalized === "try_now") {
+    return "try_now";
+  }
+
+  throw new HttpError(
+    400,
+    'enrichment_mode must be either "none" or "try_now"',
+  );
+}
+
+function mergeEnrichedFlightInput(
+  base: FlightInput,
+  enriched: FlightInput,
+): CreateLikeFlightRequest {
+  return {
+    ...base,
+    ...enriched,
+    user_id: base.user_id ?? enriched.user_id,
+    cabin_class: base.cabin_class ?? enriched.cabin_class,
+    source: base.source ?? enriched.source,
+    raw_provider: enriched.raw_provider ?? base.raw_provider,
+  };
+}
+
 async function loadExistingFlight(
   supabase: SupabaseClient,
   flightId: string,
@@ -185,6 +303,32 @@ async function loadExistingFlight(
   }
 
   return data as StoredFlightRow;
+}
+
+async function upsertTrack(
+  supabase: SupabaseClient,
+  flightId: string,
+  track: NonNullable<ReturnType<typeof normalizeTrackInput>>,
+) {
+  const { data, error } = await supabase
+    .from("tracks")
+    .upsert(
+      {
+        flight_id: flightId,
+        geojson: track.geojson,
+        source: track.source,
+        recorded_at: track.recorded_at,
+      },
+      { onConflict: "flight_id" },
+    )
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new HttpError(400, `Failed to save track: ${error.message}`);
+  }
+
+  return data as StoredTrackRow;
 }
 
 function mergeUpdateRequest(
