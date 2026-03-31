@@ -2,6 +2,8 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const AERODATABOX_HOST = "aerodatabox.p.rapidapi.com";
 const AERODATABOX_BASE_URL = `https://${AERODATABOX_HOST}`;
+const MAX_RATE_LIMIT_RETRIES = 2;
+const RATE_LIMIT_BACKOFF_MS = 500;
 
 type AeroDataBoxAircraftResponse = {
   reg?: string;
@@ -21,34 +23,22 @@ export type AircraftRefreshStats = {
 export async function refreshAircraftByRegistration(
   supabase: SupabaseClient,
   registration: string,
+  dependencies: AircraftRequestDependencies = {},
 ): Promise<AircraftRefreshStats> {
   const normalizedRegistration = normalizeRegistration(registration);
   if (!normalizedRegistration) {
     throw new Error(`Invalid registration: ${registration}`);
   }
 
-  const response = await fetch(
-    `${AERODATABOX_BASE_URL}/aircrafts/reg/${encodeURIComponent(normalizedRegistration)}`,
-    {
-      headers: {
-        "x-rapidapi-host": AERODATABOX_HOST,
-        "x-rapidapi-key": getRequiredEnv("AERODATABOX_RAPIDAPI_KEY"),
-        "accept": "application/json",
-      },
-    },
+  const aircraft = await fetchAircraftResponse(
+    normalizedRegistration,
+    dependencies,
   );
 
-  if (response.status === 404) {
+  if (!aircraft) {
     throw new Error(`Aircraft not found for registration ${normalizedRegistration}`);
   }
 
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch aircraft ${normalizedRegistration}: ${response.status}`,
-    );
-  }
-
-  const aircraft = await response.json() as AeroDataBoxAircraftResponse;
   const row = normalizeAircraftRow(aircraft, normalizedRegistration);
 
   const { error } = await supabase
@@ -68,35 +58,94 @@ export async function refreshAircraftByRegistration(
 
 export async function fetchAircraftRecordByRegistration(
   registration: string,
+  dependencies: AircraftRequestDependencies = {},
 ) {
   const normalizedRegistration = normalizeRegistration(registration);
   if (!normalizedRegistration) {
     throw new Error(`Invalid registration: ${registration}`);
   }
 
-  const response = await fetch(
-    `${AERODATABOX_BASE_URL}/aircrafts/reg/${encodeURIComponent(normalizedRegistration)}`,
-    {
-      headers: {
-        "x-rapidapi-host": AERODATABOX_HOST,
-        "x-rapidapi-key": getRequiredEnv("AERODATABOX_RAPIDAPI_KEY"),
-        "accept": "application/json",
+  const aircraft = await fetchAircraftResponse(normalizedRegistration, dependencies);
+  return aircraft ? normalizeAircraftRow(aircraft, normalizedRegistration) : null;
+}
+
+type AircraftRequestDependencies = {
+  fetch?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  apiKey?: string;
+};
+
+async function fetchAircraftResponse(
+  normalizedRegistration: string,
+  dependencies: AircraftRequestDependencies,
+) {
+  const fetchImpl = dependencies.fetch ?? fetch;
+  const sleep = dependencies.sleep ?? defaultSleep;
+  const apiKey = dependencies.apiKey ?? getRequiredEnv("AERODATABOX_RAPIDAPI_KEY");
+
+  for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt += 1) {
+    const response = await fetchImpl(
+      `${AERODATABOX_BASE_URL}/aircrafts/reg/${encodeURIComponent(normalizedRegistration)}`,
+      {
+        headers: {
+          "x-rapidapi-host": AERODATABOX_HOST,
+          "x-rapidapi-key": apiKey,
+          "accept": "application/json",
+        },
       },
-    },
-  );
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch aircraft ${normalizedRegistration}: ${response.status}`,
     );
+
+    if (response.status === 204 || response.status === 404) {
+      return null;
+    }
+
+    if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
+      await sleep(RATE_LIMIT_BACKOFF_MS * (attempt + 1));
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(await buildAircraftFetchError(normalizedRegistration, response));
+    }
+
+    const bodyText = await response.text();
+    if (!bodyText.trim()) {
+      return null;
+    }
+
+    let aircraft: AeroDataBoxAircraftResponse;
+    try {
+      aircraft = JSON.parse(bodyText) as AeroDataBoxAircraftResponse;
+    } catch {
+      throw new Error(
+        `Invalid aircraft response for ${normalizedRegistration}: expected JSON body`,
+      );
+    }
+
+    return aircraft;
   }
 
-  const aircraft = await response.json() as AeroDataBoxAircraftResponse;
-  return normalizeAircraftRow(aircraft, normalizedRegistration);
+  throw new Error(`Failed to fetch aircraft ${normalizedRegistration}: 429`);
+}
+
+async function buildAircraftFetchError(
+  normalizedRegistration: string,
+  response: Response,
+) {
+  if (response.status === 403) {
+    return `Aircraft access denied for ${normalizedRegistration}: 403`;
+  }
+
+  if (response.status === 429) {
+    return `Aircraft rate limited for ${normalizedRegistration}: 429`;
+  }
+
+  const bodyText = await response.text();
+  const detail = bodyText.trim().slice(0, 120);
+
+  return detail
+    ? `Failed to fetch aircraft ${normalizedRegistration}: ${response.status} ${detail}`
+    : `Failed to fetch aircraft ${normalizedRegistration}: ${response.status}`;
 }
 
 function normalizeAircraftRow(
@@ -179,4 +228,8 @@ function getRequiredEnv(name: string): string {
   }
 
   return value;
+}
+
+function defaultSleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }

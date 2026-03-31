@@ -28,6 +28,23 @@ export function normalizeFlightInput(
   if (schedArr < schedDep) {
     throw new HttpError(400, "sched_arr must be on or after sched_dep");
   }
+  const providerSchedDep = parseOptionalTimestamp(
+    request.provider_sched_dep,
+    "provider_sched_dep",
+  );
+  const providerSchedArr = parseOptionalTimestamp(
+    request.provider_sched_arr,
+    "provider_sched_arr",
+  );
+  if (
+    providerSchedDep && providerSchedArr &&
+    providerSchedArr < providerSchedDep
+  ) {
+    throw new HttpError(
+      400,
+      "provider_sched_arr must be on or after provider_sched_dep",
+    );
+  }
 
   const actualDep = parseOptionalTimestamp(request.actual_dep, "actual_dep");
   const actualTakeoff = parseOptionalTimestamp(
@@ -49,6 +66,8 @@ export function normalizeFlightInput(
     arr_iata: arrIata,
     sched_dep: schedDep,
     sched_arr: schedArr,
+    provider_sched_dep: providerSchedDep,
+    provider_sched_arr: providerSchedArr,
     actual_dep: actualDep,
     actual_takeoff: actualTakeoff,
     actual_landing: actualLanding,

@@ -36,6 +36,8 @@ export type FlightInput = {
   arr_iata?: string;
   sched_dep?: string;
   sched_arr?: string;
+  provider_sched_dep?: string | null;
+  provider_sched_arr?: string | null;
   actual_dep?: string | null;
   actual_takeoff?: string | null;
   actual_landing?: string | null;
@@ -85,6 +87,35 @@ export type EnrichFlightResult = {
   warnings: string[];
 };
 
+export type RefreshRecentRequest = {
+  flight_id?: string;
+  limit?: number;
+};
+
+export type RefreshRecentCandidate = StoredFlightRow & {
+  has_track: boolean;
+  track_source: TrackSource | null;
+  track_recorded_at: string | null;
+};
+
+export type RefreshRecentFlightResult = {
+  flight_id: string;
+  outcome: "refreshed" | "not_found" | "skipped" | "failed";
+  provider: FlightSource | null;
+  warnings: string[];
+  error?: string;
+};
+
+export type RefreshRecentResult = {
+  scanned: number;
+  eligible: number;
+  refreshed: number;
+  not_found: number;
+  skipped: number;
+  failed: number;
+  results: RefreshRecentFlightResult[];
+};
+
 export type AirportRow = {
   iata: string;
   latitude: number;
@@ -119,6 +150,8 @@ export type StoredFlightRow = {
   arr_iata: string;
   sched_dep: string;
   sched_arr: string;
+  provider_sched_dep: string | null;
+  provider_sched_arr: string | null;
   actual_dep: string | null;
   actual_takeoff: string | null;
   actual_landing: string | null;
@@ -151,6 +184,8 @@ export type NormalizedFlightInput = {
   arr_iata: string;
   sched_dep: string;
   sched_arr: string;
+  provider_sched_dep: string | null;
+  provider_sched_arr: string | null;
   actual_dep: string | null;
   actual_takeoff: string | null;
   actual_landing: string | null;

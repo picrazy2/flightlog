@@ -291,8 +291,10 @@ external standards.
 | `flight_number` | Required numeric/string suffix only, e.g. `123` rather than `UA123` |
 | `dep_iata` | Required FK → `airports` |
 | `arr_iata` | Required FK → `airports` |
-| `sched_dep` | Timestamptz |
-| `sched_arr` | Timestamptz |
+| `sched_dep` | Timestamptz — user-owned / booking-confirmed scheduled departure |
+| `sched_arr` | Timestamptz — user-owned / booking-confirmed scheduled arrival |
+| `provider_sched_dep` | Nullable timestamptz — provider-reported scheduled departure |
+| `provider_sched_arr` | Nullable timestamptz — provider-reported scheduled arrival |
 | `actual_dep` | Gate departure (pushback), nullable |
 | `actual_takeoff` | Wheels off, nullable |
 | `actual_landing` | Wheels on, nullable |
@@ -584,8 +586,13 @@ All Edge Functions validate `Authorization: Bearer <secret>` before executing.
 ### `refresh-recent` eligibility
 
 A flight is eligible if:
-- `actual_arr IS NULL` (not yet enriched with actuals)
 - `sched_arr <= now() - interval '30 minutes'` (should have landed, with buffer)
+- `status <> 'cancelled'`
+- it has no provider enrichment payload yet, or it is still missing a track
+
+`actual_arr` is not a sufficient eligibility test because FR24 does not return gate-arrival
+times. In steady state, provider enrichment is tracked via `raw_provider`, with track presence
+checked separately.
 
 The provider used depends on which subscription is active:
 - **AeroAPI Standard active (backfill month)**: all eligible flights regardless of age.

@@ -43,6 +43,8 @@ Deno.test("createFlight enriches on demand and stores track data", async () => {
           found: true,
           provider: "fr24api",
           flight: {
+            provider_sched_dep: "2026-03-20T10:05:00Z",
+            provider_sched_arr: "2026-03-20T19:55:00Z",
             actual_dep: "2026-03-20T10:15:00Z",
             actual_takeoff: "2026-03-20T10:30:00Z",
             actual_landing: "2026-03-20T19:35:00Z",
@@ -70,6 +72,14 @@ Deno.test("createFlight enriches on demand and stores track data", async () => {
   assertEquals(result.track?.source, "fr24api");
   assertEquals(supabase.db.flights.length, 1);
   assertEquals(supabase.db.tracks.length, 1);
+  assertEquals(
+    supabase.db.flights[0].provider_sched_dep,
+    "2026-03-20T10:05:00.000Z",
+  );
+  assertEquals(
+    supabase.db.flights[0].provider_sched_arr,
+    "2026-03-20T19:55:00.000Z",
+  );
   assert(supabase.db.flights[0].distance_mi === 3442, "Expected JFK-LHR distance");
 });
 
@@ -90,6 +100,8 @@ Deno.test("createFlight skips enrichment when the payload is already enriched", 
         arr_iata: "LHR",
         sched_dep: "2026-03-21T10:00:00Z",
         sched_arr: "2026-03-21T20:00:00Z",
+        provider_sched_dep: "2026-03-21T10:00:00Z",
+        provider_sched_arr: "2026-03-21T20:00:00Z",
         source: "fr24api",
         raw_provider: { provider: "fr24api" },
       },
@@ -129,6 +141,8 @@ Deno.test("updateFlight and deleteFlight mutate persisted records", async () => 
       arr_iata: "LHR",
       sched_dep: "2026-03-20T10:00:00Z",
       sched_arr: "2026-03-20T20:00:00Z",
+      provider_sched_dep: null,
+      provider_sched_arr: null,
       actual_dep: null,
       actual_takeoff: null,
       actual_landing: null,

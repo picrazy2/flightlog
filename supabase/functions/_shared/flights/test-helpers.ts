@@ -93,7 +93,15 @@ class MockSupabaseClient {
   }
 
   syncFlightView() {
-    this.db.v_flights_with_airports = this.db.flights.map((row) => ({ ...row }));
+    this.db.v_flights_with_airports = this.db.flights.map((row) => {
+      const track = this.db.tracks.find((candidate) => candidate.flight_id === row.id);
+      return {
+        ...row,
+        has_track: Boolean(track),
+        track_source: (track?.source as string | null) ?? null,
+        track_recorded_at: (track?.recorded_at as string | null) ?? null,
+      };
+    });
   }
 
   nextId(table: "bookings" | "flights" | "tracks") {

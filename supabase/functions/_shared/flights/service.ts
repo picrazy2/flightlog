@@ -226,6 +226,8 @@ function extractCreateFlightInput(
     arr_iata: source.arr_iata,
     sched_dep: source.sched_dep,
     sched_arr: source.sched_arr,
+    provider_sched_dep: source.provider_sched_dep,
+    provider_sched_arr: source.provider_sched_arr,
     actual_dep: source.actual_dep,
     actual_takeoff: source.actual_takeoff,
     actual_landing: source.actual_landing,
@@ -277,6 +279,8 @@ function mergeEnrichedFlightInput(
     user_id: base.user_id ?? enriched.user_id,
     cabin_class: base.cabin_class ?? enriched.cabin_class,
     source: base.source ?? enriched.source,
+    sched_dep: base.sched_dep ?? enriched.provider_sched_dep ?? enriched.sched_dep,
+    sched_arr: base.sched_arr ?? enriched.provider_sched_arr ?? enriched.sched_arr,
     raw_provider: enriched.raw_provider ?? base.raw_provider,
   };
 }
@@ -346,6 +350,12 @@ function mergeUpdateRequest(
     arr_iata: request.arr_iata ?? existingFlight.arr_iata,
     sched_dep: request.sched_dep ?? existingFlight.sched_dep,
     sched_arr: request.sched_arr ?? existingFlight.sched_arr,
+    provider_sched_dep: request.provider_sched_dep !== undefined
+      ? request.provider_sched_dep
+      : existingFlight.provider_sched_dep,
+    provider_sched_arr: request.provider_sched_arr !== undefined
+      ? request.provider_sched_arr
+      : existingFlight.provider_sched_arr,
     actual_dep: request.actual_dep !== undefined
       ? request.actual_dep
       : existingFlight.actual_dep,

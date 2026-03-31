@@ -1,4 +1,3 @@
-drop view if exists public.v_flight_tracks;
 drop view if exists public.v_flights_with_airports;
 
 create view public.v_flights_with_airports as
@@ -64,11 +63,3 @@ left join public.tracks t
   on f.id = t.flight_id
 left join public.bookings b
   on f.booking_id = b.id;
-
-create view public.v_flight_tracks as
-select
-  t.flight_id,
-  t.geojson,
-  t.source,
-  t.recorded_at
-from public.tracks t;
