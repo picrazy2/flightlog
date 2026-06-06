@@ -22,6 +22,8 @@ export type GeminiParsedBookingEmail = {
   // True when this email is an airline schedule/itinerary CHANGE for an existing
   // trip (new times), as opposed to an original booking, e-ticket, or boarding pass.
   is_schedule_change?: boolean;
+  // True when this email is a cancellation/refund for a previously booked flight.
+  is_cancellation?: boolean;
   // True when the account owner is a traveler on this flight. Undefined when no
   // owner is configured (the caller then does not gate on it).
   owner_is_traveler?: boolean;
@@ -42,6 +44,7 @@ const RESPONSE_SCHEMA = {
   properties: {
     is_flight_booking: { type: "boolean" },
     is_schedule_change: { type: "boolean", nullable: true },
+    is_cancellation: { type: "boolean", nullable: true },
     owner_is_traveler: { type: "boolean", nullable: true },
     traveler_names: {
       type: "array",
@@ -104,6 +107,8 @@ Only set is_flight_booking = true when the email contains specific flight detail
 
 Set is_schedule_change = true if the email is an airline schedule/itinerary CHANGE notification for an existing trip (revised times, "your flight time has changed", "confirmation of changes"), as opposed to an original booking, e-ticket, or boarding pass. Use the email's NEW times for the flight fields.
 
+Set is_cancellation = true if the email is a cancellation or refund notice for a previously booked flight ("ticket refund", "your flight was cancelled", "booking cancelled"). Still extract the affected flight(s) (route + date, and flight number if shown) so they can be matched to an existing record.
+
 What does NOT count (set is_flight_booking = false, empty arrays/null elsewhere):
 - Hotel/car-rental/train/event reservations, marketing, price alerts, fare sales
 - Pre-flight nudges with no concrete flight details, account/login notices
@@ -133,7 +138,7 @@ Do NOT guess:
 const OWNER_PROMPT = (owner: GeminiOwner) =>
   `\n\nThe account owner is "${owner.name ?? ""}"${
     owner.email ? ` (${owner.email})` : ""
-  }. Set owner_is_traveler = true if the owner is one of the travelers/passengers on this flight, matching by name and allowing for minor spelling, ordering, or transliteration differences (e.g. "GUO/ALEXANDER", "Alexander K Guo"). Set it false if the booking is only for other people. If the travelers cannot be determined at all, set it true.`;
+  }. Set owner_is_traveler = true ONLY if you can positively confirm the owner is one of the travelers/passengers on this flight, matching by name (allowing minor spelling, ordering, or transliteration differences, e.g. "GUO/ALEXANDER", "Alexander K Guo"). Set it false if the booking is for other people, OR if the passenger names are not stated anywhere in the email or its attachments. Do not assume the owner is a traveler just because the email was sent to them — people book flights for others.`;
 
 export async function parseEmailForFlights(
   geminiApiKey: string,

@@ -76,7 +76,11 @@ export async function watchGmail(
     lastHistoryId,
   );
 
-  const unprocessed = messages.filter((m) => !processedIds.has(m.id));
+  // Oldest first so a booking is processed before its later schedule-change /
+  // cancellation email (which needs the flight to already exist).
+  const unprocessed = messages
+    .filter((m) => !processedIds.has(m.id))
+    .sort((a, b) => (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0));
 
   const parseFn = dependencies.parseEmail ??
     ((email) => defaultParseEmail(config.geminiApiKey, email, config.owner));
@@ -97,6 +101,7 @@ export async function watchGmail(
     messages_scanned: messages.length,
     imported: results.filter((r) => r.outcome === "imported").length,
     updated: results.filter((r) => r.outcome === "updated").length,
+    cancelled: results.filter((r) => r.outcome === "cancelled").length,
     skipped: results.filter((r) => r.outcome === "skipped").length,
     not_flight: results.filter((r) => r.outcome === "not_flight").length,
     failed: results.filter((r) => r.outcome === "failed").length,
@@ -107,10 +112,16 @@ export async function watchGmail(
   // notification failure break the import.
   if (
     accessToken && config.owner?.email &&
-    (result.imported > 0 || result.updated > 0)
+    (result.imported > 0 || result.updated > 0 || result.cancelled > 0)
   ) {
     try {
-      await sendRunNotification(supabase, accessToken, config.owner.email, result);
+      await sendRunNotification(
+        supabase,
+        accessToken,
+        config.owner.email,
+        result,
+        describeWindow(config),
+      );
     } catch (error) {
       result.results.push({
         message_id: "notification",
@@ -132,9 +143,13 @@ async function sendRunNotification(
   accessToken: string,
   to: string,
   result: WatchGmailResult,
+  scanWindow: string,
 ) {
   const ids = result.results
-    .filter((r) => r.outcome === "imported" || r.outcome === "updated")
+    .filter((r) =>
+      r.outcome === "imported" || r.outcome === "updated" ||
+      r.outcome === "cancelled"
+    )
     .flatMap((r) => r.flight_ids);
   if (ids.length === 0) return;
 
@@ -142,8 +157,8 @@ async function sendRunNotification(
   const { data } = await supabase
     .from("v_flights_with_airports")
     .select(
-      "flight_date, airline_iata, flight_number, dep_iata, arr_iata, cabin_class, " +
-        "aircraft_type_name, cost_cash, cost_currency, cost_points, points_program",
+      "flight_date, airline_iata, flight_number, dep_iata, arr_iata, status, " +
+        "cabin_class, aircraft_type_name, cost_cash, cost_currency, cost_points, points_program",
     )
     .in("id", ids);
   const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
@@ -156,6 +171,7 @@ async function sendRunNotification(
       const head =
         `  ${f.flight_date}  ${f.airline_iata}${f.flight_number}  ` +
         `${f.dep_iata} → ${f.arr_iata}`;
+      if (f.status === "cancelled") return `${head}  (CANCELLED)`;
       const extras = [
         f.cabin_class ? formatCabin(String(f.cabin_class)) : null,
         f.aircraft_type_name ? String(f.aircraft_type_name) : null,
@@ -167,6 +183,7 @@ async function sendRunNotification(
   const parts: string[] = [];
   if (result.imported > 0) parts.push(`${result.imported} added`);
   if (result.updated > 0) parts.push(`${result.updated} updated`);
+  if (result.cancelled > 0) parts.push(`${result.cancelled} cancelled`);
   const summary = parts.join(", ");
 
   const subject = `✈️ Journia: ${summary} from your inbox`;
@@ -176,10 +193,25 @@ async function sendRunNotification(
     ...lines,
     ``,
     `Imported: ${result.imported}  Updated: ${result.updated}  ` +
-    `Skipped: ${result.skipped}  Not a flight: ${result.not_flight}`,
+    `Cancelled: ${result.cancelled}  Skipped: ${result.skipped}  ` +
+    `Not a flight: ${result.not_flight}`,
+    ``,
+    `Scanned emails: ${scanWindow}`,
   ].join("\n");
 
   await sendEmail(accessToken, to, subject, body);
+}
+
+function describeWindow(config: {
+  after?: string;
+  before?: string;
+  lookbackDays?: number | null;
+}): string {
+  if (config.after || config.before) {
+    return `${config.after ?? "beginning"} to ${config.before ?? "now"}`;
+  }
+  if (config.lookbackDays === null) return "entire inbox";
+  return `last ${config.lookbackDays ?? 7} days`;
 }
 
 function formatCabin(value: string): string {
@@ -226,6 +258,13 @@ async function processMessage(
         flight_ids: [],
         warnings: ["Account owner is not a traveler on this booking"],
       };
+    }
+
+    // Cancellation/refund: mark matching existing flights cancelled rather than
+    // creating anything. Matched loosely (date + route) since refund emails
+    // often omit the flight number.
+    if (parsed.is_cancellation === true) {
+      return await processCancellation(supabase, message, parsed, userId);
     }
 
     const allIatas = parsed.flights.flatMap((f) => [
@@ -387,6 +426,67 @@ async function processMessage(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+async function processCancellation(
+  supabase: SupabaseClient,
+  message: GmailMessage,
+  parsed: GeminiParsedBookingEmail,
+  userId: string | null,
+): Promise<WatchGmailMessageResult> {
+  const warnings: string[] = [];
+  const cancelledIds: string[] = [];
+
+  for (const f of parsed.flights) {
+    const date = (f.flight_date ?? "").trim();
+    const dep = (f.dep_iata ?? "").toUpperCase();
+    const arr = (f.arr_iata ?? "").toUpperCase();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || dep.length !== 3 || arr.length !== 3) {
+      warnings.push(
+        `Cancellation leg missing date/route: ${f.airline_iata}${f.flight_number}`,
+      );
+      continue;
+    }
+
+    let query = supabase
+      .from("flights")
+      .select("id, status")
+      .eq("flight_date", date)
+      .eq("dep_iata", dep)
+      .eq("arr_iata", arr);
+    const airline = (f.airline_iata ?? "").toUpperCase();
+    if (/^[A-Z0-9]{2}$/.test(airline)) {
+      query = query.eq("airline_iata", airline);
+    }
+    const { data, error } = await (userId === null
+      ? query.is("user_id", null)
+      : query.eq("user_id", userId));
+    if (error) {
+      warnings.push(`Cancellation lookup failed: ${error.message}`);
+      continue;
+    }
+
+    const matches = ((data ?? []) as Array<{ id: string; status: string }>)
+      .filter((r) => r.status !== "cancelled");
+    for (const m of matches) {
+      const { error: updateError } = await supabase
+        .from("flights")
+        .update({ status: "cancelled" })
+        .eq("id", m.id);
+      if (updateError) {
+        warnings.push(`Failed to cancel ${m.id}: ${updateError.message}`);
+      } else {
+        cancelledIds.push(m.id);
+      }
+    }
+  }
+
+  return {
+    message_id: message.id,
+    outcome: cancelledIds.length > 0 ? "cancelled" : "skipped",
+    flight_ids: cancelledIds,
+    warnings,
+  };
 }
 
 function buildFlightInput(

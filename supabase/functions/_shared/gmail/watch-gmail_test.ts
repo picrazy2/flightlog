@@ -264,6 +264,42 @@ Deno.test("watchGmail drops bookings where the owner is not a traveler", async (
   assertEquals(supabase.db.bookings.length, 0);
 });
 
+Deno.test("watchGmail cancels an existing flight on a refund/cancellation email", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  // First, import the flight
+  await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m1", subject: "BA booking", from: "ba@ba.com", date: "x", body: "" }],
+      "1",
+    ),
+    parseEmail: mockParseEmail(SINGLE_BA_BOOKING),
+  });
+  assertEquals(supabase.db.flights[0].status, "scheduled");
+
+  // Then a refund email for the same route/date
+  const refund: GeminiParsedBookingEmail = {
+    ...SINGLE_BA_BOOKING,
+    is_cancellation: true,
+    booking_platform: null,
+    cost_cash: null,
+    cost_currency: null,
+    booking_refs_airline: null,
+    flights: [{ ...SINGLE_BA_BOOKING.flights[0], flight_number: "NULL" }], // refund omits flight no.
+  };
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m2", subject: "Ticket Refund: London - New York", from: "ba@ba.com", date: "x", body: "" }],
+      "2",
+    ),
+    parseEmail: mockParseEmail(refund),
+  });
+
+  assertEquals(result.cancelled, 1);
+  assertEquals(supabase.db.flights.length, 1); // not duplicated
+  assertEquals(supabase.db.flights[0].status, "cancelled");
+});
+
 Deno.test("watchGmail rejects a flight with a null/invalid flight number", async () => {
   const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
 
