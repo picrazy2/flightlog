@@ -138,33 +138,40 @@ async function sendRunNotification(
     .flatMap((r) => r.flight_ids);
   if (ids.length === 0) return;
 
+  // The view carries denormalized class + cost so one query has everything.
   const { data } = await supabase
-    .from("flights")
-    .select("flight_date, airline_iata, flight_number, dep_iata, arr_iata, booking_id")
+    .from("v_flights_with_airports")
+    .select(
+      "flight_date, airline_iata, flight_number, dep_iata, arr_iata, cabin_class, " +
+        "aircraft_type_name, cost_cash, cost_currency, cost_points, points_program",
+    )
     .in("id", ids);
-  const rows = (data ?? []) as Array<{
-    flight_date: string;
-    airline_iata: string;
-    flight_number: string;
-    dep_iata: string;
-    arr_iata: string;
-    booking_id: string | null;
-  }>;
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
 
   const lines = rows
-    .sort((a, b) => a.flight_date.localeCompare(b.flight_date))
-    .map((f) =>
-      `  ${f.flight_date}  ${f.airline_iata}${f.flight_number}  ${f.dep_iata} → ${f.arr_iata}`
-    );
+    .sort((a, b) =>
+      String(a.flight_date).localeCompare(String(b.flight_date))
+    )
+    .map((f) => {
+      const head =
+        `  ${f.flight_date}  ${f.airline_iata}${f.flight_number}  ` +
+        `${f.dep_iata} → ${f.arr_iata}`;
+      const extras = [
+        f.cabin_class ? formatCabin(String(f.cabin_class)) : null,
+        f.aircraft_type_name ? String(f.aircraft_type_name) : null,
+        formatCost(f),
+      ].filter(Boolean);
+      return extras.length ? `${head}  (${extras.join(", ")})` : head;
+    });
 
   const parts: string[] = [];
   if (result.imported > 0) parts.push(`${result.imported} added`);
   if (result.updated > 0) parts.push(`${result.updated} updated`);
   const summary = parts.join(", ");
 
-  const subject = `✈️ Flightlog: ${summary} from your inbox`;
+  const subject = `✈️ Journia: ${summary} from your inbox`;
   const body = [
-    `Flightlog processed your inbox and made changes:`,
+    `Journia processed your inbox and made changes:`,
     ``,
     ...lines,
     ``,
@@ -173,6 +180,23 @@ async function sendRunNotification(
   ].join("\n");
 
   await sendEmail(accessToken, to, subject, body);
+}
+
+function formatCabin(value: string): string {
+  return value
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function formatCost(f: Record<string, unknown>): string | null {
+  if (f.cost_cash != null) {
+    return `${f.cost_cash} ${f.cost_currency ?? ""}`.trim();
+  }
+  if (f.cost_points != null) {
+    return `${f.cost_points} ${f.points_program ?? "pts"}`.trim();
+  }
+  return null;
 }
 
 async function processMessage(
