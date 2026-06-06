@@ -1,5 +1,6 @@
 import { watchGmail } from "./watch-gmail.ts";
 import {
+  assert,
   assertEquals,
   createMockSupabaseClient,
 } from "../flights/test-helpers.ts";
@@ -261,6 +262,78 @@ Deno.test("watchGmail drops bookings where the owner is not a traveler", async (
   assertEquals(result.imported, 0);
   assertEquals(supabase.db.flights.length, 0);
   assertEquals(supabase.db.bookings.length, 0);
+});
+
+Deno.test("watchGmail updates an existing flight on a schedule change", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m1", subject: "BA booking", from: "ba@ba.com", date: "x", body: "" }],
+      "1",
+    ),
+    parseEmail: mockParseEmail(SINGLE_BA_BOOKING),
+  });
+  const origDep = supabase.db.flights[0].sched_dep;
+
+  const changed: GeminiParsedBookingEmail = {
+    ...SINGLE_BA_BOOKING,
+    is_schedule_change: true,
+    flights: [{
+      ...SINGLE_BA_BOOKING.flights[0],
+      dep_time_local: "14:00",
+      arr_time_local: "17:00",
+    }],
+  };
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m2", subject: "Your flight time has changed", from: "ba@ba.com", date: "x", body: "" }],
+      "2",
+    ),
+    parseEmail: mockParseEmail(changed),
+  });
+
+  assertEquals(result.updated, 1);
+  assertEquals(result.imported, 0);
+  assertEquals(supabase.db.flights.length, 1); // no duplicate
+  assert(supabase.db.flights[0].sched_dep !== origDep); // schedule updated
+});
+
+Deno.test("watchGmail creates a flight from a boarding pass with no booking payload", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  const boardingPass: GeminiParsedBookingEmail = {
+    is_flight_booking: true,
+    flights: [{
+      airline_iata: "BA",
+      flight_number: "891",
+      flight_date: "2026-05-26",
+      dep_iata: "LHR",
+      arr_iata: "JFK",
+      dep_time_local: "09:00",
+      arr_time_local: "12:00",
+      cabin_class: null,
+    }],
+    booking_refs_airline: null,
+    booking_ref_platform: null,
+    booking_platform: null,
+    cost_cash: null,
+    cost_currency: null,
+    cost_points: null,
+    points_program: null,
+  };
+
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "bp1", subject: "Boarding pass for Mr Alexander Guo", from: "ba@ba.com", date: "x", body: "" }],
+      "1",
+    ),
+    parseEmail: mockParseEmail(boardingPass),
+  });
+
+  assertEquals(result.imported, 1);
+  assertEquals(supabase.db.flights.length, 1);
+  assertEquals(supabase.db.bookings.length, 0); // no booking payload -> no booking
 });
 
 Deno.test("watchGmail works with null user_id (cron path)", async () => {

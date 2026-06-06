@@ -129,7 +129,7 @@ export type WatchGmailRequest = {
 
 export type WatchGmailMessageResult = {
   message_id: string;
-  outcome: "imported" | "skipped" | "not_flight" | "failed";
+  outcome: "imported" | "updated" | "skipped" | "not_flight" | "failed";
   flight_ids: string[];
   warnings: string[];
   error?: string;
@@ -138,6 +138,7 @@ export type WatchGmailMessageResult = {
 export type WatchGmailResult = {
   messages_scanned: number;
   imported: number;
+  updated: number;
   skipped: number;
   not_flight: number;
   failed: number;

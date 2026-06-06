@@ -50,6 +50,8 @@ export const FLIGHT_SEARCH_QUERIES = [
   'subject:("boarding pass" OR "checked in" OR "checked-in" OR "e-boarding")',
   // Google Flights itineraries (and self-forwards of them)
   'subject:"Google Flights"',
+  // Airline schedule / itinerary change notifications
+  'subject:("schedule change" OR "itinerary has changed" OR "flight has changed" OR "change to your booking" OR "confirmation of changes" OR rescheduled OR "time change")',
   // Booking confirmations (Chinese) — 机票 air ticket, 航班 flight, 行程 itinerary,
   // 值机 check-in, 登机牌 boarding pass
   "subject:(机票 OR 航班 OR 行程 OR 值机 OR 登机牌)",
@@ -59,6 +61,8 @@ export const FLIGHT_SEARCH_QUERIES = [
 
 const DEFAULT_LOOKBACK_DAYS = 7;
 const MAX_IDS_PER_QUERY = 1500;
+// Drop Gmail-categorized marketing. Spam/Trash are already excluded by default.
+const EXCLUSIONS = "-category:promotions";
 
 export type ScanOptions = {
   // Days back to search. null = whole inbox (used for backfill).
@@ -85,7 +89,9 @@ export async function scanNewMessages(
 
   const seen = new Set<string>();
   for (const clause of queries) {
-    const q = after ? `${clause} after:${after}` : clause;
+    const q = [clause, after ? `after:${after}` : null, EXCLUSIONS]
+      .filter(Boolean)
+      .join(" ");
     for (const id of await listMessageIdsBySearch(accessToken, q)) {
       seen.add(id);
     }

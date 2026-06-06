@@ -19,6 +19,9 @@ export type GeminiOwner = {
 
 export type GeminiParsedBookingEmail = {
   is_flight_booking: boolean;
+  // True when this email is an airline schedule/itinerary CHANGE for an existing
+  // trip (new times), as opposed to an original booking, e-ticket, or boarding pass.
+  is_schedule_change?: boolean;
   // True when the account owner is a traveler on this flight. Undefined when no
   // owner is configured (the caller then does not gate on it).
   owner_is_traveler?: boolean;
@@ -38,6 +41,7 @@ const RESPONSE_SCHEMA = {
   required: ["is_flight_booking", "flights"],
   properties: {
     is_flight_booking: { type: "boolean" },
+    is_schedule_change: { type: "boolean", nullable: true },
     owner_is_traveler: { type: "boolean", nullable: true },
     traveler_names: {
       type: "array",
@@ -97,6 +101,8 @@ What counts (set is_flight_booking = true):
 - Boarding passes and check-in confirmations (these often have no cost — that is fine)
 - Multi-language emails (Chinese, French, etc.) — parse them the same way
 Only set is_flight_booking = true when the email contains specific flight details (airline, flight number, route, date). It is fine if cost/PNR are missing (common for boarding passes).
+
+Set is_schedule_change = true if the email is an airline schedule/itinerary CHANGE notification for an existing trip (revised times, "your flight time has changed", "confirmation of changes"), as opposed to an original booking, e-ticket, or boarding pass. Use the email's NEW times for the flight fields.
 
 What does NOT count (set is_flight_booking = false, empty arrays/null elsewhere):
 - Hotel/car-rental/train/event reservations, marketing, price alerts, fare sales

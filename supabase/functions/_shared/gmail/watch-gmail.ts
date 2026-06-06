@@ -3,7 +3,7 @@ import { DateTime } from "npm:luxon@3.7.2";
 
 import { upsertBookingIfPresent } from "../flights/bookings.ts";
 import { HttpError } from "../flights/http.ts";
-import { hasBookingPayload, normalizeFlightInput } from "../flights/normalize.ts";
+import { normalizeFlightInput } from "../flights/normalize.ts";
 import { createFlight } from "../flights/service.ts";
 import type {
   BookingInput,
@@ -90,6 +90,7 @@ export async function watchGmail(
   return {
     messages_scanned: messages.length,
     imported: results.filter((r) => r.outcome === "imported").length,
+    updated: results.filter((r) => r.outcome === "updated").length,
     skipped: results.filter((r) => r.outcome === "skipped").length,
     not_flight: results.filter((r) => r.outcome === "not_flight").length,
     failed: results.filter((r) => r.outcome === "failed").length,
@@ -134,23 +135,19 @@ async function processMessage(
 
     const warnings: string[] = [];
 
-    // First pass: build/normalize each leg and check whether it already exists.
-    // This lets us avoid creating a booking when the whole email is a
-    // re-notification of flights we already have (the orphan-booking bug).
+    // First pass: normalize each leg and look up any existing flight.
     type LegPlan = {
       input: FlightInput;
-      existing: { id: string; booking_id: string | null } | null;
+      normalized: NormalizedFlightInput;
+      existing: ExistingFlight | null;
     };
     const plans: LegPlan[] = [];
     for (const parsedFlight of parsed.flights) {
       try {
         const input = buildFlightInput(parsedFlight, airports, userId);
-        const existing = await findExistingFlight(
-          supabase,
-          normalizeFlightInput(input),
-          userId,
-        );
-        plans.push({ input, existing });
+        const normalized = normalizeFlightInput(input);
+        const existing = await findExistingFlight(supabase, normalized, userId);
+        plans.push({ input, normalized, existing });
       } catch (error) {
         warnings.push(
           `${parsedFlight.airline_iata}${parsedFlight.flight_number}: ${
@@ -161,36 +158,35 @@ async function processMessage(
     }
 
     const newLegs = plans.filter((p) => !p.existing);
+    const existingLegs = plans.filter((p) => p.existing);
     const existingBookingIds = [
       ...new Set(
-        plans
-          .filter((p) => p.existing?.booking_id)
+        existingLegs
+          .filter((p) => p.existing!.booking_id)
           .map((p) => p.existing!.booking_id as string),
       ),
     ];
+    const existingLegsNeedingBooking = existingLegs.filter(
+      (p) => !p.existing!.booking_id,
+    );
 
-    // Every leg already exists → nothing new; don't create a booking.
-    if (newLegs.length === 0) {
-      return {
-        message_id: message.id,
-        outcome: "skipped",
-        flight_ids: plans.map((p) => p.existing!.id),
-        warnings,
-      };
-    }
-
-    // Reuse the trip's existing booking when there's exactly one; otherwise
-    // create a fresh booking from this email's payload (if any).
+    // Resolve a booking id: reuse the trip's existing booking when there's
+    // exactly one; otherwise create a fresh one from this email's payload, but
+    // only if a new flight needs it (or an existing flight has none yet).
     const bookingInput = buildBookingInput(parsed, userId, message.id);
-    const createdFreshBooking = existingBookingIds.length !== 1 &&
-      hasBookingPayload(bookingInput);
+    const wantsBooking =
+      (newLegs.length > 0 || existingLegsNeedingBooking.length > 0) &&
+      hasBookingContent(parsed);
+    const createdFreshBooking = existingBookingIds.length !== 1 && wantsBooking;
     const bookingId = existingBookingIds.length === 1
       ? existingBookingIds[0]
       : createdFreshBooking
       ? await upsertBookingIfPresent(supabase, bookingInput, userId)
       : null;
+    let bookingUsed = existingBookingIds.length === 1;
 
-    const flightIds: string[] = [];
+    // Create genuinely new flights.
+    const createdIds: string[] = [];
     for (const plan of newLegs) {
       try {
         const { flight, warnings: flightWarnings } = await createFlight(
@@ -198,17 +194,10 @@ async function processMessage(
           { ...plan.input, enrichment_mode: "try_now" },
         );
         const flightId = String(flight.id);
-        flightIds.push(flightId);
+        createdIds.push(flightId);
         warnings.push(...flightWarnings);
-
-        if (bookingId) {
-          const { error } = await supabase
-            .from("flights")
-            .update({ booking_id: bookingId })
-            .eq("id", flightId);
-          if (error) {
-            warnings.push(`Failed to link booking: ${error.message}`);
-          }
+        if (bookingId && await linkBooking(supabase, flightId, bookingId, warnings)) {
+          bookingUsed = true;
         }
       } catch (error) {
         warnings.push(
@@ -219,11 +208,61 @@ async function processMessage(
       }
     }
 
-    if (flightIds.length === 0) {
-      // No new flight persisted — don't leave a freshly-created booking orphaned.
-      if (createdFreshBooking && bookingId) {
-        await supabase.from("bookings").delete().eq("id", bookingId);
+    // Update existing flights. Schedule (sched_dep/arr) is the booking's source
+    // of truth, so an ordinary booking/boarding-pass does NOT overwrite it —
+    // only an explicit schedule-change does. A booking is backfilled onto an
+    // existing flight that has none yet (e.g. boarding pass arrived first).
+    const updatedIds: string[] = [];
+    for (const plan of existingLegs) {
+      const ex = plan.existing!;
+      const changes: Record<string, unknown> = {};
+      if (
+        parsed.is_schedule_change === true &&
+        (instantsDiffer(plan.normalized.sched_dep, ex.sched_dep) ||
+          instantsDiffer(plan.normalized.sched_arr, ex.sched_arr))
+      ) {
+        changes.sched_dep = plan.normalized.sched_dep;
+        changes.sched_arr = plan.normalized.sched_arr;
       }
+      if (!ex.booking_id && bookingId) {
+        changes.booking_id = bookingId;
+        bookingUsed = true;
+      }
+      if (Object.keys(changes).length === 0) continue;
+
+      const { error } = await supabase
+        .from("flights")
+        .update(changes)
+        .eq("id", ex.id);
+      if (error) {
+        warnings.push(`Failed to update flight ${ex.id}: ${error.message}`);
+      } else {
+        updatedIds.push(ex.id);
+      }
+    }
+
+    // Don't leave a freshly-created booking unattached.
+    if (createdFreshBooking && bookingId && !bookingUsed) {
+      await supabase.from("bookings").delete().eq("id", bookingId);
+    }
+
+    if (createdIds.length > 0) {
+      return {
+        message_id: message.id,
+        outcome: "imported",
+        flight_ids: createdIds,
+        warnings,
+      };
+    }
+    if (updatedIds.length > 0) {
+      return {
+        message_id: message.id,
+        outcome: "updated",
+        flight_ids: updatedIds,
+        warnings,
+      };
+    }
+    if (newLegs.length > 0) {
       return {
         message_id: message.id,
         outcome: "failed",
@@ -232,11 +271,10 @@ async function processMessage(
         error: "All flights failed to create",
       };
     }
-
     return {
       message_id: message.id,
-      outcome: "imported",
-      flight_ids: flightIds,
+      outcome: "skipped",
+      flight_ids: existingLegs.map((p) => p.existing!.id),
       warnings,
     };
   } catch (error) {
@@ -287,6 +325,20 @@ function buildFlightInput(
     cabin_class: parsed.cabin_class,
     source: "gmail",
   };
+}
+
+// Real booking content worth a bookings row — excludes raw_email provenance,
+// which is always present. A boarding pass with no cost/PNR should not create one.
+function hasBookingContent(parsed: GeminiParsedBookingEmail): boolean {
+  return Boolean(
+    parsed.cost_cash != null ||
+      parsed.cost_points != null ||
+      parsed.cost_currency ||
+      parsed.points_program ||
+      parsed.booking_platform ||
+      parsed.booking_ref_platform ||
+      (parsed.booking_refs_airline && parsed.booking_refs_airline.length > 0),
+  );
 }
 
 function buildBookingInput(
@@ -360,14 +412,21 @@ function toUtcIso(dt: DateTime): string {
   return iso.replace(".000Z", "Z");
 }
 
+type ExistingFlight = {
+  id: string;
+  booking_id: string | null;
+  sched_dep: string;
+  sched_arr: string;
+};
+
 async function findExistingFlight(
   supabase: SupabaseClient,
   flight: NormalizedFlightInput,
   userId: string | null,
-): Promise<{ id: string; booking_id: string | null } | null> {
+): Promise<ExistingFlight | null> {
   const query = supabase
     .from("flights")
-    .select("id, booking_id")
+    .select("id, booking_id, sched_dep, sched_arr")
     .eq("flight_date", flight.flight_date)
     .eq("airline_iata", flight.airline_iata)
     .eq("flight_number", flight.flight_number)
@@ -381,8 +440,32 @@ async function findExistingFlight(
     throw new HttpError(500, `Failed to check existing flight: ${error.message}`);
   }
 
-  const rows = (data ?? []) as Array<{ id: string; booking_id: string | null }>;
+  const rows = (data ?? []) as ExistingFlight[];
   return rows[0] ?? null;
+}
+
+function instantsDiffer(a: string, b: string): boolean {
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return a !== b;
+  return Math.abs(ta - tb) > 60_000; // ignore sub-minute jitter
+}
+
+async function linkBooking(
+  supabase: SupabaseClient,
+  flightId: string,
+  bookingId: string,
+  warnings: string[],
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("flights")
+    .update({ booking_id: bookingId })
+    .eq("id", flightId);
+  if (error) {
+    warnings.push(`Failed to link booking: ${error.message}`);
+    return false;
+  }
+  return true;
 }
 
 async function loadSyncState(
