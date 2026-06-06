@@ -114,7 +114,7 @@ What does NOT count (set is_flight_booking = false, empty arrays/null elsewhere)
 - Pre-flight nudges with no concrete flight details, account/login notices
 
 Field rules:
-- Extract every flight leg, including connections and both directions of a round trip
+- Extract EVERY individual flight segment as its own flight. A connection/layover is MULTIPLE flights, not one. For example "London (STN) → Almaty (ALA), 1 connecting flight: TK1244 via IST, then TK352" is TWO flights — STN→IST (TK1244) and IST→ALA (TK352). Never collapse a connection into a single origin→destination flight, and never keep only the first or last leg. A round trip with one stopover each way is FOUR flights. List every flight number shown.
 - airline_iata: 2-character IATA airline code (e.g. UA, BA, AA)
 - flight_number: numeric/alphanumeric suffix only, no airline prefix (e.g. "117" not "BA117")
 - flight_date: YYYY-MM-DD, the local operating date at departure

@@ -95,19 +95,30 @@ function b64url(s: string): string {
 // Each clause is an independent Gmail search; results are unioned. Keeping them
 // separate is clearer (and avoids fragile precedence) than one mega-query.
 export const FLIGHT_SEARCH_QUERIES = [
-  // Booking confirmations / itineraries / e-tickets (English)
+  // English: bookings / itineraries / e-tickets
   'subject:(confirmation OR itinerary OR "e-ticket" OR booking) (flight OR airline)',
-  // Boarding passes & check-in confirmations — flights actually flown
+  // English: boarding passes & check-ins — flights actually flown
   'subject:("boarding pass" OR "checked in" OR "checked-in" OR "e-boarding")',
   // Google Flights itineraries (and self-forwards of them)
   'subject:"Google Flights"',
-  // Airline schedule / itinerary change notifications
-  'subject:("schedule change" OR "itinerary has changed" OR "flight has changed" OR "change to your booking" OR "confirmation of changes" OR rescheduled OR "time change")',
-  // Booking confirmations (Chinese) — 机票 air ticket, 航班 flight, 行程 itinerary,
-  // 值机 check-in, 登机牌 boarding pass
-  "subject:(机票 OR 航班 OR 行程 OR 值机 OR 登机牌)",
-  // Booking confirmations (French)
-  "subject:(billet OR réservation OR vol OR avion)",
+  // English: changes, cancellations & refunds (these supersede existing bookings)
+  'subject:(refund OR cancelled OR canceled OR cancellation OR "schedule change" OR "flight change" OR "itinerary has changed" OR "flight has changed" OR rescheduled OR "time change" OR "change to your booking" OR "confirmation of changes")',
+  // Chinese — ticket/flight/itinerary/checkin/boarding/booking/confirm/refund/change/cancel
+  "subject:(机票 OR 航班 OR 行程 OR 值机 OR 登机牌 OR 预订 OR 确认 OR 退票 OR 退款 OR 变更 OR 取消)",
+  // Japanese — ticket/booking/boarding/flight/e-ticket/cancellation/change/refund
+  "subject:(航空券 OR 予約 OR 搭乗 OR フライト OR eチケット OR 欠航 OR 変更 OR 払い戻し)",
+  // Korean — ticket/booking/boarding/flight/cancel/change/refund/itinerary
+  "subject:(항공권 OR 예약 OR 탑승 OR 항공편 OR 취소 OR 변경 OR 환불 OR 일정)",
+  // Italian — flight/booking/ticket/itinerary/cancellation/refund
+  "subject:(volo OR prenotazione OR biglietto OR itinerario OR annullamento OR rimborso OR cancellazione)",
+  // Spanish / Catalan — flight/booking/ticket/invoice/cancellation/refund
+  "subject:(vuelo OR vol OR reserva OR billete OR bitllet OR factura OR cancelación OR reembolso)",
+  // French — booking/ticket/itinerary/cancellation/refund/plane
+  "subject:(réservation OR billet OR itinéraire OR annulation OR remboursement OR avion)",
+  // Turkish — flight/booking/ticket/cancel/refund/boarding
+  "subject:(uçuş OR rezervasyon OR bilet OR iptal OR iade OR biniş)",
+  // Portuguese — flight/boarding/ticket/cancellation/refund
+  "subject:(voo OR embarque OR bilhete OR cancelamento OR reembolso)",
 ];
 
 const DEFAULT_LOOKBACK_DAYS = 7;
@@ -321,24 +332,56 @@ function extractHeader(
   );
 }
 
+const MAX_BODY_CHARS = 20000;
+
 function extractBody(payload: GmailPart | undefined): string {
   if (!payload) return "";
 
+  // Prefer plain text; otherwise convert HTML to text first. Sending raw HTML
+  // wastes the char budget on CSS/markup and can push the real flight details
+  // past the cap entirely (some confirmation emails are 300KB+ of styling).
   const plainPart = findPartByMimeType(payload, "text/plain");
   if (plainPart?.body?.data) {
-    return decodeBase64Url(plainPart.body.data).slice(0, 15000);
+    return decodeBase64Url(plainPart.body.data).slice(0, MAX_BODY_CHARS);
   }
 
   const htmlPart = findPartByMimeType(payload, "text/html");
   if (htmlPart?.body?.data) {
-    return decodeBase64Url(htmlPart.body.data).slice(0, 15000);
+    return htmlToText(decodeBase64Url(htmlPart.body.data)).slice(0, MAX_BODY_CHARS);
   }
 
   if (payload.body?.data) {
-    return decodeBase64Url(payload.body.data).slice(0, 15000);
+    const raw = decodeBase64Url(payload.body.data);
+    const text = payload.mimeType === "text/html" ? htmlToText(raw) : raw;
+    return text.slice(0, MAX_BODY_CHARS);
   }
 
   return "";
+}
+
+// Strip HTML to readable text: drop style/script/head/comments, turn block-level
+// tags into newlines, remove remaining tags, decode common entities, collapse
+// whitespace. Keeps the actual content (flight legs, times) within budget.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<head[\s\S]*?<\/head>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<\/(p|div|tr|td|li|h[1-6]|table)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;|&hairsp;|&#8199;|&#847;|&zwnj;|&#8204;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&[a-z0-9#]+;/gi, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function findPartByMimeType(
