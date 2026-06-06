@@ -1,0 +1,218 @@
+import { watchGmail } from "./watch-gmail.ts";
+import {
+  assertEquals,
+  createMockSupabaseClient,
+} from "../flights/test-helpers.ts";
+import type { GeminiParsedBookingEmail } from "./gemini-parser.ts";
+import type { GmailMessage } from "./gmail-client.ts";
+
+const USER_ID = "11111111-1111-4111-8111-111111111111";
+
+const AIRPORTS = [
+  { iata: "LHR", latitude: 51.47, longitude: -0.4543, timezone: "Europe/London" },
+  { iata: "JFK", latitude: 40.6413, longitude: -73.7781, timezone: "America/New_York" },
+  { iata: "LAX", latitude: 33.9425, longitude: -118.408, timezone: "America/Los_Angeles" },
+];
+
+const AIRLINES = [
+  { iata: "BA", name: "British Airways" },
+  { iata: "AA", name: "American Airlines" },
+];
+
+const MOCK_CONFIG = {
+  gmailClientId: "client-id",
+  gmailClientSecret: "client-secret",
+  gmailRefreshToken: "refresh-token",
+  geminiApiKey: "gemini-key",
+  userId: USER_ID,
+};
+
+function mockScanMessages(
+  messages: GmailMessage[],
+  historyId: string,
+) {
+  return async (_token: string, _historyId: string | null) => ({
+    messages,
+    historyId,
+  });
+}
+
+function mockParseEmail(result: GeminiParsedBookingEmail) {
+  return async (_email: GmailMessage) => result;
+}
+
+const NOT_FLIGHT: GeminiParsedBookingEmail = {
+  is_flight_booking: false,
+  flights: [],
+  booking_refs_airline: null,
+  booking_ref_platform: null,
+  booking_platform: null,
+  cost_cash: null,
+  cost_currency: null,
+  cost_points: null,
+  points_program: null,
+};
+
+Deno.test("watchGmail imports a single-leg booking email", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "msg1", subject: "BA booking", from: "ba@ba.com", date: "Mon, 1 Jun 2026", body: "" }],
+      "100",
+    ),
+    parseEmail: mockParseEmail({
+      is_flight_booking: true,
+      flights: [
+        {
+          airline_iata: "BA",
+          flight_number: "117",
+          flight_date: "2026-07-01",
+          dep_iata: "LHR",
+          arr_iata: "JFK",
+          dep_time_local: "10:00",
+          arr_time_local: "13:00",
+          cabin_class: "economy",
+        },
+      ],
+      booking_refs_airline: [{ airline_iata: "BA", pnr: "XYZ123" }],
+      booking_ref_platform: null,
+      booking_platform: "direct",
+      cost_cash: 500,
+      cost_currency: "GBP",
+      cost_points: null,
+      points_program: null,
+    }),
+  });
+
+  assertEquals(result.messages_scanned, 1);
+  assertEquals(result.imported, 1);
+  assertEquals(result.not_flight, 0);
+  assertEquals(result.results[0].outcome, "imported");
+  assertEquals(result.results[0].flight_ids.length, 1);
+  assertEquals(supabase.db.flights.length, 1);
+  assertEquals(supabase.db.flights[0].source, "gmail");
+  assertEquals(supabase.db.flights[0].airline_iata, "BA");
+  assertEquals(supabase.db.bookings.length, 1);
+  assertEquals(supabase.db.bookings[0].cost_cash, 500);
+});
+
+Deno.test("watchGmail creates flights for a round-trip booking sharing one booking row", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "msg1", subject: "Round trip", from: "ba@ba.com", date: "Mon, 1 Jun 2026", body: "" }],
+      "200",
+    ),
+    parseEmail: mockParseEmail({
+      is_flight_booking: true,
+      flights: [
+        {
+          airline_iata: "BA",
+          flight_number: "117",
+          flight_date: "2026-07-01",
+          dep_iata: "LHR",
+          arr_iata: "JFK",
+          dep_time_local: "10:00",
+          arr_time_local: "13:00",
+          cabin_class: null,
+        },
+        {
+          airline_iata: "BA",
+          flight_number: "118",
+          flight_date: "2026-07-15",
+          dep_iata: "JFK",
+          arr_iata: "LHR",
+          dep_time_local: "19:00",
+          arr_time_local: "07:00",
+          cabin_class: null,
+        },
+      ],
+      booking_refs_airline: [{ airline_iata: "BA", pnr: "RT456" }],
+      booking_ref_platform: null,
+      booking_platform: null,
+      cost_cash: 1200,
+      cost_currency: "USD",
+      cost_points: null,
+      points_program: null,
+    }),
+  });
+
+  assertEquals(result.imported, 1);
+  assertEquals(supabase.db.flights.length, 2);
+  assertEquals(supabase.db.bookings.length, 1);
+  // Both legs linked to the same booking
+  assertEquals(
+    supabase.db.flights[0].booking_id,
+    supabase.db.flights[1].booking_id,
+  );
+});
+
+Deno.test("watchGmail marks non-flight emails as not_flight", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "msg1", subject: "Newsletter", from: "news@airline.com", date: "Mon, 1 Jun 2026", body: "" }],
+      "100",
+    ),
+    parseEmail: mockParseEmail(NOT_FLIGHT),
+  });
+
+  assertEquals(result.messages_scanned, 1);
+  assertEquals(result.not_flight, 1);
+  assertEquals(result.imported, 0);
+  assertEquals(supabase.db.flights.length, 0);
+});
+
+Deno.test("watchGmail skips already-processed message IDs", async () => {
+  const supabase = createMockSupabaseClient({
+    airports: AIRPORTS,
+    airlines: AIRLINES,
+    sync_state: [
+      { user_id: USER_ID, key: "gmail_last_history_id", value: "50" },
+      {
+        user_id: USER_ID,
+        key: "gmail_processed_ids",
+        value: JSON.stringify(["msg1"]),
+      },
+    ],
+  });
+
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "msg1", subject: "BA booking", from: "ba@ba.com", date: "Mon, 1 Jun 2026", body: "" }],
+      "100",
+    ),
+    parseEmail: async () => { throw new Error("should not be called"); },
+  });
+
+  assertEquals(result.messages_scanned, 1);
+  assertEquals(result.imported, 0);
+  assertEquals(result.results.length, 0);
+  assertEquals(supabase.db.flights.length, 0);
+});
+
+Deno.test("watchGmail saves historyId and processed IDs to sync_state", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "msg42", subject: "Newsletter", from: "x@y.com", date: "Mon, 1 Jun 2026", body: "" }],
+      "999",
+    ),
+    parseEmail: mockParseEmail(NOT_FLIGHT),
+  });
+
+  const historyRow = supabase.db.sync_state.find(
+    (r) => (r as Record<string, unknown>)["key"] === "gmail_last_history_id",
+  ) as Record<string, unknown> | undefined;
+  assertEquals(historyRow?.["value"], "999");
+
+  const processedRow = supabase.db.sync_state.find(
+    (r) => (r as Record<string, unknown>)["key"] === "gmail_processed_ids",
+  ) as Record<string, unknown> | undefined;
+  const ids = JSON.parse(processedRow?.["value"] as string) as string[];
+  assertEquals(ids.includes("msg42"), true);
+});

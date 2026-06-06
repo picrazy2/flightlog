@@ -9,6 +9,7 @@ type TableName =
   | "aircraft"
   | "bookings"
   | "flights"
+  | "sync_state"
   | "tracks"
   | "v_flights_with_airports";
 
@@ -81,6 +82,7 @@ class MockSupabaseClient {
       aircraft: clone(seed.aircraft ?? []),
       bookings: clone(seed.bookings ?? []),
       flights: clone(seed.flights ?? []),
+      sync_state: clone(seed.sync_state ?? []),
       tracks: clone(seed.tracks ?? []),
       v_flights_with_airports: clone(seed.v_flights_with_airports ?? []),
     };

@@ -1,5 +1,5 @@
 {
   "tasks": {
-    "test:backend": "deno test supabase/functions/_shared/flights"
+    "test:backend": "deno test supabase/functions/_shared"
   }
 }

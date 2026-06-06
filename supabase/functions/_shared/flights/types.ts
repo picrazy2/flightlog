@@ -121,6 +121,27 @@ export type ImportCsvResult = {
   results: ImportCsvRowResult[];
 };
 
+export type WatchGmailRequest = {
+  user_id?: string | null;
+};
+
+export type WatchGmailMessageResult = {
+  message_id: string;
+  outcome: "imported" | "skipped" | "not_flight" | "failed";
+  flight_ids: string[];
+  warnings: string[];
+  error?: string;
+};
+
+export type WatchGmailResult = {
+  messages_scanned: number;
+  imported: number;
+  skipped: number;
+  not_flight: number;
+  failed: number;
+  results: WatchGmailMessageResult[];
+};
+
 export type RefreshRecentCandidate = StoredFlightRow & {
   has_track: boolean;
   track_source: TrackSource | null;

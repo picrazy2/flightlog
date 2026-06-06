@@ -20,10 +20,13 @@ This folder contains the current Supabase schema and backend code for the Flight
 - `update-flight` Validated flight edits and manual corrections.
 - `delete-flight` Flight deletion by id.
 - `import-csv` Bulk-imports flights from the app CSV contract with duplicate handling and optional post-import refresh.
+- `watch-gmail` Polls Gmail for new booking confirmation emails, parses them with Gemini 2.5 Flash, and creates flights.
 - `refresh-reference-data` Refreshes reference tables from OurAirports, OpenFlights, Wikidata, doc8643.
 - `refresh-recent` Batch-enriches landed flights that are still missing provider actuals or track data.
 
 **Shared modules** (`_shared/flights/`): types, normalize, enrich orchestration, service, bookings, references, aircraft enrichment, providers (aeroapi, fr24api).
+
+**Shared modules** (`_shared/gmail/`): Gmail client (OAuth token refresh, History API, message fetch), Gemini parser (structured email extraction), watch-gmail core logic.
 
 ## Flight Data Providers
 
@@ -48,6 +51,10 @@ supabase secrets set AEROAPI_KEY=<key>
 supabase secrets set FR24_API_KEY=<token>
 supabase secrets set AERODATABOX_RAPIDAPI_KEY=<key>
 supabase secrets set AEROAPI_STANDARD_BACKFILL_ACTIVE=<true|false>
+supabase secrets set GOOGLE_CLIENT_ID=<oauth_client_id>
+supabase secrets set GOOGLE_CLIENT_SECRET=<oauth_client_secret>
+supabase secrets set GOOGLE_REFRESH_TOKEN=<gmail_refresh_token>
+supabase secrets set GEMINI_API_KEY=<gemini_api_key>
 ```
 
 Supabase also injects `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` automatically.
@@ -62,9 +69,26 @@ supabase functions deploy create-flight --no-verify-jwt
 supabase functions deploy update-flight --no-verify-jwt
 supabase functions deploy delete-flight --no-verify-jwt
 supabase functions deploy import-csv --no-verify-jwt
+supabase functions deploy watch-gmail --no-verify-jwt
 supabase functions deploy refresh-reference-data --no-verify-jwt
 supabase functions deploy refresh-recent --no-verify-jwt
 ```
+
+## watch-gmail
+
+`watch-gmail` accepts an empty POST or `{"user_id": "..."}`. It:
+
+1. Loads `gmail_last_history_id` and `gmail_processed_ids` from `sync_state`
+2. Refreshes the Gmail OAuth access token using stored Google credentials
+3. On first run: searches for booking-related emails from the last 90 days. On subsequent runs: uses the Gmail History API from the stored cursor
+4. Skips messages in `gmail_processed_ids` (duplicate protection when runs overlap)
+5. Sends each new message to Gemini 2.5 Flash for structured extraction
+6. Creates a booking row and one or more flight rows per confirmed booking email; all legs of a round trip or connecting itinerary share the same booking row
+7. Saves the new `historyId` and processed message IDs back to `sync_state`
+
+OAuth setup: obtain a Gmail refresh token using the Google OAuth 2.0 flow with `gmail.readonly` scope. Store the refresh token in Supabase secrets as `GOOGLE_REFRESH_TOKEN`.
+
+Scheduled every 15 minutes via pg_cron. The "Check email now" button in the frontend calls the same function.
 
 ## import-csv
 
