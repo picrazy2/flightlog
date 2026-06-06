@@ -208,9 +208,11 @@ function normalizeFlightNumber(value: string | undefined, airlineIata: string) {
     throw new HttpError(400, "flight_number is required");
   }
 
-  const stripped = cleaned.startsWith(airlineIata)
+  const withoutAirline = cleaned.startsWith(airlineIata)
     ? cleaned.slice(airlineIata.length)
     : cleaned;
+  // Strip leading zeros so "0884" and "884" are the same flight (avoids dupes).
+  const stripped = withoutAirline.replace(/^0+(?=\d)/, "");
 
   if (!/^[A-Z0-9]{1,8}$/.test(stripped)) {
     throw new HttpError(
