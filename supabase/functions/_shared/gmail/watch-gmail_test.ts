@@ -264,6 +264,26 @@ Deno.test("watchGmail drops bookings where the owner is not a traveler", async (
   assertEquals(supabase.db.bookings.length, 0);
 });
 
+Deno.test("watchGmail rejects a flight with a null/invalid flight number", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m1", subject: "Booking", from: "x@y.com", date: "x", body: "" }],
+      "1",
+    ),
+    parseEmail: mockParseEmail({
+      ...SINGLE_BA_BOOKING,
+      flights: [{ ...SINGLE_BA_BOOKING.flights[0], flight_number: "NULL" }],
+    }),
+  });
+
+  // The only leg is invalid → nothing created, no orphan booking
+  assertEquals(result.imported, 0);
+  assertEquals(supabase.db.flights.length, 0);
+  assertEquals(supabase.db.bookings.length, 0);
+});
+
 Deno.test("watchGmail updates an existing flight on a schedule change", async () => {
   const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
 

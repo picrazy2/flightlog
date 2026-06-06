@@ -3,13 +3,23 @@ import { HttpError } from "../flights/http.ts";
 const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
+export type PdfAttachment = {
+  filename: string;
+  // base64 (standard, not url-safe) — ready for Gemini inline_data
+  data: string;
+};
+
 export type GmailMessage = {
   id: string;
   subject: string;
   from: string;
   date: string;
   body: string;
+  attachments?: PdfAttachment[];
 };
+
+const MAX_PDFS_PER_MESSAGE = 3;
+const MAX_PDF_BYTES = 8 * 1024 * 1024; // 8MB Gemini inline limit headroom
 
 export type GmailScanResult = {
   messages: GmailMessage[];
@@ -108,6 +118,10 @@ const EXCLUSIONS = "-category:promotions";
 export type ScanOptions = {
   // Days back to search. null = whole inbox (used for backfill).
   lookbackDays?: number | null;
+  // Explicit window (YYYY/MM/DD). When set, overrides lookbackDays — used to
+  // backfill in fixed chunks (e.g. 90 days at a time) so runs don't time out.
+  after?: string;
+  before?: string;
   queries?: string[];
 };
 
@@ -124,15 +138,21 @@ export async function scanNewMessages(
   const lookbackDays = options.lookbackDays === undefined
     ? DEFAULT_LOOKBACK_DAYS
     : options.lookbackDays;
-  const after = lookbackDays === null ? null : afterDate(lookbackDays);
+
+  // Explicit window takes priority; otherwise derive `after` from lookbackDays.
+  const windowParts: string[] = [];
+  if (options.after || options.before) {
+    if (options.after) windowParts.push(`after:${options.after}`);
+    if (options.before) windowParts.push(`before:${options.before}`);
+  } else if (lookbackDays !== null) {
+    windowParts.push(`after:${afterDate(lookbackDays)}`);
+  }
 
   const historyId = await getCurrentHistoryId(accessToken);
 
   const seen = new Set<string>();
   for (const clause of queries) {
-    const q = [clause, after ? `after:${after}` : null, EXCLUSIONS]
-      .filter(Boolean)
-      .join(" ");
+    const q = [clause, ...windowParts, EXCLUSIONS].join(" ");
     for (const id of await listMessageIdsBySearch(accessToken, q)) {
       seen.add(id);
     }
@@ -217,7 +237,48 @@ async function fetchMessage(
     from: extractHeader(raw.payload?.headers ?? [], "From") ?? "",
     date: extractHeader(raw.payload?.headers ?? [], "Date") ?? "",
     body: extractBody(raw.payload),
+    attachments: await fetchPdfAttachments(accessToken, messageId, raw.payload),
   };
+}
+
+// Itinerary emails (e.g. Trip.com) often put the real flight detail in a PDF.
+// We pull up to a few PDFs so Gemini can read them directly.
+async function fetchPdfAttachments(
+  accessToken: string,
+  messageId: string,
+  payload: GmailPart | undefined,
+): Promise<PdfAttachment[]> {
+  if (!payload) return [];
+
+  const pdfParts: GmailPart[] = [];
+  const walk = (part: GmailPart) => {
+    const isPdf = part.mimeType === "application/pdf" ||
+      (part.filename ?? "").toLowerCase().endsWith(".pdf");
+    if (isPdf && part.body?.attachmentId) pdfParts.push(part);
+    for (const sub of part.parts ?? []) walk(sub);
+  };
+  walk(payload);
+
+  const out: PdfAttachment[] = [];
+  for (const part of pdfParts.slice(0, MAX_PDFS_PER_MESSAGE)) {
+    if ((part.body?.size ?? 0) > MAX_PDF_BYTES) continue;
+    try {
+      const res = await gmailFetch(
+        accessToken,
+        `messages/${messageId}/attachments/${part.body!.attachmentId}`,
+      );
+      const data = await res.json() as { data?: string };
+      if (data.data) {
+        out.push({
+          filename: part.filename || "attachment.pdf",
+          data: data.data.replace(/-/g, "+").replace(/_/g, "/"),
+        });
+      }
+    } catch {
+      // Skip attachments that fail to fetch
+    }
+  }
+  return out;
 }
 
 async function gmailFetch(
@@ -238,7 +299,8 @@ async function gmailFetch(
 
 type GmailPart = {
   mimeType: string;
-  body?: { data?: string };
+  filename?: string;
+  body?: { data?: string; attachmentId?: string; size?: number };
   parts?: GmailPart[];
 };
 

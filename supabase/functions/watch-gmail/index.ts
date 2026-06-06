@@ -65,6 +65,8 @@ function buildConfig(body: WatchGmailRequest) {
     geminiApiKey,
     userId: body.user_id ?? null,
     lookbackDays: body.lookback_days,
+    after: body.after,
+    before: body.before,
     owner: ownerName || ownerEmail
       ? { name: ownerName ?? null, email: ownerEmail ?? null }
       : undefined,

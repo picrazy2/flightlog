@@ -125,6 +125,9 @@ export type WatchGmailRequest = {
   user_id?: string | null;
   // Days back to scan; null = whole inbox (backfill). Omit for the default.
   lookback_days?: number | null;
+  // Explicit window (YYYY/MM/DD) for chunked backfills; overrides lookback_days.
+  after?: string;
+  before?: string;
 };
 
 export type WatchGmailMessageResult = {

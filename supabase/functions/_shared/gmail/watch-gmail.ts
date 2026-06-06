@@ -40,6 +40,9 @@ export async function watchGmail(
     owner?: GeminiOwner;
     // Days back to search; null = whole inbox (backfill). Default in gmail-client.
     lookbackDays?: number | null;
+    // Explicit window (YYYY/MM/DD) for chunked backfills; overrides lookbackDays.
+    after?: string;
+    before?: string;
   },
   dependencies: {
     scanMessages?: (
@@ -56,6 +59,8 @@ export async function watchGmail(
     ((token, historyId) =>
       defaultScanMessages(token, historyId, {
         lookbackDays: config.lookbackDays,
+        after: config.after,
+        before: config.before,
       }));
 
   // Skip token refresh when scanMessages is injected (e.g. in tests)
@@ -365,6 +370,11 @@ function buildFlightInput(
   airports: Map<string, { iata: string; timezone: string }>,
   userId: string | null,
 ): FlightInput {
+  const flightNumber = (parsed.flight_number ?? "").trim();
+  if (!flightNumber || /^(null|n\/?a|unknown|tbd|tba)$/i.test(flightNumber)) {
+    throw new Error(`Missing or invalid flight number: "${parsed.flight_number}"`);
+  }
+
   const depIata = parsed.dep_iata.toUpperCase();
   const arrIata = parsed.arr_iata.toUpperCase();
   const depAirport = airports.get(depIata);

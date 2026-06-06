@@ -122,7 +122,13 @@ Field rules:
 - cost_currency: ISO 4217 3-letter code e.g. USD, GBP, or null
 - cost_points: integer points/miles used, or null
 - points_program: e.g. "chase_ur", "amex_mr", "united_mp", or null
-- traveler_names: the passenger name(s) on the booking, as written, or null if not stated`;
+- traveler_names: the passenger name(s) on the booking, as written, or null if not stated
+
+Do NOT guess:
+- Resolve every flight date against the email's received date (given below). The flight year is almost always the same as, or shortly after, the received date — never default to January 1 or a prior year.
+- If you cannot confidently determine a flight's date, flight number, or airports from the email body OR its PDF attachments, OMIT that flight. Never invent or place-hold a flight number (no "NULL"/"N/A"), date, or airport.
+- If no flight can be confidently extracted, set is_flight_booking = false.
+- The PDF attachments (when present) are the most authoritative source for flight numbers, times, dates, and cabin class — prefer them over the email body.`;
 
 const OWNER_PROMPT = (owner: GeminiOwner) =>
   `\n\nThe account owner is "${owner.name ?? ""}"${
@@ -131,13 +137,29 @@ const OWNER_PROMPT = (owner: GeminiOwner) =>
 
 export async function parseEmailForFlights(
   geminiApiKey: string,
-  email: { subject: string; from: string; body: string },
+  email: {
+    subject: string;
+    from: string;
+    body: string;
+    date?: string;
+    attachments?: Array<{ filename: string; data: string }>;
+  },
   owner?: GeminiOwner,
 ): Promise<GeminiParsedBookingEmail> {
   const systemPrompt = owner?.name
     ? SYSTEM_PROMPT + OWNER_PROMPT(owner)
     : SYSTEM_PROMPT;
-  const prompt = `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.body}`;
+  const prompt =
+    `Email received on: ${email.date ?? "unknown"}\nSubject: ${email.subject}\n` +
+    `From: ${email.from}\n\n${email.body}`;
+
+  // deno-lint-ignore no-explicit-any
+  const parts: any[] = [{ text: prompt }];
+  for (const att of email.attachments ?? []) {
+    parts.push({
+      inlineData: { mimeType: "application/pdf", data: att.data },
+    });
+  }
 
   const res = await fetch(
     `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`,
@@ -146,7 +168,7 @@ export async function parseEmailForFlights(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        contents: [{ role: "user", parts }],
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
