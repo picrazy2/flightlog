@@ -1,5 +1,6 @@
 type Filter =
   | { kind: "eq"; column: string; value: unknown }
+  | { kind: "is"; column: string; value: null }
   | { kind: "in"; column: string; values: unknown[] };
 
 type TableName =
@@ -120,6 +121,7 @@ class MockQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
   private payload: Record<string, unknown> | Record<string, unknown>[] | null =
     null;
   private onConflict: string | null = null;
+  private nullEqError: string | null = null;
 
   constructor(
     private readonly client: MockSupabaseClient,
@@ -131,7 +133,17 @@ class MockQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
   }
 
   eq(column: string, value: unknown) {
+    // Mirror PostgREST: .eq(col, null) sends `col=eq.null`, which Postgres rejects
+    // for typed columns (e.g. uuid). Real null filtering must use .is().
+    if (value === null) {
+      this.nullEqError = column;
+    }
     this.filters.push({ kind: "eq", column, value });
+    return this;
+  }
+
+  is(column: string, value: null) {
+    this.filters.push({ kind: "is", column, value });
     return this;
   }
 
@@ -185,6 +197,16 @@ class MockQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
   }
 
   private async execute() {
+    if (this.nullEqError) {
+      return {
+        data: null,
+        error: {
+          message: `invalid input syntax for type uuid: "null"`,
+          column: this.nullEqError,
+        },
+      };
+    }
+
     switch (this.operation) {
       case "select":
         return { data: this.filteredRows(), error: null };
@@ -324,6 +346,10 @@ function matchesFilters(row: Record<string, unknown>, filters: Filter[]) {
   return filters.every((filter) => {
     if (filter.kind === "eq") {
       return row[filter.column] === filter.value;
+    }
+
+    if (filter.kind === "is") {
+      return (row[filter.column] ?? null) === filter.value;
     }
 
     return filter.values.includes(row[filter.column]);

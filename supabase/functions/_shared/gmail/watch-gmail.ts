@@ -292,10 +292,10 @@ async function loadSyncState(
   supabase: SupabaseClient,
   userId: string | null,
 ): Promise<{ lastHistoryId: string | null; processedIds: Set<string> }> {
-  const { data, error } = await supabase
-    .from("sync_state")
-    .select("key, value")
-    .eq("user_id", userId);
+  const query = supabase.from("sync_state").select("key, value");
+  const { data, error } = await (userId === null
+    ? query.is("user_id", null)
+    : query.eq("user_id", userId));
 
   if (error) {
     throw new HttpError(500, `Failed to load sync state: ${error.message}`);
@@ -341,11 +341,10 @@ async function upsertSyncStateKey(
   key: string,
   value: string,
 ) {
-  const { data, error: selectError } = await supabase
-    .from("sync_state")
-    .select("id")
-    .eq("key", key)
-    .eq("user_id", userId);
+  const selectQuery = supabase.from("sync_state").select("id").eq("key", key);
+  const { data, error: selectError } = await (userId === null
+    ? selectQuery.is("user_id", null)
+    : selectQuery.eq("user_id", userId));
 
   if (selectError) {
     throw new HttpError(
@@ -357,11 +356,13 @@ async function upsertSyncStateKey(
   const rows = (data ?? []) as Array<{ id: string }>;
 
   if (rows.length > 0) {
-    const { error } = await supabase
+    const updateQuery = supabase
       .from("sync_state")
       .update({ value })
-      .eq("key", key)
-      .eq("user_id", userId);
+      .eq("key", key);
+    const { error } = await (userId === null
+      ? updateQuery.is("user_id", null)
+      : updateQuery.eq("user_id", userId));
     if (error) {
       throw new HttpError(500, `Failed to update sync state: ${error.message}`);
     }

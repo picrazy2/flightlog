@@ -194,6 +194,27 @@ Deno.test("watchGmail skips already-processed message IDs", async () => {
   assertEquals(supabase.db.flights.length, 0);
 });
 
+Deno.test("watchGmail works with null user_id (cron path)", async () => {
+  // The cron invokes with no user_id. Filtering sync_state by a null uuid must use
+  // .is(), not .eq() — the mock rejects .eq(col, null) like real PostgREST/Postgres.
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  const result = await watchGmail(supabase as never, { ...MOCK_CONFIG, userId: null }, {
+    scanMessages: mockScanMessages(
+      [{ id: "msgX", subject: "Newsletter", from: "x@y.com", date: "Mon, 1 Jun 2026", body: "" }],
+      "321",
+    ),
+    parseEmail: mockParseEmail(NOT_FLIGHT),
+  });
+
+  assertEquals(result.messages_scanned, 1);
+  const historyRow = supabase.db.sync_state.find(
+    (r) => (r as Record<string, unknown>)["key"] === "gmail_last_history_id",
+  ) as Record<string, unknown> | undefined;
+  assertEquals(historyRow?.["value"], "321");
+  assertEquals(historyRow?.["user_id"] ?? null, null);
+});
+
 Deno.test("watchGmail saves historyId and processed IDs to sync_state", async () => {
   const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
 
