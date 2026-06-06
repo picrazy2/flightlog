@@ -19,6 +19,7 @@ This folder contains the current Supabase schema and backend code for the Flight
 - `create-flight` Validated flight creation with optional provider enrichment, booking persistence, and aircraft enrichment.
 - `update-flight` Validated flight edits and manual corrections.
 - `delete-flight` Flight deletion by id.
+- `import-csv` Bulk-imports flights from the app CSV contract with duplicate handling and optional post-import refresh.
 - `refresh-reference-data` Refreshes reference tables from OurAirports, OpenFlights, Wikidata, doc8643.
 - `refresh-recent` Batch-enriches landed flights that are still missing provider actuals or track data.
 
@@ -60,9 +61,24 @@ supabase functions deploy enrich-flight --no-verify-jwt
 supabase functions deploy create-flight --no-verify-jwt
 supabase functions deploy update-flight --no-verify-jwt
 supabase functions deploy delete-flight --no-verify-jwt
+supabase functions deploy import-csv --no-verify-jwt
 supabase functions deploy refresh-reference-data --no-verify-jwt
 supabase functions deploy refresh-recent --no-verify-jwt
 ```
+
+## import-csv
+
+`import-csv` accepts either `application/json` with `csv_text` or raw `text/csv`.
+It supports:
+
+- one row = one flight segment
+- strict first-party CSV headers with case-insensitive, space/underscore-insensitive matching
+- duplicate modes: `skip`, `update_missing`, `overwrite`
+- enrichment modes: `none`, `refresh_after_import`
+
+Imported rows are stored as `source = csv_import`. `sched_dep` / `sched_arr` remain
+user-owned schedule fields. When `refresh_after_import` is selected, the function reuses
+shared `refresh-recent` logic for just the affected eligible rows before returning.
 
 ## refresh-recent
 

@@ -121,9 +121,10 @@ Sufficient for a single-user personal app before Supabase Auth is wired up.
      which fetches actuals and track geometry from the relevant provider in one call and
      returns a preview. User confirms → frontend calls `create-flight` with the enriched
      payload (actuals + track). No second provider call in `create-flight`.
-   - **CSV import**: user uploads a CSV → `import-csv` bulk-creates records with no
-     per-row provider enrichment. `refresh-recent` subsequently enriches any imported
-     flights within the 30-day FR24 window.
+   - **CSV import**: user uploads a CSV → `import-csv` parses one flight segment per row,
+     bulk-creates or updates records using the app's own CSV contract, and optionally runs
+     post-import refresh for just the affected eligible rows. No provider lookup happens as
+     part of row parsing itself.
    - **Gmail auto-import**: `watch-gmail` detects a booking confirmation email → Gemini
      parses it → `create-flight` is called, which invokes the shared `enrich()` module
      internally to fetch actuals and track before persisting.
@@ -566,12 +567,82 @@ all-flights load.
 | `create-flight` | Persist a flight record. Accepts either an already-enriched payload (`flight` plus optional `track`) or a raw payload. If `enrichment_mode = "try_now"` and enriched data is not already present, it calls `enrich()` internally before persisting. If the request already contains enriched data, no provider call is made. Also triggers aircraft metadata lookup if the registration is new. |
 | `update-flight` | Edit an existing flight record. Supports corrections and manual overrides. |
 | `delete-flight` | Remove a flight record. |
-| `import-csv` | Bulk-create flights from a CSV upload. No per-row provider enrichment — `refresh-recent` backfills actuals and tracks for any imported flights within the 30-day FR24 window. |
+| `import-csv` | Bulk-create or update flights from a CSV upload. One row = one flight segment. Accepts only the app's own CSV contract. No per-row provider lookup during parsing; can optionally run post-import refresh for just the affected eligible flights before returning. |
 | `refresh-recent` | Cron batch job. Primary purpose: auto-enrich future flights after they land with actuals and track data. Also backfills CSV-imported flights that haven't been enriched. Uses the same provider routing as `enrich()` — AeroAPI Standard during the backfill month (no practical age limit on historical flights), FR24 otherwise (30-day window). Writes directly to `flights` and `tracks`. |
 | `refresh-reference-data` | Refresh `countries`, `airports`, `airlines`, `airline alliances`, and `aircraft_types` from OurAirports, OpenFlights/Wikidata, and `doc8643.com`. Supports targeted scopes for one country, airport, airline, aircraft type, or airport boundary. Logs every run to `reference_refresh_runs`. Does not touch `aircraft`, which remains an on-demand registration lookup. |
 | `watch-gmail` | Poll Gmail for new emails, pre-filter with a Gmail search query, parse matches with Gemini 2.5 Flash, call `create-flight` for confirmed booking emails. |
 
 All Edge Functions validate `Authorization: Bearer <secret>` before executing.
+
+### `import-csv` v1 contract
+
+`import-csv` is intentionally narrow in v1:
+
+- one CSV row = one flight segment
+- only the app's own CSV format is supported
+- column matching is case-insensitive and treats spaces / underscores as equivalent
+- the import writes `flights` only, not `bookings`
+- imports are partial-success: one bad row does not fail the whole file
+
+Accepted columns map onto existing backend field names. Canonical names:
+
+| CSV column | Backend field | Required | Notes |
+|------------|---------------|----------|-------|
+| `date` | `flight_date` | Yes | Local operating date |
+| `scheduled_dep_time_local` | `sched_dep` | Yes | User-owned scheduled departure |
+| `scheduled_arr_time_local` | `sched_arr` | Yes | User-owned scheduled arrival |
+| `airline` | `airline_iata` | Yes | IATA code preferred; app may normalize known aliases |
+| `flight` | `flight_number` | Yes | Airline prefix is stripped if present |
+| `dep_airport` | `dep_iata` | Yes | IATA code |
+| `arr_airport` | `arr_iata` | Yes | IATA code |
+| `actual_dep_time_local` | `actual_dep` | No | User/import-owned gate departure |
+| `actual_arr_time_local` | `actual_arr` | No | User/import-owned gate arrival |
+| `actual_takeoff_time_local` | `actual_takeoff` | No | User/import-owned wheels-off |
+| `actual_landing_time_local` | `actual_landing` | No | User/import-owned wheels-on |
+| `class` | `cabin_class` | No | Normalized to enum |
+| `aircraft` | `aircraft_type_code` | No | Prefer ICAO aircraft type code |
+| `registration` | `registration` | No | Tail number |
+
+Friendly header aliases like `Date`, `Scheduled Dep Time (Local)`, and `Actual Landing Time (Local)`
+are accepted as long as they normalize to the same canonical names.
+
+Import ownership and enrichment rules:
+
+- imported `sched_dep` / `sched_arr` are user-owned booking schedule
+- imported `actual_dep`, `actual_arr`, `actual_takeoff`, and `actual_landing` are trusted as
+  user/import-owned values in v1
+- `import-csv` does not itself call flight providers while parsing rows
+- optional post-import refresh may call the shared `refresh-recent` logic for just the
+  imported flight ids that are immediately eligible
+- provider enrichment fills provider-owned fields such as track, `raw_provider`,
+  `registration`, `aircraft_type_code`, and `provider_sched_*`
+
+Duplicate detection key:
+
+- `flight_date`
+- `airline_iata`
+- `flight_number`
+- `dep_iata`
+- `arr_iata`
+
+Supported duplicate modes:
+
+- `skip` — do nothing if the flight already exists
+- `update_missing` — fill only missing user-owned/import-owned fields
+- `overwrite` — replace import-owned fields from the CSV row
+
+Default duplicate mode should be `update_missing`.
+
+Unknown airline / airport handling:
+
+- if a referenced airline or airport is missing locally, `import-csv` first triggers an
+  on-demand reference refresh
+- if the reference still cannot be resolved, the row is skipped and returned as an error
+
+Recommended frontend controls:
+
+- duplicate mode toggle: `skip` / `update_missing` / `overwrite`
+- enrichment mode toggle: `none` / `refresh_after_import`
 
 ---
 

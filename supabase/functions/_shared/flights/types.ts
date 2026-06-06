@@ -7,6 +7,8 @@ export type FlightSource =
   | "gmail";
 export type TrackSource = "fr24api" | "aeroapi";
 export type EnrichmentMode = "none" | "try_now";
+export type ImportCsvDuplicateMode = "skip" | "update_missing" | "overwrite";
+export type ImportCsvEnrichmentMode = "none" | "refresh_after_import";
 export type CabinClass =
   | "economy"
   | "premium_economy"
@@ -90,6 +92,33 @@ export type EnrichFlightResult = {
 export type RefreshRecentRequest = {
   flight_id?: string;
   limit?: number;
+};
+
+export type ImportCsvRequest = {
+  csv_text?: string;
+  duplicate_mode?: string | null;
+  enrichment_mode?: string | null;
+  user_id?: string | null;
+};
+
+export type ImportCsvRowResult = {
+  row_number: number;
+  outcome: "created" | "updated" | "skipped" | "failed";
+  flight_id: string | null;
+  warnings: string[];
+  refresh_outcome?: RefreshRecentFlightResult["outcome"];
+  refresh_provider?: FlightSource | null;
+  error?: string;
+};
+
+export type ImportCsvResult = {
+  rows_total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  refreshed: number;
+  results: ImportCsvRowResult[];
 };
 
 export type RefreshRecentCandidate = StoredFlightRow & {
@@ -223,6 +252,15 @@ export const TRACK_SOURCE_VALUES = new Set<TrackSource>([
 export const ENRICHMENT_MODE_VALUES = new Set<EnrichmentMode>([
   "none",
   "try_now",
+]);
+export const IMPORT_CSV_DUPLICATE_MODE_VALUES = new Set<ImportCsvDuplicateMode>([
+  "skip",
+  "update_missing",
+  "overwrite",
+]);
+export const IMPORT_CSV_ENRICHMENT_MODE_VALUES = new Set<ImportCsvEnrichmentMode>([
+  "none",
+  "refresh_after_import",
 ]);
 export const CABIN_CLASS_VALUES = new Set<CabinClass>([
   "economy",
