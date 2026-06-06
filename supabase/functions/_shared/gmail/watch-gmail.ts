@@ -242,6 +242,14 @@ async function processMessage(
   try {
     const parsed = await parseFn(message);
 
+    // Cancellation/refund first — these aren't "bookings" so they'd otherwise be
+    // dropped by the not_flight gate before we could cancel anything. Mark
+    // matching existing flights cancelled; never create. Matched loosely (date +
+    // route) since refund emails often omit the flight number.
+    if (parsed.is_cancellation === true && parsed.flights.length > 0) {
+      return await processCancellation(supabase, message, parsed, userId);
+    }
+
     if (!parsed.is_flight_booking || parsed.flights.length === 0) {
       return {
         message_id: message.id,
@@ -260,13 +268,6 @@ async function processMessage(
         flight_ids: [],
         warnings: ["Account owner is not a traveler on this booking"],
       };
-    }
-
-    // Cancellation/refund: mark matching existing flights cancelled rather than
-    // creating anything. Matched loosely (date + route) since refund emails
-    // often omit the flight number.
-    if (parsed.is_cancellation === true) {
-      return await processCancellation(supabase, message, parsed, userId);
     }
 
     const allIatas = parsed.flights.flatMap((f) => [

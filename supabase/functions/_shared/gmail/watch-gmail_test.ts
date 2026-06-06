@@ -280,6 +280,7 @@ Deno.test("watchGmail cancels an existing flight on a refund/cancellation email"
   // Then a refund email for the same route/date
   const refund: GeminiParsedBookingEmail = {
     ...SINGLE_BA_BOOKING,
+    is_flight_booking: false, // refunds aren't "bookings" — must still cancel
     is_cancellation: true,
     booking_platform: null,
     cost_cash: null,
