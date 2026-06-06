@@ -16,6 +16,7 @@ import type { GmailMessage, GmailScanResult } from "./gmail-client.ts";
 import {
   refreshGmailAccessToken,
   scanNewMessages as defaultScanMessages,
+  sendEmail,
 } from "./gmail-client.ts";
 import type {
   GeminiOwner,
@@ -87,7 +88,7 @@ export async function watchGmail(
   ]);
   await saveSyncState(supabase, userId, newHistoryId, newProcessedIds);
 
-  return {
+  const result: WatchGmailResult = {
     messages_scanned: messages.length,
     imported: results.filter((r) => r.outcome === "imported").length,
     updated: results.filter((r) => r.outcome === "updated").length,
@@ -96,6 +97,77 @@ export async function watchGmail(
     failed: results.filter((r) => r.outcome === "failed").length,
     results,
   };
+
+  // Notify on any add/change. Real runs only (accessToken present); never let a
+  // notification failure break the import.
+  if (
+    accessToken && config.owner?.email &&
+    (result.imported > 0 || result.updated > 0)
+  ) {
+    try {
+      await sendRunNotification(supabase, accessToken, config.owner.email, result);
+    } catch (error) {
+      result.results.push({
+        message_id: "notification",
+        outcome: "failed",
+        flight_ids: [],
+        warnings: [],
+        error: `Notification email failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    }
+  }
+
+  return result;
+}
+
+async function sendRunNotification(
+  supabase: SupabaseClient,
+  accessToken: string,
+  to: string,
+  result: WatchGmailResult,
+) {
+  const ids = result.results
+    .filter((r) => r.outcome === "imported" || r.outcome === "updated")
+    .flatMap((r) => r.flight_ids);
+  if (ids.length === 0) return;
+
+  const { data } = await supabase
+    .from("flights")
+    .select("flight_date, airline_iata, flight_number, dep_iata, arr_iata, booking_id")
+    .in("id", ids);
+  const rows = (data ?? []) as Array<{
+    flight_date: string;
+    airline_iata: string;
+    flight_number: string;
+    dep_iata: string;
+    arr_iata: string;
+    booking_id: string | null;
+  }>;
+
+  const lines = rows
+    .sort((a, b) => a.flight_date.localeCompare(b.flight_date))
+    .map((f) =>
+      `  ${f.flight_date}  ${f.airline_iata}${f.flight_number}  ${f.dep_iata} → ${f.arr_iata}`
+    );
+
+  const parts: string[] = [];
+  if (result.imported > 0) parts.push(`${result.imported} added`);
+  if (result.updated > 0) parts.push(`${result.updated} updated`);
+  const summary = parts.join(", ");
+
+  const subject = `✈️ Flightlog: ${summary} from your inbox`;
+  const body = [
+    `Flightlog processed your inbox and made changes:`,
+    ``,
+    ...lines,
+    ``,
+    `Imported: ${result.imported}  Updated: ${result.updated}  ` +
+    `Skipped: ${result.skipped}  Not a flight: ${result.not_flight}`,
+  ].join("\n");
+
+  await sendEmail(accessToken, to, subject, body);
 }
 
 async function processMessage(

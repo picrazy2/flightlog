@@ -41,6 +41,47 @@ export async function refreshGmailAccessToken(
   return data.access_token;
 }
 
+// Sends a plain-text email as the authenticated user (requires gmail.send scope).
+export async function sendEmail(
+  accessToken: string,
+  to: string,
+  subject: string,
+  body: string,
+): Promise<void> {
+  const mime = [
+    `To: ${to}`,
+    `Subject: =?UTF-8?B?${b64(subject)}?=`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "MIME-Version: 1.0",
+    "",
+    body,
+  ].join("\r\n");
+
+  const res = await fetch(`${GMAIL_BASE}/messages/send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ raw: b64url(mime) }),
+  });
+
+  if (!res.ok) {
+    throw new HttpError(500, `Gmail send failed: ${await res.text()}`);
+  }
+}
+
+function b64(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = "";
+  for (const byte of bytes) bin += String.fromCharCode(byte);
+  return btoa(bin);
+}
+
+function b64url(s: string): string {
+  return b64(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 // Each clause is an independent Gmail search; results are unioned. Keeping them
 // separate is clearer (and avoids fragile precedence) than one mega-query.
 export const FLIGHT_SEARCH_QUERIES = [
