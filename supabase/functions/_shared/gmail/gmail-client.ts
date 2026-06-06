@@ -41,56 +41,68 @@ export async function refreshGmailAccessToken(
   return data.access_token;
 }
 
-const BOOKING_SEARCH_QUERY =
-  'subject:(confirmation OR itinerary OR "e-ticket" OR booking) AND (flight OR airline)';
+// Each clause is an independent Gmail search; results are unioned. Keeping them
+// separate is clearer (and avoids fragile precedence) than one mega-query.
+export const FLIGHT_SEARCH_QUERIES = [
+  // Booking confirmations / itineraries / e-tickets (English)
+  'subject:(confirmation OR itinerary OR "e-ticket" OR booking) (flight OR airline)',
+  // Boarding passes & check-in confirmations — flights actually flown
+  'subject:("boarding pass" OR "checked in" OR "checked-in" OR "e-boarding")',
+  // Google Flights itineraries (and self-forwards of them)
+  'subject:"Google Flights"',
+  // Booking confirmations (Chinese) — 机票 air ticket, 航班 flight, 行程 itinerary,
+  // 值机 check-in, 登机牌 boarding pass
+  "subject:(机票 OR 航班 OR 行程 OR 值机 OR 登机牌)",
+  // Booking confirmations (French)
+  "subject:(billet OR réservation OR vol OR avion)",
+];
 
+const DEFAULT_LOOKBACK_DAYS = 7;
+const MAX_IDS_PER_QUERY = 1500;
+
+export type ScanOptions = {
+  // Days back to search. null = whole inbox (used for backfill).
+  lookbackDays?: number | null;
+  queries?: string[];
+};
+
+// Runs each flight-search clause (so Gemini is never called on arbitrary mail),
+// unions and de-duplicates the message ids, and fetches the bodies.
+// Deduplication of already-processed messages is handled by the caller.
+// `lookbackDays` keeps steady-state runs cheap; pass null for a full backfill.
 export async function scanNewMessages(
   accessToken: string,
-  lastHistoryId: string | null,
+  _lastHistoryId: string | null,
+  options: ScanOptions = {},
 ): Promise<GmailScanResult> {
-  if (lastHistoryId) {
-    try {
-      return await scanFromHistory(accessToken, lastHistoryId);
-    } catch (error) {
-      if (!(error instanceof HttpError) || error.status !== 404) {
-        throw error;
-      }
-      // History expired — fall through to initial scan
+  const queries = options.queries ?? FLIGHT_SEARCH_QUERIES;
+  const lookbackDays = options.lookbackDays === undefined
+    ? DEFAULT_LOOKBACK_DAYS
+    : options.lookbackDays;
+  const after = lookbackDays === null ? null : afterDate(lookbackDays);
+
+  const historyId = await getCurrentHistoryId(accessToken);
+
+  const seen = new Set<string>();
+  for (const clause of queries) {
+    const q = after ? `${clause} after:${after}` : clause;
+    for (const id of await listMessageIdsBySearch(accessToken, q)) {
+      seen.add(id);
     }
   }
 
-  return await initialScan(accessToken);
+  const messages = await fetchMessages(accessToken, [...seen]);
+  return { messages, historyId };
 }
 
-async function initialScan(accessToken: string): Promise<GmailScanResult> {
-  const historyId = await getCurrentHistoryId(accessToken);
-
+function afterDate(days: number): string {
   const since = new Date();
-  since.setDate(since.getDate() - 90);
-  const afterDate = [
+  since.setDate(since.getDate() - days);
+  return [
     since.getFullYear(),
     String(since.getMonth() + 1).padStart(2, "0"),
     String(since.getDate()).padStart(2, "0"),
   ].join("/");
-
-  const messageIds = await listMessageIdsBySearch(
-    accessToken,
-    `${BOOKING_SEARCH_QUERY} after:${afterDate}`,
-  );
-  const messages = await fetchMessages(accessToken, messageIds);
-  return { messages, historyId };
-}
-
-async function scanFromHistory(
-  accessToken: string,
-  startHistoryId: string,
-): Promise<GmailScanResult> {
-  const { messageIds, historyId } = await listMessageIdsFromHistory(
-    accessToken,
-    startHistoryId,
-  );
-  const messages = await fetchMessages(accessToken, messageIds);
-  return { messages, historyId };
 }
 
 async function getCurrentHistoryId(accessToken: string): Promise<string> {
@@ -102,51 +114,29 @@ async function getCurrentHistoryId(accessToken: string): Promise<string> {
 async function listMessageIdsBySearch(
   accessToken: string,
   q: string,
-  maxResults = 100,
+  maxResults = MAX_IDS_PER_QUERY,
 ): Promise<string[]> {
-  const params = new URLSearchParams({ q, maxResults: String(maxResults) });
-  const res = await gmailFetch(accessToken, `messages?${params}`);
-  const data = await res.json() as { messages?: Array<{ id: string }> };
-  return (data.messages ?? []).map((m) => m.id);
-}
+  const ids: string[] = [];
+  let pageToken: string | undefined;
 
-async function listMessageIdsFromHistory(
-  accessToken: string,
-  startHistoryId: string,
-): Promise<{ messageIds: string[]; historyId: string }> {
-  const params = new URLSearchParams({
-    startHistoryId,
-    historyTypes: "messageAdded",
-    maxResults: "100",
-  });
+  while (ids.length < maxResults) {
+    const params = new URLSearchParams({
+      q,
+      maxResults: String(Math.min(500, maxResults - ids.length)),
+    });
+    if (pageToken) params.set("pageToken", pageToken);
 
-  const res = await gmailFetch(accessToken, `history?${params}`);
-
-  if (res.status === 404) {
-    throw new HttpError(404, "Gmail history expired");
+    const res = await gmailFetch(accessToken, `messages?${params}`);
+    const data = await res.json() as {
+      messages?: Array<{ id: string }>;
+      nextPageToken?: string;
+    };
+    ids.push(...(data.messages ?? []).map((m) => m.id));
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
   }
 
-  const data = await res.json() as {
-    history?: Array<{
-      messagesAdded?: Array<{ message: { id: string } }>;
-    }>;
-    historyId: string;
-  };
-
-  const seen = new Set<string>();
-  const messageIds: string[] = [];
-
-  for (const record of data.history ?? []) {
-    for (const added of record.messagesAdded ?? []) {
-      const id = added.message.id;
-      if (!seen.has(id)) {
-        seen.add(id);
-        messageIds.push(id);
-      }
-    }
-  }
-
-  return { messageIds, historyId: data.historyId };
+  return ids;
 }
 
 async function fetchMessages(

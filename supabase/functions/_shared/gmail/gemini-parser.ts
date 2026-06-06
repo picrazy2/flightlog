@@ -12,8 +12,17 @@ export type GeminiParsedFlight = {
   cabin_class: string | null;
 };
 
+export type GeminiOwner = {
+  name?: string | null;
+  email?: string | null;
+};
+
 export type GeminiParsedBookingEmail = {
   is_flight_booking: boolean;
+  // True when the account owner is a traveler on this flight. Undefined when no
+  // owner is configured (the caller then does not gate on it).
+  owner_is_traveler?: boolean;
+  traveler_names?: string[] | null;
   flights: GeminiParsedFlight[];
   booking_refs_airline: Array<{ airline_iata: string; pnr: string }> | null;
   booking_ref_platform: string | null;
@@ -29,6 +38,12 @@ const RESPONSE_SCHEMA = {
   required: ["is_flight_booking", "flights"],
   properties: {
     is_flight_booking: { type: "boolean" },
+    owner_is_traveler: { type: "boolean", nullable: true },
+    traveler_names: {
+      type: "array",
+      nullable: true,
+      items: { type: "string" },
+    },
     flights: {
       type: "array",
       items: {
@@ -74,16 +89,26 @@ const RESPONSE_SCHEMA = {
   },
 };
 
-const SYSTEM_PROMPT = `You are a flight booking email parser. Extract flight booking information from emails.
+const SYSTEM_PROMPT =
+  `You are a flight email parser. Extract flight information from emails that document a specific flight the recipient is taking.
 
-Rules:
-- Set is_flight_booking to true ONLY for flight booking confirmation emails with specific flight details
-- Extract all flight legs including connecting flights and both legs of a round trip
+What counts (set is_flight_booking = true):
+- Flight booking confirmations, e-tickets, and itineraries
+- Boarding passes and check-in confirmations (these often have no cost — that is fine)
+- Multi-language emails (Chinese, French, etc.) — parse them the same way
+Only set is_flight_booking = true when the email contains specific flight details (airline, flight number, route, date). It is fine if cost/PNR are missing (common for boarding passes).
+
+What does NOT count (set is_flight_booking = false, empty arrays/null elsewhere):
+- Hotel/car-rental/train/event reservations, marketing, price alerts, fare sales
+- Pre-flight nudges with no concrete flight details, account/login notices
+
+Field rules:
+- Extract every flight leg, including connections and both directions of a round trip
 - airline_iata: 2-character IATA airline code (e.g. UA, BA, AA)
 - flight_number: numeric/alphanumeric suffix only, no airline prefix (e.g. "117" not "BA117")
-- flight_date: YYYY-MM-DD format, the local operating date at departure
+- flight_date: YYYY-MM-DD, the local operating date at departure
 - dep_iata / arr_iata: 3-character IATA airport codes
-- dep_time_local / arr_time_local: HH:MM 24-hour local time at departure/arrival airport respectively
+- dep_time_local / arr_time_local: HH:MM 24-hour local time at the departure/arrival airport
 - cabin_class: "economy", "premium_economy", "lie_flat_business", "recliner_first", "international_first", or null
 - booking_refs_airline: each item has airline_iata (2-char) and pnr (airline confirmation code)
 - booking_platform: "direct", "expedia", "google_flights", "chase_travel", or lowercase platform name, or null
@@ -91,12 +116,21 @@ Rules:
 - cost_currency: ISO 4217 3-letter code e.g. USD, GBP, or null
 - cost_points: integer points/miles used, or null
 - points_program: e.g. "chase_ur", "amex_mr", "united_mp", or null
-- If not a flight booking confirmation, set is_flight_booking to false and return empty arrays/null for other fields`;
+- traveler_names: the passenger name(s) on the booking, as written, or null if not stated`;
+
+const OWNER_PROMPT = (owner: GeminiOwner) =>
+  `\n\nThe account owner is "${owner.name ?? ""}"${
+    owner.email ? ` (${owner.email})` : ""
+  }. Set owner_is_traveler = true if the owner is one of the travelers/passengers on this flight, matching by name and allowing for minor spelling, ordering, or transliteration differences (e.g. "GUO/ALEXANDER", "Alexander K Guo"). Set it false if the booking is only for other people. If the travelers cannot be determined at all, set it true.`;
 
 export async function parseEmailForFlights(
   geminiApiKey: string,
   email: { subject: string; from: string; body: string },
+  owner?: GeminiOwner,
 ): Promise<GeminiParsedBookingEmail> {
+  const systemPrompt = owner?.name
+    ? SYSTEM_PROMPT + OWNER_PROMPT(owner)
+    : SYSTEM_PROMPT;
   const prompt = `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.body}`;
 
   const res = await fetch(
@@ -105,7 +139,7 @@ export async function parseEmailForFlights(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        systemInstruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           responseMimeType: "application/json",

@@ -25,7 +25,7 @@ export async function handleWatchGmailRequest(
     requireAuthorizedRequest(request);
     const body = await parseRequest(request);
     const supabase = dependencies?.supabase ?? createAdminClient();
-    const result = await watchGmail(supabase, buildConfig(body.user_id ?? null));
+    const result = await watchGmail(supabase, buildConfig(body));
 
     return jsonResponse<WatchGmailResult & { ok: true }>({ ok: true, ...result });
   } catch (error) {
@@ -38,7 +38,7 @@ if (import.meta.main) {
   Deno.serve((request) => handleWatchGmailRequest(request));
 }
 
-function buildConfig(userId: string | null) {
+function buildConfig(body: WatchGmailRequest) {
   const gmailClientId = Deno.env.get("GOOGLE_CLIENT_ID");
   const gmailClientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
   const gmailRefreshToken = Deno.env.get("GOOGLE_REFRESH_TOKEN");
@@ -55,7 +55,20 @@ function buildConfig(userId: string | null) {
     throw new HttpError(500, "Missing GEMINI_API_KEY");
   }
 
-  return { gmailClientId, gmailClientSecret, gmailRefreshToken, geminiApiKey, userId };
+  const ownerName = Deno.env.get("GMAIL_OWNER_NAME");
+  const ownerEmail = Deno.env.get("GMAIL_OWNER_EMAIL");
+
+  return {
+    gmailClientId,
+    gmailClientSecret,
+    gmailRefreshToken,
+    geminiApiKey,
+    userId: body.user_id ?? null,
+    lookbackDays: body.lookback_days,
+    owner: ownerName || ownerEmail
+      ? { name: ownerName ?? null, email: ownerEmail ?? null }
+      : undefined,
+  };
 }
 
 function createAdminClient() {

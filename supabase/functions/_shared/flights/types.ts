@@ -123,6 +123,8 @@ export type ImportCsvResult = {
 
 export type WatchGmailRequest = {
   user_id?: string | null;
+  // Days back to scan; null = whole inbox (backfill). Omit for the default.
+  lookback_days?: number | null;
 };
 
 export type WatchGmailMessageResult = {

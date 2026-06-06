@@ -194,6 +194,75 @@ Deno.test("watchGmail skips already-processed message IDs", async () => {
   assertEquals(supabase.db.flights.length, 0);
 });
 
+const SINGLE_BA_BOOKING: GeminiParsedBookingEmail = {
+  is_flight_booking: true,
+  flights: [
+    {
+      airline_iata: "BA",
+      flight_number: "117",
+      flight_date: "2026-07-01",
+      dep_iata: "LHR",
+      arr_iata: "JFK",
+      dep_time_local: "10:00",
+      arr_time_local: "13:00",
+      cabin_class: "economy",
+    },
+  ],
+  booking_refs_airline: [{ airline_iata: "BA", pnr: "XYZ123" }],
+  booking_ref_platform: null,
+  booking_platform: "direct",
+  cost_cash: 500,
+  cost_currency: "GBP",
+  cost_points: null,
+  points_program: null,
+};
+
+Deno.test("watchGmail skips a duplicate-flight email without creating an orphan booking", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  // First email creates the flight + booking
+  await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m1", subject: "BA booking", from: "ba@ba.com", date: "x", body: "" }],
+      "1",
+    ),
+    parseEmail: mockParseEmail(SINGLE_BA_BOOKING),
+  });
+  assertEquals(supabase.db.flights.length, 1);
+  assertEquals(supabase.db.bookings.length, 1);
+
+  // A second, different email about the SAME flight (e.g. an airline reminder)
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m2", subject: "Fwd: BA booking", from: "me@me.com", date: "x", body: "" }],
+      "2",
+    ),
+    parseEmail: mockParseEmail(SINGLE_BA_BOOKING),
+  });
+
+  assertEquals(result.skipped, 1);
+  assertEquals(result.imported, 0);
+  assertEquals(supabase.db.flights.length, 1); // no duplicate flight
+  assertEquals(supabase.db.bookings.length, 1); // no orphan booking
+});
+
+Deno.test("watchGmail drops bookings where the owner is not a traveler", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m1", subject: "Someone else's BA booking", from: "ba@ba.com", date: "x", body: "" }],
+      "1",
+    ),
+    parseEmail: mockParseEmail({ ...SINGLE_BA_BOOKING, owner_is_traveler: false }),
+  });
+
+  assertEquals(result.not_flight, 1);
+  assertEquals(result.imported, 0);
+  assertEquals(supabase.db.flights.length, 0);
+  assertEquals(supabase.db.bookings.length, 0);
+});
+
 Deno.test("watchGmail works with null user_id (cron path)", async () => {
   // The cron invokes with no user_id. Filtering sync_state by a null uuid must use
   // .is(), not .eq() — the mock rejects .eq(col, null) like real PostgREST/Postgres.

@@ -3,11 +3,12 @@ import { DateTime } from "npm:luxon@3.7.2";
 
 import { upsertBookingIfPresent } from "../flights/bookings.ts";
 import { HttpError } from "../flights/http.ts";
-import { hasBookingPayload } from "../flights/normalize.ts";
+import { hasBookingPayload, normalizeFlightInput } from "../flights/normalize.ts";
 import { createFlight } from "../flights/service.ts";
 import type {
   BookingInput,
   FlightInput,
+  NormalizedFlightInput,
   WatchGmailMessageResult,
   WatchGmailResult,
 } from "../flights/types.ts";
@@ -17,6 +18,7 @@ import {
   scanNewMessages as defaultScanMessages,
 } from "./gmail-client.ts";
 import type {
+  GeminiOwner,
   GeminiParsedBookingEmail,
   GeminiParsedFlight,
 } from "./gemini-parser.ts";
@@ -34,6 +36,9 @@ export async function watchGmail(
     gmailRefreshToken: string;
     geminiApiKey: string;
     userId?: string | null;
+    owner?: GeminiOwner;
+    // Days back to search; null = whole inbox (backfill). Default in gmail-client.
+    lookbackDays?: number | null;
   },
   dependencies: {
     scanMessages?: (
@@ -47,7 +52,10 @@ export async function watchGmail(
   const { lastHistoryId, processedIds } = await loadSyncState(supabase, userId);
 
   const scanFn = dependencies.scanMessages ??
-    ((token, historyId) => defaultScanMessages(token, historyId));
+    ((token, historyId) =>
+      defaultScanMessages(token, historyId, {
+        lookbackDays: config.lookbackDays,
+      }));
 
   // Skip token refresh when scanMessages is injected (e.g. in tests)
   const accessToken = dependencies.scanMessages
@@ -65,7 +73,7 @@ export async function watchGmail(
   const unprocessed = messages.filter((m) => !processedIds.has(m.id));
 
   const parseFn = dependencies.parseEmail ??
-    ((email) => defaultParseEmail(config.geminiApiKey, email));
+    ((email) => defaultParseEmail(config.geminiApiKey, email, config.owner));
 
   const results: WatchGmailMessageResult[] = [];
   for (const message of unprocessed) {
@@ -107,27 +115,87 @@ async function processMessage(
       };
     }
 
+    // Passenger gate: drop bookings where the account owner isn't a traveler.
+    // owner_is_traveler is only set when an owner is configured.
+    if (parsed.owner_is_traveler === false) {
+      return {
+        message_id: message.id,
+        outcome: "not_flight",
+        flight_ids: [],
+        warnings: ["Account owner is not a traveler on this booking"],
+      };
+    }
+
     const allIatas = parsed.flights.flatMap((f) => [
       f.dep_iata.toUpperCase(),
       f.arr_iata.toUpperCase(),
     ]);
     const airports = await loadAirportTimezones(supabase, allIatas);
 
+    const warnings: string[] = [];
+
+    // First pass: build/normalize each leg and check whether it already exists.
+    // This lets us avoid creating a booking when the whole email is a
+    // re-notification of flights we already have (the orphan-booking bug).
+    type LegPlan = {
+      input: FlightInput;
+      existing: { id: string; booking_id: string | null } | null;
+    };
+    const plans: LegPlan[] = [];
+    for (const parsedFlight of parsed.flights) {
+      try {
+        const input = buildFlightInput(parsedFlight, airports, userId);
+        const existing = await findExistingFlight(
+          supabase,
+          normalizeFlightInput(input),
+          userId,
+        );
+        plans.push({ input, existing });
+      } catch (error) {
+        warnings.push(
+          `${parsedFlight.airline_iata}${parsedFlight.flight_number}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    const newLegs = plans.filter((p) => !p.existing);
+    const existingBookingIds = [
+      ...new Set(
+        plans
+          .filter((p) => p.existing?.booking_id)
+          .map((p) => p.existing!.booking_id as string),
+      ),
+    ];
+
+    // Every leg already exists → nothing new; don't create a booking.
+    if (newLegs.length === 0) {
+      return {
+        message_id: message.id,
+        outcome: "skipped",
+        flight_ids: plans.map((p) => p.existing!.id),
+        warnings,
+      };
+    }
+
+    // Reuse the trip's existing booking when there's exactly one; otherwise
+    // create a fresh booking from this email's payload (if any).
     const bookingInput = buildBookingInput(parsed, userId, message.id);
-    // Create the booking once so all legs can share it
-    const bookingId = hasBookingPayload(bookingInput)
+    const createdFreshBooking = existingBookingIds.length !== 1 &&
+      hasBookingPayload(bookingInput);
+    const bookingId = existingBookingIds.length === 1
+      ? existingBookingIds[0]
+      : createdFreshBooking
       ? await upsertBookingIfPresent(supabase, bookingInput, userId)
       : null;
 
     const flightIds: string[] = [];
-    const warnings: string[] = [];
-
-    for (const parsedFlight of parsed.flights) {
+    for (const plan of newLegs) {
       try {
-        const flightInput = buildFlightInput(parsedFlight, airports, userId);
         const { flight, warnings: flightWarnings } = await createFlight(
           supabase,
-          { ...flightInput, enrichment_mode: "try_now" },
+          { ...plan.input, enrichment_mode: "try_now" },
         );
         const flightId = String(flight.id);
         flightIds.push(flightId);
@@ -144,7 +212,7 @@ async function processMessage(
         }
       } catch (error) {
         warnings.push(
-          `${parsedFlight.airline_iata}${parsedFlight.flight_number}: ${
+          `${plan.input.airline_iata}${plan.input.flight_number}: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
@@ -152,6 +220,10 @@ async function processMessage(
     }
 
     if (flightIds.length === 0) {
+      // No new flight persisted — don't leave a freshly-created booking orphaned.
+      if (createdFreshBooking && bookingId) {
+        await supabase.from("bookings").delete().eq("id", bookingId);
+      }
       return {
         message_id: message.id,
         outcome: "failed",
@@ -286,6 +358,31 @@ function toUtcIso(dt: DateTime): string {
     .toISO({ suppressMilliseconds: true, includeOffset: true });
   if (!iso) throw new Error("Failed to format timestamp");
   return iso.replace(".000Z", "Z");
+}
+
+async function findExistingFlight(
+  supabase: SupabaseClient,
+  flight: NormalizedFlightInput,
+  userId: string | null,
+): Promise<{ id: string; booking_id: string | null } | null> {
+  const query = supabase
+    .from("flights")
+    .select("id, booking_id")
+    .eq("flight_date", flight.flight_date)
+    .eq("airline_iata", flight.airline_iata)
+    .eq("flight_number", flight.flight_number)
+    .eq("dep_iata", flight.dep_iata)
+    .eq("arr_iata", flight.arr_iata);
+  const { data, error } = await (userId === null
+    ? query.is("user_id", null)
+    : query.eq("user_id", userId));
+
+  if (error) {
+    throw new HttpError(500, `Failed to check existing flight: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as Array<{ id: string; booking_id: string | null }>;
+  return rows[0] ?? null;
 }
 
 async function loadSyncState(
