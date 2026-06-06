@@ -67,6 +67,7 @@ function buildConfig(body: WatchGmailRequest) {
     lookbackDays: body.lookback_days,
     after: body.after,
     before: body.before,
+    notify: body.notify,
     owner: ownerName || ownerEmail
       ? { name: ownerName ?? null, email: ownerEmail ?? null }
       : undefined,

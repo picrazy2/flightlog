@@ -43,6 +43,8 @@ export async function watchGmail(
     // Explicit window (YYYY/MM/DD) for chunked backfills; overrides lookbackDays.
     after?: string;
     before?: string;
+    // Set false to suppress the summary email.
+    notify?: boolean;
   },
   dependencies: {
     scanMessages?: (
@@ -111,7 +113,7 @@ export async function watchGmail(
   // Notify on any add/change. Real runs only (accessToken present); never let a
   // notification failure break the import.
   if (
-    accessToken && config.owner?.email &&
+    accessToken && config.owner?.email && config.notify !== false &&
     (result.imported > 0 || result.updated > 0 || result.cancelled > 0)
   ) {
     try {

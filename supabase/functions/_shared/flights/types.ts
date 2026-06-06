@@ -128,6 +128,8 @@ export type WatchGmailRequest = {
   // Explicit window (YYYY/MM/DD) for chunked backfills; overrides lookback_days.
   after?: string;
   before?: string;
+  // Set false to suppress the summary email (e.g. during a chunked backfill).
+  notify?: boolean;
 };
 
 export type WatchGmailMessageResult = {
