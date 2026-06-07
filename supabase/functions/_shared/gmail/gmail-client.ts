@@ -104,6 +104,9 @@ export const FLIGHT_SEARCH_QUERIES = [
   // Online travel agencies / points portals (Chase Travel "Travel Reservation
   // Center Trip ID #…", Expedia/Kiwi itineraries) — full flight detail, generic subject
   'subject:("travel reservation center" OR "trip id" OR "trip confirmation" OR "your trip to") (flight OR airline OR airport)',
+  // Award/points redemptions whose body carries the itinerary (e.g. LifeMiles
+  // "You've redeemed lifemiles!"), but whose subject lacks a flight keyword
+  'subject:(redeemed OR redemption OR "miles") (itinerary OR flight OR airline OR reservation)',
   // English: changes, cancellations & refunds (these supersede existing bookings)
   'subject:(refund OR cancelled OR canceled OR cancellation OR "schedule change" OR "flight change" OR "itinerary has changed" OR "flight has changed" OR rescheduled OR "time change" OR "change to your booking" OR "confirmation of changes")',
   // Chinese — ticket/flight/itinerary/checkin/boarding/booking/confirm/refund/change/cancel
@@ -192,6 +195,8 @@ async function getCurrentHistoryId(accessToken: string): Promise<string> {
   return data.historyId;
 }
 
+const EMPTY_PAGE_RETRIES = 2;
+
 async function listMessageIdsBySearch(
   accessToken: string,
   q: string,
@@ -199,6 +204,7 @@ async function listMessageIdsBySearch(
 ): Promise<string[]> {
   const ids: string[] = [];
   let pageToken: string | undefined;
+  let firstPage = true;
 
   while (ids.length < maxResults) {
     const params = new URLSearchParams({
@@ -207,17 +213,54 @@ async function listMessageIdsBySearch(
     });
     if (pageToken) params.set("pageToken", pageToken);
 
-    const res = await gmailFetch(accessToken, `messages?${params}`);
-    const data = await res.json() as {
-      messages?: Array<{ id: string }>;
-      nextPageToken?: string;
-    };
+    // Gmail's messages.list intermittently returns an empty result under load
+    // (it's a 200, not an error), which silently drops a whole window. Retry an
+    // empty first page a couple times with backoff before trusting the 0.
+    let data: { messages?: Array<{ id: string }>; nextPageToken?: string } = {};
+    for (let attempt = 0; ; attempt++) {
+      const res = await gmailFetchWithRetry(accessToken, `messages?${params}`);
+      data = await res.json();
+      const count = (data.messages ?? []).length;
+      if (
+        firstPage && count === 0 && !data.nextPageToken &&
+        attempt < EMPTY_PAGE_RETRIES
+      ) {
+        await sleep(700 * (attempt + 1));
+        continue;
+      }
+      break;
+    }
+
     ids.push(...(data.messages ?? []).map((m) => m.id));
+    firstPage = false;
     pageToken = data.nextPageToken;
     if (!pageToken) break;
   }
 
   return ids;
+}
+
+// Retries transient Gmail API failures (429/5xx) with backoff. Free — Gmail API
+// calls are quota-limited, not billed, and never invoke Gemini.
+async function gmailFetchWithRetry(
+  accessToken: string,
+  path: string,
+  retries = 3,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await gmailFetch(accessToken, path);
+    } catch (error) {
+      lastError = error;
+      await sleep(500 * (i + 1));
+    }
+  }
+  throw lastError;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function fetchMessages(
