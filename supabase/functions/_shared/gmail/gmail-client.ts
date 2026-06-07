@@ -114,8 +114,8 @@ export const FLIGHT_SEARCH_QUERIES = [
   "subject:(항공권 OR 예약 OR 탑승 OR 항공편 OR 취소 OR 변경 OR 환불 OR 일정)",
   // Italian — flight/booking/ticket/itinerary/cancellation/refund
   "subject:(volo OR prenotazione OR biglietto OR itinerario OR annullamento OR rimborso OR cancellazione)",
-  // Spanish / Catalan — flight/booking/ticket/invoice/cancellation/refund
-  "subject:(vuelo OR vol OR reserva OR billete OR bitllet OR factura OR cancelación OR reembolso)",
+  // Spanish / Catalan — flight/booking/ticket/itinerary/trip/invoice/cancellation/refund
+  "subject:(vuelo OR vol OR reserva OR billete OR bitllet OR factura OR itinerari OR viatge OR cancelación OR reembolso)",
   // French — booking/ticket/itinerary/cancellation/refund/plane
   "subject:(réservation OR billet OR itinéraire OR annulation OR remboursement OR avion)",
   // Turkish — flight/booking/ticket/cancel/refund/boarding
