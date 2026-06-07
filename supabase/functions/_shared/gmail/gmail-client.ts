@@ -18,8 +18,8 @@ export type GmailMessage = {
   attachments?: PdfAttachment[];
 };
 
-const MAX_PDFS_PER_MESSAGE = 3;
-const MAX_PDF_BYTES = 8 * 1024 * 1024; // 8MB Gemini inline limit headroom
+const MAX_PDFS_PER_MESSAGE = 1; // itinerary PDF; e-receipt is redundant & doubles memory
+const MAX_PDF_BYTES = 5 * 1024 * 1024;
 
 export type GmailScanResult = {
   messages: GmailMessage[];
