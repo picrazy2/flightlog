@@ -383,18 +383,21 @@ const MAX_BODY_CHARS = 20000;
 function extractBody(payload: GmailPart | undefined): string {
   if (!payload) return "";
 
-  // Prefer plain text; otherwise convert HTML to text first. Sending raw HTML
-  // wastes the char budget on CSS/markup and can push the real flight details
-  // past the cap entirely (some confirmation emails are 300KB+ of styling).
+  // Use whichever of text/plain or (HTML→text) has MORE content. Some senders
+  // (e.g. Virgin/Adobe Campaign e-tickets) put only a legal footer in
+  // text/plain and the real itinerary in the HTML — blindly preferring plain
+  // text there feeds Gemini the footer and it sees no flight. Converting HTML
+  // to text also keeps CSS/markup from eating the char budget.
   const plainPart = findPartByMimeType(payload, "text/plain");
-  if (plainPart?.body?.data) {
-    return decodeBase64Url(plainPart.body.data).slice(0, MAX_BODY_CHARS);
-  }
-
   const htmlPart = findPartByMimeType(payload, "text/html");
-  if (htmlPart?.body?.data) {
-    return htmlToText(decodeBase64Url(htmlPart.body.data)).slice(0, MAX_BODY_CHARS);
-  }
+  const plain = plainPart?.body?.data
+    ? decodeBase64Url(plainPart.body.data)
+    : "";
+  const html = htmlPart?.body?.data
+    ? htmlToText(decodeBase64Url(htmlPart.body.data))
+    : "";
+  const best = html.length > plain.length ? html : plain;
+  if (best) return best.slice(0, MAX_BODY_CHARS);
 
   if (payload.body?.data) {
     const raw = decodeBase64Url(payload.body.data);
