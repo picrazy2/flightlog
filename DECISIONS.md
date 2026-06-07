@@ -1,4 +1,4 @@
-# Flight Log App — Architecture Decisions
+# Journia — Architecture Decisions
 
 This document is the source of truth for how the app is structured. It is written to be
 readable both by humans and by AI agents starting a new session. Decisions are final unless
@@ -22,7 +22,7 @@ part of the new build.
 
 ## Product Goal
 
-A modern, mobile-friendly personal flight log that:
+Journia is a modern, mobile-friendly personal flight log that:
 
 - lets flights be added, edited, imported, and deleted from the UI,
 - enriches flights automatically from external providers and booking confirmation emails,

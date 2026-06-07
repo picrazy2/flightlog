@@ -1,6 +1,6 @@
 # Supabase Setup
 
-This folder contains the current Supabase schema and backend code for the Flight Log app.
+This folder contains the current Supabase schema and backend code for Journia (the flight-log app).
 
 ## Contents
 
