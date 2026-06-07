@@ -107,7 +107,7 @@ Only set is_flight_booking = true when the email contains specific flight detail
 
 Set is_schedule_change = true if the email is an airline schedule/itinerary CHANGE notification for an existing trip (revised times, "your flight time has changed", "confirmation of changes"), as opposed to an original booking, e-ticket, or boarding pass. Use the email's NEW times for the flight fields.
 
-Set is_cancellation = true if the email means a previously booked flight is no longer happening — a full ticket refund / cancelled flight / cancelled booking. Do NOT set it for partial or ancillary refunds (seat, bag, tax, fare adjustment) where the flight still operates. When is_cancellation = true, ALSO set is_flight_booking = true and still extract the affected flight(s) (route + date, plus flight number if shown) so they can be matched to an existing record.
+Set is_cancellation = true if the email means a previously booked flight is no longer happening — a ticket refund, cancelled flight, or cancelled booking. This holds REGARDLESS of the refund amount: a cancelled ticket may refund only a small sum if the fare was mostly non-refundable, so a "Ticket Refund" for a flight is still a cancellation even if the amount is tiny. Only set is_cancellation = false for refunds of ancillary add-ons (seat selection, baggage, meal, insurance) where the flight itself still operates. When is_cancellation = true, ALSO set is_flight_booking = true and still extract the affected flight(s) (route + date, plus flight number if shown) so they can be matched to an existing record.
 
 What does NOT count (set is_flight_booking = false, empty arrays/null elsewhere):
 - Hotel/car-rental/train/event reservations, marketing, price alerts, fare sales
