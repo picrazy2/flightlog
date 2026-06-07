@@ -91,12 +91,23 @@ export async function watchGmail(
   for (const message of unprocessed) {
     const result = await processMessage(supabase, message, parseFn, userId);
     results.push(result);
+    // Stop immediately if Gemini is rate-limited / over its spending cap —
+    // continuing would just fail every remaining message for no reason.
+    if (
+      result.outcome === "failed" &&
+      /quota|spending cap|resource_exhausted|\b429\b/i.test(result.error ?? "")
+    ) {
+      break;
+    }
   }
 
-  const newProcessedIds = new Set([
-    ...processedIds,
-    ...unprocessed.map((m) => m.id),
-  ]);
+  // Only mark successfully-handled messages as processed. Failed ones (e.g. a
+  // transient Gemini 429 / quota cap) stay unprocessed so a later run retries
+  // them instead of permanently skipping a real flight.
+  const handledIds = results
+    .filter((r) => r.outcome !== "failed")
+    .map((r) => r.message_id);
+  const newProcessedIds = new Set([...processedIds, ...handledIds]);
   await saveSyncState(supabase, userId, newHistoryId, newProcessedIds);
 
   const result: WatchGmailResult = {
