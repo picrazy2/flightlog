@@ -95,12 +95,15 @@ function b64url(s: string): string {
 // Each clause is an independent Gmail search; results are unioned. Keeping them
 // separate is clearer (and avoids fragile precedence) than one mega-query.
 export const FLIGHT_SEARCH_QUERIES = [
-  // English: bookings / itineraries / e-tickets
-  'subject:(confirmation OR itinerary OR "e-ticket" OR booking) (flight OR airline)',
+  // English: bookings / itineraries / tickets ("Ticket Details", e-ticket, etc.)
+  'subject:(confirmation OR itinerary OR "e-ticket" OR ticket OR booking OR reservation) (flight OR airline)',
   // English: boarding passes & check-ins — flights actually flown
   'subject:("boarding pass" OR "checked in" OR "checked-in" OR "e-boarding")',
   // Google Flights itineraries (and self-forwards of them)
   'subject:"Google Flights"',
+  // Online travel agencies / points portals (Chase Travel "Travel Reservation
+  // Center Trip ID #…", Expedia/Kiwi itineraries) — full flight detail, generic subject
+  'subject:("travel reservation center" OR "trip id" OR "trip confirmation" OR "your trip to") (flight OR airline OR airport)',
   // English: changes, cancellations & refunds (these supersede existing bookings)
   'subject:(refund OR cancelled OR canceled OR cancellation OR "schedule change" OR "flight change" OR "itinerary has changed" OR "flight has changed" OR rescheduled OR "time change" OR "change to your booking" OR "confirmation of changes")',
   // Chinese — ticket/flight/itinerary/checkin/boarding/booking/confirm/refund/change/cancel
