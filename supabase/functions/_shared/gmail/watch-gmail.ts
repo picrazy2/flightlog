@@ -287,6 +287,12 @@ async function processMessage(
     const plans: LegPlan[] = [];
     for (const parsedFlight of parsed.flights) {
       try {
+        // Gemini sometimes returns an ICAO airline code (e.g. EZY instead of
+        // U2); resolve it to IATA so the flight isn't rejected.
+        parsedFlight.airline_iata = await resolveAirlineIata(
+          supabase,
+          parsedFlight.airline_iata,
+        );
         const input = buildFlightInput(parsedFlight, airports, userId);
         const normalized = normalizeFlightInput(input);
         const existing = await findExistingFlight(supabase, normalized, userId);
@@ -442,24 +448,35 @@ async function processCancellation(
 
   for (const f of parsed.flights) {
     const date = (f.flight_date ?? "").trim();
-    const dep = (f.dep_iata ?? "").toUpperCase();
-    const arr = (f.arr_iata ?? "").toUpperCase();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || dep.length !== 3 || arr.length !== 3) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       warnings.push(
-        `Cancellation leg missing date/route: ${f.airline_iata}${f.flight_number}`,
+        `Cancellation leg missing date: ${f.airline_iata}${f.flight_number}`,
       );
       continue;
     }
-
-    let query = supabase
-      .from("flights")
-      .select("id, status")
-      .eq("flight_date", date)
-      .eq("dep_iata", dep)
-      .eq("arr_iata", arr);
     const airline = (f.airline_iata ?? "").toUpperCase();
-    if (/^[A-Z0-9]{2}$/.test(airline)) {
-      query = query.eq("airline_iata", airline);
+    const flightNumber = normalizeFlightNumberLoose(f.flight_number, airline);
+    const hasFlightNumber = /^[A-Z0-9]{1,8}$/.test(flightNumber) &&
+      !/^(null|n\/?a|unknown|tbd|tba)$/i.test(flightNumber);
+    const dep = (f.dep_iata ?? "").toUpperCase();
+    const arr = (f.arr_iata ?? "").toUpperCase();
+
+    // Match by airline + flight number + date — the exact, unambiguous key.
+    // Refund/cancellation emails frequently give only the city ("Chengdu"),
+    // not the airport code, so the airport pair can't be trusted; the flight
+    // number already implies the route. Fall back to date+route only when the
+    // refund has no usable flight number.
+    let query = supabase.from("flights").select("id, status").eq("flight_date", date);
+    if (/^[A-Z0-9]{2}$/.test(airline) && hasFlightNumber) {
+      query = query.eq("airline_iata", airline).eq("flight_number", flightNumber);
+    } else if (dep.length === 3 && arr.length === 3) {
+      query = query.eq("dep_iata", dep).eq("arr_iata", arr);
+      if (/^[A-Z0-9]{2}$/.test(airline)) query = query.eq("airline_iata", airline);
+    } else {
+      warnings.push(
+        `Cancellation leg lacks flight number and route: ${airline}${f.flight_number}`,
+      );
+      continue;
     }
     const { data, error } = await (userId === null
       ? query.is("user_id", null)
@@ -651,6 +668,36 @@ async function findExistingFlight(
 
   const rows = (data ?? []) as ExistingFlight[];
   return rows[0] ?? null;
+}
+
+// Gemini occasionally returns a 3-letter ICAO airline code; map it to the
+// 2-char IATA code via the airlines table so normalization doesn't reject it.
+async function resolveAirlineIata(
+  supabase: SupabaseClient,
+  code: string | null | undefined,
+): Promise<string> {
+  const c = (code ?? "").toUpperCase().trim();
+  if (/^[A-Z0-9]{2}$/.test(c)) return c;
+  if (/^[A-Z]{3}$/.test(c)) {
+    const { data } = await supabase
+      .from("airlines")
+      .select("iata")
+      .eq("icao", c)
+      .limit(1);
+    const iata = (data as Array<{ iata: string }> | null)?.[0]?.iata;
+    if (iata) return iata;
+  }
+  return c;
+}
+
+// Strip airline prefix and leading zeros to match how flight_number is stored.
+function normalizeFlightNumberLoose(
+  value: string | null | undefined,
+  airline: string,
+): string {
+  let n = (value ?? "").toUpperCase().replace(/\s/g, "");
+  if (airline && n.startsWith(airline)) n = n.slice(airline.length);
+  return n.replace(/^0+(?=\d)/, "");
 }
 
 function instantsDiffer(a: string, b: string): boolean {
