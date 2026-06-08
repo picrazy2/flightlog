@@ -301,6 +301,85 @@ Deno.test("watchGmail cancels an existing flight on a refund/cancellation email"
   assertEquals(supabase.db.flights[0].status, "cancelled");
 });
 
+Deno.test("watchGmail cancels by PNR when the refund email lists no flights", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m1", subject: "BA booking", from: "ba@ba.com", date: "x", body: "" }],
+      "1",
+    ),
+    parseEmail: mockParseEmail(SINGLE_BA_BOOKING), // PNR XYZ123
+  });
+  assertEquals(supabase.db.flights[0].status, "scheduled");
+
+  // Terse refund: only the confirmation code, no flight legs at all.
+  const refund: GeminiParsedBookingEmail = {
+    ...SINGLE_BA_BOOKING,
+    is_flight_booking: false,
+    is_cancellation: true,
+    booking_platform: null,
+    cost_cash: null,
+    cost_currency: null,
+    booking_refs_airline: [{ airline_iata: "BA", pnr: "XYZ123" }],
+    flights: [],
+  };
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m2", subject: "Your reservation XYZ123 was canceled", from: "ba@ba.com", date: "x", body: "" }],
+      "2",
+    ),
+    parseEmail: mockParseEmail(refund),
+  });
+
+  assertEquals(result.cancelled, 1);
+  assertEquals(supabase.db.flights.length, 1);
+  assertEquals(supabase.db.flights[0].status, "cancelled");
+});
+
+Deno.test("watchGmail cancels by PNR when the cancel email lists a rebooked (mismatched) itinerary", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m1", subject: "BA booking", from: "ba@ba.com", date: "x", body: "" }],
+      "1",
+    ),
+    parseEmail: mockParseEmail(SINGLE_BA_BOOKING), // stored flight, PNR XYZ123
+  });
+  assertEquals(supabase.db.flights[0].status, "scheduled");
+
+  // Cancel email for the SAME PNR but listing a different (rebooked) flight —
+  // per-leg matching can't connect them, PNR fallback must.
+  const refund: GeminiParsedBookingEmail = {
+    ...SINGLE_BA_BOOKING,
+    is_flight_booking: false,
+    is_cancellation: true,
+    booking_platform: null,
+    cost_cash: null,
+    cost_currency: null,
+    booking_refs_airline: [{ airline_iata: "BA", pnr: "XYZ123" }],
+    flights: [{
+      ...SINGLE_BA_BOOKING.flights[0],
+      flight_number: "999",
+      dep_iata: "JFK",
+      arr_iata: "LAX",
+      flight_date: "2099-01-01",
+    }],
+  };
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{ id: "m2", subject: "Your reservation has been canceled (XYZ123)", from: "ba@ba.com", date: "x", body: "" }],
+      "2",
+    ),
+    parseEmail: mockParseEmail(refund),
+  });
+
+  assertEquals(result.cancelled, 1);
+  assertEquals(supabase.db.flights.length, 1);
+  assertEquals(supabase.db.flights[0].status, "cancelled");
+});
+
 Deno.test("watchGmail rejects a flight with a null/invalid flight number", async () => {
   const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
 

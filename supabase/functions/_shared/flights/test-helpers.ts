@@ -1,7 +1,8 @@
 type Filter =
   | { kind: "eq"; column: string; value: unknown }
   | { kind: "is"; column: string; value: null }
-  | { kind: "in"; column: string; values: unknown[] };
+  | { kind: "in"; column: string; values: unknown[] }
+  | { kind: "contains"; column: string; value: unknown };
 
 type TableName =
   | "airports"
@@ -149,7 +150,13 @@ class MockQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
 
   in(column: string, values: unknown[]) {
     this.filters.push({ kind: "in", column, values });
-    return this.execute();
+    return this;
+  }
+
+  // jsonb array containment: column @> value (e.g. booking_refs_airline @> [{pnr}])
+  contains(column: string, value: unknown) {
+    this.filters.push({ kind: "contains", column, value });
+    return this;
   }
 
   insert(payload: Record<string, unknown> | Record<string, unknown>[]) {
@@ -350,6 +357,18 @@ function matchesFilters(row: Record<string, unknown>, filters: Filter[]) {
 
     if (filter.kind === "is") {
       return (row[filter.column] ?? null) === filter.value;
+    }
+
+    if (filter.kind === "contains") {
+      // jsonb array @> [partialObj]: every query element must be contained in
+      // some row element (subset match on object keys).
+      const rowArr = (row[filter.column] ?? []) as Array<Record<string, unknown>>;
+      const want = filter.value as Array<Record<string, unknown>>;
+      return want.every((w) =>
+        rowArr.some((r) =>
+          Object.entries(w).every(([k, v]) => r?.[k] === v)
+        )
+      );
     }
 
     return filter.values.includes(row[filter.column]);

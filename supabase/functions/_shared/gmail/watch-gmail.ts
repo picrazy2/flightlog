@@ -255,9 +255,10 @@ async function processMessage(
 
     // Cancellation/refund first — these aren't "bookings" so they'd otherwise be
     // dropped by the not_flight gate before we could cancel anything. Mark
-    // matching existing flights cancelled; never create. Matched loosely (date +
-    // route) since refund emails often omit the flight number.
-    if (parsed.is_cancellation === true && parsed.flights.length > 0) {
+    // matching existing flights cancelled; never create. Handled even when the
+    // email carries no flight legs: terse "your reservation X was canceled"
+    // refunds carry only the confirmation number, which we match on by PNR.
+    if (parsed.is_cancellation === true) {
       return await processCancellation(supabase, message, parsed, userId);
     }
 
@@ -457,7 +458,7 @@ async function processCancellation(
   const warnings: string[] = [];
   const cancelledIds: string[] = [];
 
-  for (const f of parsed.flights) {
+  for (const f of parsed.flights ?? []) {
     const date = (f.flight_date ?? "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       warnings.push(
@@ -508,6 +509,59 @@ async function processCancellation(
         warnings.push(`Failed to cancel ${m.id}: ${updateError.message}`);
       } else {
         cancelledIds.push(m.id);
+      }
+    }
+  }
+
+  // PNR fallback. Two common cases that the per-leg matching above misses:
+  //  1. Terse refunds ("Your reservation X was canceled") carry no flight legs.
+  //  2. Change-then-cancel: the cancel email lists the *latest* itinerary, but
+  //     the stored flights are an earlier, superseded version of the same PNR —
+  //     so flight number / route / date no longer line up.
+  // In both, the confirmation code is the only stable key. Cancel every flight
+  // belonging to a booking with that PNR, but only when per-leg matching found
+  // nothing (keeps precise matches authoritative and avoids over-cancelling).
+  if (cancelledIds.length === 0) {
+    const pnrs = new Set<string>();
+    const refs = (parsed.booking_refs_airline ?? []) as Array<{ pnr?: string }>;
+    for (const r of refs) {
+      const p = (r?.pnr ?? "").toUpperCase().trim();
+      if (/^[A-Z0-9]{5,7}$/.test(p)) pnrs.add(p);
+    }
+    const plat = (parsed.booking_ref_platform ?? "").toUpperCase().trim();
+    if (/^[A-Z0-9]{5,7}$/.test(plat)) pnrs.add(plat);
+
+    for (const pnr of pnrs) {
+      const { data: bookings, error: bErr } = await supabase
+        .from("bookings")
+        .select("id")
+        .contains("booking_refs_airline", [{ pnr }]);
+      if (bErr) {
+        warnings.push(`Booking lookup by PNR ${pnr} failed: ${bErr.message}`);
+        continue;
+      }
+      const bookingIds = ((bookings ?? []) as Array<{ id: string }>).map((b) => b.id);
+      if (bookingIds.length === 0) continue;
+
+      let q = supabase.from("flights").select("id, status").in("booking_id", bookingIds);
+      q = userId === null ? q.is("user_id", null) : q.eq("user_id", userId);
+      const { data, error } = await q;
+      if (error) {
+        warnings.push(`Cancellation by PNR ${pnr} lookup failed: ${error.message}`);
+        continue;
+      }
+      const matches = ((data ?? []) as Array<{ id: string; status: string }>)
+        .filter((r) => r.status !== "cancelled");
+      for (const m of matches) {
+        const { error: updateError } = await supabase
+          .from("flights")
+          .update({ status: "cancelled" })
+          .eq("id", m.id);
+        if (updateError) {
+          warnings.push(`Failed to cancel ${m.id} (PNR ${pnr}): ${updateError.message}`);
+        } else {
+          cancelledIds.push(m.id);
+        }
       }
     }
   }

@@ -125,6 +125,13 @@ export const FLIGHT_SEARCH_QUERIES = [
   "subject:(uçuş OR rezervasyon OR bilet OR iptal OR iade OR biniş)",
   // Portuguese — flight/boarding/ticket/cancellation/refund
   "subject:(voo OR embarque OR bilhete OR cancelamento OR reembolso)",
+  // Travel-agent / GDS itineraries whose subject carries no flight keyword
+  // (Amadeus agent forwards like "GUO/ALEXANDER MR 13MAR BOS PEK", or airline
+  // "Important information for travellers" sent via Amadeus). Low volume.
+  "from:amadeus.com",
+  // Ctrip / Trip.com bookings with an English subject (Chinese subjects are
+  // already covered by the 机票/行程 clause above).
+  "from:(trip.com OR ctrip.com) subject:(confirm OR itinerary OR booking OR ticket OR e-ticket)",
 ];
 
 const DEFAULT_LOOKBACK_DAYS = 7;
