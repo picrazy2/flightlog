@@ -170,11 +170,25 @@ async function sendRunNotification(
   const { data } = await supabase
     .from("v_flights_with_airports")
     .select(
-      "flight_date, airline_iata, flight_number, dep_iata, arr_iata, status, " +
+      "id, booking_id, flight_date, airline_iata, flight_number, dep_iata, arr_iata, status, " +
         "cabin_class, aircraft_type_name, cost_cash, cost_currency, cost_points, points_program",
     )
     .in("id", ids);
   const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
+
+  // Pull the booking rows to add PNR, platform, and a link to the source email
+  // so each line can be sanity-checked against Gmail.
+  const bookingIds = [...new Set(rows.map((r) => r.booking_id).filter(Boolean))];
+  const bookingById = new Map<string, Record<string, unknown>>();
+  if (bookingIds.length) {
+    const { data: bks } = await supabase
+      .from("bookings")
+      .select("id, booking_refs_airline, booking_ref_platform, raw_email")
+      .in("id", bookingIds as string[]);
+    for (const b of (bks ?? []) as Array<Record<string, unknown>>) {
+      bookingById.set(String(b.id), b);
+    }
+  }
 
   const lines = rows
     .sort((a, b) =>
@@ -184,13 +198,23 @@ async function sendRunNotification(
       const head =
         `  ${f.flight_date}  ${f.airline_iata}${f.flight_number}  ` +
         `${f.dep_iata} → ${f.arr_iata}`;
-      if (f.status === "cancelled") return `${head}  (CANCELLED)`;
+      const b = f.booking_id ? bookingById.get(String(f.booking_id)) : undefined;
+      const refs = (b?.booking_refs_airline ?? []) as Array<{ pnr?: string }>;
+      const pnr = refs.map((x) => x?.pnr).filter(Boolean).join(",") ||
+        (b?.booking_ref_platform as string | undefined) || "";
+      const mid = (b?.raw_email as { message_id?: string } | undefined)?.message_id;
+      const link = mid ? `https://mail.google.com/mail/u/0/#all/${mid}` : "";
+      if (f.status === "cancelled") {
+        return `${head}  (CANCELLED)${pnr ? `  PNR ${pnr}` : ""}${link ? `\n      ↳ ${link}` : ""}`;
+      }
       const extras = [
         f.cabin_class ? formatCabin(String(f.cabin_class)) : null,
         f.aircraft_type_name ? String(f.aircraft_type_name) : null,
         formatCost(f),
+        pnr ? `PNR ${pnr}` : null,
       ].filter(Boolean);
-      return extras.length ? `${head}  (${extras.join(", ")})` : head;
+      const detail = extras.length ? `${head}  (${extras.join(", ")})` : head;
+      return link ? `${detail}\n      ↳ verify: ${link}` : detail;
     });
 
   const parts: string[] = [];
