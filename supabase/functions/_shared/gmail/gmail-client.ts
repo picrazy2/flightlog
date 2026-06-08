@@ -129,9 +129,19 @@ export const FLIGHT_SEARCH_QUERIES = [
   // (Amadeus agent forwards like "GUO/ALEXANDER MR 13MAR BOS PEK", or airline
   // "Important information for travellers" sent via Amadeus). Low volume.
   "from:amadeus.com",
-  // Ctrip / Trip.com bookings with an English subject (Chinese subjects are
-  // already covered by the 机票/行程 clause above).
-  "from:(trip.com OR ctrip.com) subject:(confirm OR itinerary OR booking OR ticket OR e-ticket)",
+  // Ctrip / Trip.com / Tongcheng (ly.com) bookings — Chinese OTAs that mail an
+  // (often PDF) e-ticket itinerary. Chinese subjects are also covered above.
+  "from:(trip.com OR ctrip.com OR ly.com) (confirm OR itinerary OR booking OR ticket OR 机票 OR 行程 OR 出票)",
+  // Airline-app / Chinese e-ticket subjects ("出票成功确认", "电子客票行程单")
+  "subject:(出票成功 OR 电子客票 OR 行程单 OR 行程确认)",
+  // Flight receipts whose subject says "receipt" (e.g. Delta "Your Flight Receipt")
+  'subject:("flight receipt" OR "e-receipt" OR "your receipt") (flight OR airline OR air)',
+  // Expedia / OTA travel confirmations (subject lacks a flight keyword)
+  "from:(expedia.com OR expediamail.com) subject:(confirmation OR itinerary OR trip)",
+  // LOT and other carriers fronted by Amadeus/LOT.com booking desks
+  "from:(lot.com OR amadeus.net)",
+  // Forwarded e-tickets from family (parents forward bookings made for the trip)
+  'subject:("Fwd:" OR "Fw:") (e-ticket OR eticket OR itinerary OR "flight booking" OR confirmation OR 行程 OR 机票)',
 ];
 
 const DEFAULT_LOOKBACK_DAYS = 7;

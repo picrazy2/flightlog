@@ -123,9 +123,9 @@ Field rules:
 - cabin_class: "economy", "premium_economy", "lie_flat_business", "recliner_first", "international_first", or null
 - booking_refs_airline: each item has airline_iata (2-char) and pnr (airline confirmation code)
 - booking_platform: "direct", "expedia", "google_flights", "chase_travel", or lowercase platform name, or null
-- cost_cash: numeric amount (no currency symbol), or null
+- cost_cash: numeric amount (no currency symbol), or null. PER PERSON for the account owner only: if the booking covers multiple passengers and only a combined total is shown, divide by the passenger count. Prefer an explicit "per person" / "total per passenger" figure when present. (e.g. a 4-passenger eTicket Total of 23,903.60 USD → cost_cash = 5975.90.)
 - cost_currency: ISO 4217 3-letter code e.g. USD, GBP, or null
-- cost_points: integer points/miles used, or null
+- cost_points: integer points/miles used, or null. Also PER PERSON (divide a multi-passenger total by passenger count; prefer an explicit "per passenger" figure).
 - points_program: e.g. "chase_ur", "amex_mr", "united_mp", or null
 - traveler_names: the passenger name(s) on the booking, as written, or null if not stated
 
