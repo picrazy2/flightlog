@@ -125,7 +125,7 @@ Field rules:
 - booking_platform: "direct", "expedia", "google_flights", "chase_travel", or lowercase platform name, or null
 - cost_cash: numeric amount (no currency symbol), or null. PER PERSON for the account owner only: if the booking covers multiple passengers and only a combined total is shown, divide by the passenger count. Prefer an explicit "per person" / "total per passenger" figure when present. (e.g. a 4-passenger eTicket Total of 23,903.60 USD → cost_cash = 5975.90.)
 - cost_currency: ISO 4217 3-letter code e.g. USD, GBP, or null
-- cost_points: integer points/miles used, or null. Also PER PERSON (divide a multi-passenger total by passenger count; prefer an explicit "per passenger" figure).
+- cost_points: integer points/miles REDEEMED to pay for this ticket (an award/points booking), or null. Also PER PERSON (divide a multi-passenger total by passenger count). CRITICAL: only the points spent to BUY the ticket count. Do NOT use miles EARNED/accrued on a paid ticket, "bonus miles", frequent-flyer accrual tables, or upgrade certificates (e.g. United PlusPoints) — those are not the ticket's cost; leave cost_points null and use cost_cash for paid tickets.
 - points_program: e.g. "chase_ur", "amex_mr", "united_mp", or null
 - traveler_names: the passenger name(s) on the booking, as written, or null if not stated
 
