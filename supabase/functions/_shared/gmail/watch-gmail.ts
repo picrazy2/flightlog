@@ -297,7 +297,20 @@ async function processMessage(
       existing: ExistingFlight | null;
     };
     const plans: LegPlan[] = [];
+    // Dedupe legs within a single email: Gemini occasionally emits the same
+    // segment twice when a city has two airport codes (e.g. Shanghai PVG vs
+    // SHA), creating a phantom duplicate flight. Same airline+number+date is the
+    // same flight regardless of which code it used.
+    const seenLegKeys = new Set<string>();
     for (const parsedFlight of parsed.flights) {
+      const legKey = `${(parsedFlight.airline_iata ?? "").toUpperCase()}|` +
+        `${normalizeFlightNumberLoose(parsedFlight.flight_number, parsedFlight.airline_iata ?? "")}|` +
+        `${(parsedFlight.flight_date ?? "").trim()}`;
+      if (seenLegKeys.has(legKey)) {
+        warnings.push(`Skipped duplicate leg within email: ${parsedFlight.airline_iata}${parsedFlight.flight_number} ${parsedFlight.flight_date}`);
+        continue;
+      }
+      seenLegKeys.add(legKey);
       try {
         // Gemini sometimes returns an ICAO airline code (e.g. EZY instead of
         // U2); resolve it to IATA so the flight isn't rejected.
