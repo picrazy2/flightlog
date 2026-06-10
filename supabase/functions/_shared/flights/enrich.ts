@@ -13,6 +13,7 @@ type EnrichmentProvider = (
 type NormalizedEnrichFlightRequest = {
   flight_date: string;
   airline_iata: string | null;
+  airline_icao: string | null;
   flight_number: string;
   dep_iata: string | null;
   arr_iata: string | null;
@@ -73,6 +74,7 @@ function normalizeEnrichmentRequest(
   return {
     flight_date: flightDate,
     airline_iata: normalizeCode(request.airline_iata, 2),
+    airline_icao: normalizeCode(request.airline_icao, 3),
     flight_number: flightNumber,
     dep_iata: normalizeCode(request.dep_iata, 3),
     arr_iata: normalizeCode(request.arr_iata, 3),

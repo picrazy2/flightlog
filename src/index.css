@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens (see docs/DESIGN_SYSTEM.md) ───────────────────────────── */
+:root {
+  /* surfaces & ink */
+  --bg: #0a0c12;
+  --surface-1: #11141c;
+  --surface-2: #171b25;
+  --surface-3: #1f2430;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --ink: #eaedf3;
+  --ink-muted: #98a2b3;
+  --ink-faint: #5c6575;
+
+  /* accents — one primary, one secondary */
+  --accent: #5b9dff;
+  --accent-press: #3d82f0;
+  --accent-ink: #06101f; /* text on accent fill */
+  --secondary: #ffc061;
+
+  /* semantic / map */
+  --route-domestic: #34d399;
+  --route-intl: #fb7185;
+  --airport: #cbd5e1;
+  --positive: #34d399;
+  --warning: #fbbf24;
+  --negative: #f87171;
+
+  /* radius */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+
+  /* elevation */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-3: 0 16px 48px -12px rgba(0, 0, 0, 0.6);
+}
+
+/* categorical palette as a JS-readable list lives in src/lib/palette.ts */
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Geist", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9375rem;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* tabular figures for all stat numerals */
+.tnum {
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* glass treatment for floating chrome over the map */
+.glass {
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-3);
+}
+
+/* focus ring */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* MapLibre popups restyled to match the system */
+/* The map container is z-auto (no stacking context), so this lifts popups above all
+   the floating chrome (control bar, stat cards, detail panel, legend). */
+.maplibregl-popup {
+  z-index: 60;
+}
+.maplibregl-popup-content {
+  background: var(--surface-1);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  /* extra right padding so text/close button don't butt against the edge */
+  padding: 11px 26px 12px 13px;
+  font-family: "Geist", sans-serif;
+}
+.maplibregl-popup-close-button {
+  width: 20px;
+  height: 20px;
+  right: 4px;
+  top: 4px;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 6px;
+  color: var(--ink-muted);
+}
+.maplibregl-popup-close-button:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+/* feature-typed tint: accent for airports, secondary for routes */
+.popup-airport .maplibregl-popup-content {
+  border-left: 3px solid var(--accent);
+  background: linear-gradient(90deg, rgba(91, 157, 255, 0.08), var(--surface-1) 60%);
+}
+.popup-route .maplibregl-popup-content {
+  border-left: 3px solid #ffc061;
+  background: linear-gradient(90deg, rgba(255, 192, 97, 0.08), var(--surface-1) 60%);
+}
+.maplibregl-popup-tip {
+  display: none;
+}
+.maplibregl-ctrl-attrib {
+  background: transparent !important;
+  color: var(--ink-faint);
+}
+/* scrollable but no visible scrollbar (mobile stat cards) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

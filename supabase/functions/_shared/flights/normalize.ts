@@ -149,8 +149,8 @@ export function normalizeBookingInput(
     cost_cash: costCash,
     cost_currency: normalizeCurrency(booking.cost_currency),
     cost_points: costPoints,
-    points_program: cleanString(booking.points_program),
-    raw_email: booking.raw_email ?? null,
+    points_program: normalizePointsProgram(booking.points_program),
+    emails: Array.isArray(booking.emails) ? booking.emails : [],
   };
 }
 
@@ -165,7 +165,7 @@ export function hasBookingPayload(booking: BookingInput) {
       booking.cost_currency ||
       booking.cost_points !== undefined ||
       booking.points_program ||
-      booking.raw_email !== undefined,
+      booking.emails !== undefined,
   );
 }
 
@@ -357,17 +357,48 @@ function normalizeBookingRefsAirline(value: unknown) {
   });
 }
 
+// Currency aliases that aren't ISO 4217 (the renminbi is "CNY", but emails and
+// the parser often say "RMB"). Map them to the canonical code.
+const CURRENCY_ALIASES = new Map<string, string>([
+  ["RMB", "CNY"],
+]);
+
 function normalizeCurrency(value: string | null | undefined) {
-  const currency = cleanString(value)?.toUpperCase();
+  let currency = cleanString(value)?.toUpperCase();
   if (!currency) {
     return null;
   }
+
+  currency = CURRENCY_ALIASES.get(currency) ?? currency;
 
   if (!/^[A-Z]{3}$/.test(currency)) {
     throw new HttpError(400, "booking.cost_currency must be a 3-letter code");
   }
 
   return currency;
+}
+
+// Loyalty-program aliases → canonical "<carrier>_<program>" slugs, so the same
+// program never fragments across rows (e.g. "united_mp"/"MileagePlus" → one key).
+const POINTS_PROGRAM_ALIASES = new Map<string, string>([
+  ["united_mp", "united_mileageplus"],
+  ["mileageplus", "united_mileageplus"],
+  ["lifemiles", "avianca_lifemiles"],
+  ["aeroplan", "ac_aeroplan"],
+  ["avios", "ba_avios"],
+  ["virgin_atlantic_flying_club", "virgin_flying_club"],
+  ["virgin_points", "virgin_flying_club"],
+  ["phoenix_miles", "air_china_phoenix_miles"],
+  ["krisflyer", "singapore_krisflyer"],
+]);
+
+function normalizePointsProgram(value: string | null | undefined) {
+  const program = cleanString(value);
+  if (!program) {
+    return null;
+  }
+  const key = program.toLowerCase();
+  return POINTS_PROGRAM_ALIASES.get(key) ?? key;
 }
 
 function parseOptionalDecimal(

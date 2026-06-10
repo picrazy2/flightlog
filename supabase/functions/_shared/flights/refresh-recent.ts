@@ -14,6 +14,11 @@ import {
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const LANDING_BUFFER_MS = 30 * 60 * 1000;
+// Providers only retain position tracks for recent flights. Once a flight has been
+// provider-enriched, keep retrying ONLY for a still-missing track within this window;
+// after it, stop — otherwise old trackless flights get re-queried (and re-billed)
+// on every run forever.
+const TRACK_RETRY_MS = 14 * 24 * 60 * 60 * 1000;
 
 export async function refreshRecentFlights(
   supabase: SupabaseClient,
@@ -30,6 +35,8 @@ export async function refreshRecentFlights(
   const limit = parseLimit(request.limit, dependencies.batchLimit);
   const candidates = await loadRefreshRecentCandidates(supabase, request.flight_id);
   const eligibleFlights = selectEligibleFlights(candidates, now).slice(0, limit);
+  const neededIatas = [...new Set(eligibleFlights.map((f) => f.airline_iata).filter(Boolean))];
+  const icaoByIata = await loadAirlineIcaoMap(supabase, neededIatas);
   const results: RefreshRecentFlightResult[] = [];
 
   for (const flight of eligibleFlights) {
@@ -38,6 +45,7 @@ export async function refreshRecentFlights(
         supabase,
         flight,
         dependencies.enrichFlight,
+        icaoByIata,
       ),
     );
   }
@@ -79,7 +87,15 @@ export function isRefreshRecentEligible(
     return false;
   }
 
-  return !isProviderEnriched(flight) || !flight.has_track;
+  // Not yet enriched → always backfill once.
+  if (!isProviderEnriched(flight)) {
+    return true;
+  }
+
+  // Already enriched: only keep re-running to pick up a still-missing track while the
+  // flight is recent enough that the provider plausibly has one. Old enriched flights
+  // without a track are done (avoids an unbounded re-query/billing loop).
+  return !flight.has_track && now.getTime() - schedArrival <= TRACK_RETRY_MS;
 }
 
 async function refreshRecentFlight(
@@ -88,6 +104,7 @@ async function refreshRecentFlight(
   enrichFlight?: (
     request: FlightInput,
   ) => Promise<EnrichFlightResult>,
+  icaoByIata?: Map<string, string>,
 ): Promise<RefreshRecentFlightResult> {
   if (!enrichFlight) {
     return {
@@ -103,6 +120,7 @@ async function refreshRecentFlight(
     const enrichment = await enrichFlight({
       flight_date: flight.flight_date,
       airline_iata: flight.airline_iata,
+      airline_icao: icaoByIata?.get(flight.airline_iata) ?? null,
       flight_number: flight.flight_number,
       dep_iata: flight.dep_iata,
       arr_iata: flight.arr_iata,
@@ -133,6 +151,15 @@ async function refreshRecentFlight(
     }
 
     if (Object.keys(changes).length > 0) {
+      // Ensure the aircraft type exists (satisfy the FK) — AeroAPI sometimes returns a
+      // code not yet in the reference table. Insert a stub; the quarterly doc8643
+      // refresh fills in the real name/body_class later.
+      if (typeof changes.aircraft_type_code === "string" && changes.aircraft_type_code) {
+        await supabase
+          .from("aircraft_types")
+          .upsert({ code: changes.aircraft_type_code, name: changes.aircraft_type_code }, { onConflict: "code", ignoreDuplicates: true });
+      }
+
       const { error } = await supabase
         .from("flights")
         .update(changes)
@@ -192,6 +219,8 @@ function buildRefreshRecentUpdateRow(
 
   assignProviderValue(row, "provider_sched_dep", enriched.provider_sched_dep);
   assignProviderValue(row, "provider_sched_arr", enriched.provider_sched_arr);
+  assignProviderValue(row, "provider_sched_takeoff", enriched.provider_sched_takeoff);
+  assignProviderValue(row, "provider_sched_landing", enriched.provider_sched_landing);
   assignProviderValue(row, "actual_dep", enriched.actual_dep);
   assignProviderValue(
     row,
@@ -214,6 +243,15 @@ function buildRefreshRecentUpdateRow(
     "registration",
     enriched.registration,
   );
+  assignProviderValue(row, "terminal_origin", enriched.terminal_origin);
+  assignProviderValue(row, "terminal_destination", enriched.terminal_destination);
+  assignProviderValue(row, "gate_origin", enriched.gate_origin);
+  assignProviderValue(row, "gate_destination", enriched.gate_destination);
+  assignProviderValue(row, "actual_runway_off", enriched.actual_runway_off);
+  assignProviderValue(row, "actual_runway_on", enriched.actual_runway_on);
+  assignProviderValue(row, "route_distance_mi", enriched.route_distance_mi);
+  assignProviderValue(row, "diverted", enriched.diverted);
+  assignProviderValue(row, "provider_status", enriched.provider_status);
 
   if (enriched.raw_provider !== undefined) {
     row.raw_provider = enriched.raw_provider;
@@ -273,6 +311,25 @@ async function loadRefreshRecentCandidates(
   }
 
   return ((data ?? []) as RefreshRecentCandidate[]);
+}
+
+// IATA → ICAO for ONLY the airlines we need (avoids the 1000-row default cap when the
+// reference table is large). Defensive: any failure yields an empty map → IATA fallback.
+async function loadAirlineIcaoMap(
+  supabase: SupabaseClient,
+  iatas: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (iatas.length === 0) return map;
+  try {
+    const { data } = await supabase.from("airlines").select("iata,icao").in("iata", iatas);
+    for (const row of (data ?? []) as { iata: string | null; icao: string | null }[]) {
+      if (row.iata && row.icao) map.set(row.iata, row.icao);
+    }
+  } catch {
+    // ignore — fall back to IATA idents
+  }
+  return map;
 }
 
 function isProviderEnriched(flight: RefreshRecentCandidate) {

@@ -2,4 +2,13 @@
 .venv/
 .env
 .env.*
+!.env.example
 supabase/scripts/logs/
+
+# frontend
+node_modules/
+dist/
+*.tsbuildinfo
+
+# claude code session data
+.claude/

@@ -26,13 +26,14 @@ export type BookingInput = {
   cost_currency?: string | null;
   cost_points?: number | null;
   points_program?: string | null;
-  raw_email?: unknown;
+  emails?: unknown;
 };
 
 export type FlightInput = {
   user_id?: string | null;
   flight_date?: string;
   airline_iata?: string;
+  airline_icao?: string | null;
   flight_number?: string;
   dep_iata?: string;
   arr_iata?: string;
@@ -40,6 +41,8 @@ export type FlightInput = {
   sched_arr?: string;
   provider_sched_dep?: string | null;
   provider_sched_arr?: string | null;
+  provider_sched_takeoff?: string | null;
+  provider_sched_landing?: string | null;
   actual_dep?: string | null;
   actual_takeoff?: string | null;
   actual_landing?: string | null;
@@ -49,6 +52,16 @@ export type FlightInput = {
   cabin_class?: string | null;
   status?: string | null;
   source?: string | null;
+  // extra AeroAPI capture
+  terminal_origin?: string | null;
+  terminal_destination?: string | null;
+  gate_origin?: string | null;
+  gate_destination?: string | null;
+  actual_runway_off?: string | null;
+  actual_runway_on?: string | null;
+  route_distance_mi?: number | null;
+  diverted?: boolean | null;
+  provider_status?: string | null;
   raw_provider?: unknown;
 };
 
@@ -75,6 +88,7 @@ export type CreateLikeFlightRequest = FlightInput;
 export type EnrichFlightRequest = {
   flight_date?: string;
   airline_iata?: string | null;
+  airline_icao?: string | null; // preferred for AeroAPI idents (avoids IATA ambiguity)
   flight_number?: string;
   dep_iata?: string | null;
   arr_iata?: string | null;

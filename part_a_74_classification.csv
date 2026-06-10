@@ -1,0 +1,75 @@
+date,flight,route,category,passenger,email_pnr,reason
+2014-08-24,AA84,BOS-JFK,PRE_CSV,Alexander (you),,"2014 AA boarding pass, PNR ERZKUH — real flight but predates CSV (log starts 2015)"
+2014-08-25,AA2314,JFK-BOS,PRE_CSV,Alexander (you),,2014 AA boarding pass — predates CSV
+2016-07-12,UA1564,BOS-ORD,OTHER_PEOPLE,dad GUO/PENG + mom YING/KUI,,"agent itinerary: UA1564/UA851=dad, HU482=mom. Your own legs end at SFO-BOS. Cost was the FAMILY total RMB169,803"
+2016-07-14,UA851,ORD-PEK,OTHER_PEOPLE,dad GUO/PENG + mom YING/KUI,,"agent itinerary: UA1564/UA851=dad, HU482=mom. Your own legs end at SFO-BOS. Cost was the FAMILY total RMB169,803"
+2016-09-08,HU482,BOS-PEK,OTHER_PEOPLE,dad GUO/PENG + mom YING/KUI,,"agent itinerary: UA1564/UA851=dad, HU482=mom. Your own legs end at SFO-BOS. Cost was the FAMILY total RMB169,803"
+2017-09-22,UA700,BOS-EWR,NEVER_TICKETED,Alexander (you),,"FareLock HOLD (FDQSBG) ""being held until... to purchase"" — never ticketed. The PEK round trip you flagged as cancelled"
+2017-09-22,UA89,EWR-PEK,NEVER_TICKETED,Alexander (you),,"FareLock HOLD (FDQSBG) ""being held until... to purchase"" — never ticketed. The PEK round trip you flagged as cancelled"
+2017-09-24,UA808,PEK-IAD,NEVER_TICKETED,Alexander (you),,"FareLock HOLD (FDQSBG) ""being held until... to purchase"" — never ticketed. The PEK round trip you flagged as cancelled"
+2017-09-25,UA352,IAD-BOS,NEVER_TICKETED,Alexander (you),,"FareLock HOLD (FDQSBG) ""being held until... to purchase"" — never ticketed. The PEK round trip you flagged as cancelled"
+2017-12-20,DL438,JFK-CUN,NOT_A_BOOKING,(none),,"Google Flights price quote you emailed yourself (""sent to yourself while searching"") — never booked"
+2017-12-22,DL789,CUN-JFK,NOT_A_BOOKING,(none),,"Google Flights price quote you emailed yourself (""sent to yourself while searching"") — never booked"
+2019-11-24,UA8851,LHR-MUC,REBOOKED_OR_CANCELLED,Alexander (you),E343VN,"E343VN: outbound flown Nov 28 (in CSV), but LHR-MUC-BOS return not flown as booked"
+2019-11-24,UA8902,MUC-BOS,REBOOKED_OR_CANCELLED,Alexander (you),E343VN,"E343VN: outbound flown Nov 28 (in CSV), but LHR-MUC-BOS return not flown as booked"
+2019-12-28,UA1123,CPT-EWR,REBOOKED_OR_CANCELLED,Alexander (you),,J84GEL Cape Town: return CPT-EWR-BOS not in CSV (rebooked/changed)
+2019-12-29,UA2310,EWR-BOS,REBOOKED_OR_CANCELLED,Alexander (you),,J84GEL Cape Town: return CPT-EWR-BOS not in CSV (rebooked/changed)
+2020-01-27,UA890,PVG-SFO,REBOOKED_OR_CANCELLED,Alexander (you),,AJR5EK PVG-BOS Jan 2020 (COVID) — superseded; you flew a different routing
+2020-01-28,UA1796,SFO-EWR,REBOOKED_OR_CANCELLED,Alexander (you),,AJR5EK PVG-BOS Jan 2020 (COVID) — superseded; you flew a different routing
+2020-01-28,UA1990,EWR-BOS,REBOOKED_OR_CANCELLED,Alexander (you),,AJR5EK PVG-BOS Jan 2020 (COVID) — superseded; you flew a different routing
+2020-01-28,UA890,PVG-SFO,REBOOKED_OR_CANCELLED,Alexander (you),,COVID rebooking of the PVG-BOS trip (dup of AJR5EK)
+2020-01-29,UA1912,SFO-IAD,REBOOKED_OR_CANCELLED,Alexander (you),,COVID rebooking of the PVG-BOS trip (dup of AJR5EK)
+2020-01-29,UA641,IAD-BOS,REBOOKED_OR_CANCELLED,Alexander (you),,COVID rebooking of the PVG-BOS trip (dup of AJR5EK)
+2020-03-10,UA1078,BOS-EWR,REBOOKED_OR_CANCELLED,Alexander (you),M0DKXM,M0DKXM BOS-EWR-TPA-BOS Mar 2020 (COVID) — not flown as booked
+2020-03-10,UA1421,EWR-TPA,REBOOKED_OR_CANCELLED,Alexander (you),M0DKXM,M0DKXM BOS-EWR-TPA-BOS Mar 2020 (COVID) — not flown as booked
+2020-03-10,UA352,TPA-BOS,REBOOKED_OR_CANCELLED,Alexander (you),M0DKXM,M0DKXM BOS-EWR-TPA-BOS Mar 2020 (COVID) — not flown as booked
+2020-03-24,4O580,CUN-LIM,REBOOKED_OR_CANCELLED,Alexander (you),,Interjet CUN-LIM Mar 24 2020 (COVID border closure) — not flown
+2020-05-19,UA179,EWR-HKG,REBOOKED_OR_CANCELLED,Alexander (you),EENYJY,EENYJY EWR-HKG May 2020 (COVID) — not flown
+2020-05-19,UA2394,BOS-EWR,REBOOKED_OR_CANCELLED,Alexander (you),EENYJY,EENYJY EWR-HKG May 2020 (COVID) — not flown
+2020-10-14,UA2435,IAD-SFO,REBOOKED_OR_CANCELLED,Alexander (you),,Oct 2020 reservation — superseded
+2020-10-14,UA511,BOS-IAD,REBOOKED_OR_CANCELLED,Alexander (you),,Oct 2020 reservation — superseded
+2020-10-16,UA1666,SFO-BOS,REBOOKED_OR_CANCELLED,Alexander (you),,Oct 2020 reservation — superseded
+2020-12-02,UA383,HNL-DEN,REBOOKED_OR_CANCELLED,Alexander (you),,D5F5PT schedule-change (HNL-DEN-BOS) — not flown as booked
+2020-12-02,UA385,DEN-BOS,REBOOKED_OR_CANCELLED,Alexander (you),,D5F5PT schedule-change (HNL-DEN-BOS) — not flown as booked
+2020-12-02,UA501,LAX-SFO,REBOOKED_OR_CANCELLED,Alexander (you),D5F5PT,D5F5PT HNL-LAX-SFO Dec 2020 — superseded
+2020-12-02,UA534,HNL-LAX,REBOOKED_OR_CANCELLED,Alexander (you),D5F5PT,D5F5PT HNL-LAX-SFO Dec 2020 — superseded
+2021-04-30,UA3552,BOS-EWR,REBOOKED_OR_CANCELLED,Alexander (you),,Apr/May 2021 reservation — superseded
+2021-05-04,UA235,EWR-BOS,REBOOKED_OR_CANCELLED,Alexander (you),,Apr/May 2021 reservation — superseded
+2021-05-28,TK2010,IST-ASR,REBOOKED_OR_CANCELLED,Alexander (you),,Turkish TK2010 IST-ASR — you flew IST-NAV instead (airport changed)
+2021-06-15,UA1185,ORD-BOS,REBOOKED_OR_CANCELLED,Alexander (you),,Jun 2021 reservation — superseded
+2021-06-15,UA348,OGG-ORD,REBOOKED_OR_CANCELLED,Alexander (you),,Jun 2021 reservation — superseded
+2021-06-29,UA477,BOS-SFO,REBOOKED_OR_CANCELLED,Alexander (you),,Jun 2021 reservation — superseded
+2022-01-04,UA1853,IAH-SFO,REBOOKED_OR_CANCELLED,Alexander (you),M5RKS7,M5RKS7 two IAH-SFO options same day — superseded
+2022-01-04,UA2621,IAH-SFO,REBOOKED_OR_CANCELLED,Alexander (you),M5RKS7,M5RKS7 two IAH-SFO options same day — superseded
+2022-02-05,UA1135,ORD-SJO,REBOOKED_OR_CANCELLED,Alexander (you),,SFO-ORD-SJO Feb 5 (processing) — superseded by Feb 26 booking
+2022-02-05,UA1485,SFO-ORD,REBOOKED_OR_CANCELLED,Alexander (you),,SFO-ORD-SJO Feb 5 (processing) — superseded by Feb 26 booking
+2022-02-26,UA1135,ORD-SJO,REBOOKED_OR_CANCELLED,Alexander (you),JZGY6Q,JZGY6Q SFO-ORD-SJO Feb 26 — not in CSV (rebooked/cancelled Costa Rica)
+2022-02-26,UA1485,SFO-ORD,REBOOKED_OR_CANCELLED,Alexander (you),JZGY6Q,JZGY6Q SFO-ORD-SJO Feb 26 — not in CSV (rebooked/cancelled Costa Rica)
+2022-10-19,LH1497,LIS-FRA,REBOOKED_OR_CANCELLED,Alexander (you),,Lufthansa LIS-FRA-SFO return Oct 2022 — not in CSV
+2022-10-19,LH454,FRA-SFO,REBOOKED_OR_CANCELLED,Alexander (you),,Lufthansa LIS-FRA-SFO return Oct 2022 — not in CSV
+2023-01-01,JQ208,MEL-SIN,REBOOKED_OR_CANCELLED,Alexander (you) — verify,,Jetstar MEL-SIN / SIN-MEL — not in CSV
+2023-01-02,UA599,TPA-EWR,OTHER_PEOPLE,sister GUO/COURTNEY + mom YING/KUI,L797R2,"L797R2 TPA-EWR — passengers are Courtney & Ying Kui, not you"
+2023-01-08,JQ207,SIN-MEL,REBOOKED_OR_CANCELLED,Alexander (you) — verify,,Jetstar MEL-SIN / SIN-MEL — not in CSV
+2023-03-04,UA412,SFO-MEX,REBOOKED_OR_CANCELLED,Alexander (you),,SFO-MEX Mar 2023 reservation — superseded
+2023-03-26,UA901,SFO-LHR,REBOOKED_OR_CANCELLED,Alexander (you),,SFO-LHR Mar 2023 reservation — superseded
+2023-03-30,UA2385,SFO-SEA,REBOOKED_OR_CANCELLED,Alexander (you),F4D2ZN,F4D2ZN SFO-SEA — not in CSV
+2023-04-06,UA1216,SFO-DEN,REBOOKED_OR_CANCELLED,Alexander (you),LPKJDX,LPKJDX SFO-DEN — not in CSV
+2023-05-11,BR27,SFO-TPE,REBOOKED_OR_CANCELLED,Alexander (you),CPF7T7,CPF7T7 BR27 SFO-TPE — not in CSV
+2023-05-12,BR716,TPE-PEK,REBOOKED_OR_CANCELLED,Alexander (you),CPJV0J,CPJV0J BR716 TPE-PEK May 12 — superseded by May 14
+2023-05-13,CA1398,SZX-PEK,REBOOKED_OR_CANCELLED,Alexander (you),M1JXTQ,M1JXTQ NRT-SZX-PEK — not in CSV
+2023-05-13,NH931,NRT-SZX,REBOOKED_OR_CANCELLED,Alexander (you),M1JXTQ,M1JXTQ NRT-SZX-PEK — not in CSV
+2023-05-14,BR716,TPE-PEK,REBOOKED_OR_CANCELLED,Alexander (you),C83397,C83397 BR716 TPE-PEK May 14 — dup of May 12
+2023-09-25,CA856,LHR-PEK,REBOOKED_OR_CANCELLED,Alexander (you) — verify,,Air China PEK-LHR round trip (amadeus) — not in CSV
+2023-09-28,TK290,SFO-IST,REBOOKED_OR_CANCELLED,Alexander (you),,Turkish TK290/TK88 SFO-IST-PEK — not in CSV (rebooked)
+2023-09-29,TK88,IST-PEK,REBOOKED_OR_CANCELLED,Alexander (you),,Turkish TK290/TK88 SFO-IST-PEK — not in CSV (rebooked)
+2023-12-09,CA855,PEK-LHR,REBOOKED_OR_CANCELLED,Alexander (you) — verify,,Air China PEK-LHR round trip (amadeus) — not in CSV
+2024-01-09,FR2691,SOF-STN,REBOOKED_OR_CANCELLED,Alexander (you),,Ryanair SOF-STN Jan 2024 — not in CSV
+2024-01-09,FR9301,AQJ-SOF,REBOOKED_OR_CANCELLED,Alexander (you),,Ryanair AQJ-SOF Jan 2024 — not in CSV
+2024-02-28,CA1687,PEK-DDG,REBOOKED_OR_CANCELLED,Alexander (you),,Air China CA1687 PEK-DDG — you flew PEK-YNJ instead (destination changed)
+2024-03-31,CA1883,PEK-PVG,REBOOKED_OR_CANCELLED,Alexander (you),PV806S,PV806S CA1883/UA858 — you flew UA889 PEK-SFO instead
+2024-04-01,UA858,PVG-SFO,REBOOKED_OR_CANCELLED,Alexander (you),PV806S,PV806S CA1883/UA858 — you flew UA889 PEK-SFO instead
+2024-04-11,UA855,LIM-IAH,REBOOKED_OR_CANCELLED,Alexander (you),LY3PZM,LY3PZM LIM-IAH-LHR Apr 11 — superseded (schedule change)
+2024-04-11,UA880,IAH-LHR,REBOOKED_OR_CANCELLED,Alexander (you),LY3PZM,LY3PZM LIM-IAH-LHR Apr 11 — superseded (schedule change)
+2024-04-12,UA1256,IAH-DEN,REBOOKED_OR_CANCELLED,Alexander (you),LY3PZM,LY3PZM LIM-IAH-DEN-LHR Apr 12 — dup of Apr 11 (same PNR)
+2024-04-12,UA27,DEN-LHR,REBOOKED_OR_CANCELLED,Alexander (you),LY3PZM,LY3PZM LIM-IAH-DEN-LHR Apr 12 — dup of Apr 11 (same PNR)
+2024-04-12,UA855,LIM-IAH,REBOOKED_OR_CANCELLED,Alexander (you),LY3PZM,LY3PZM LIM-IAH-DEN-LHR Apr 12 — dup of Apr 11 (same PNR)

@@ -4,6 +4,7 @@ import { DateTime } from "npm:luxon@3.7.2";
 import { upsertBookingIfPresent } from "../flights/bookings.ts";
 import { HttpError } from "../flights/http.ts";
 import { normalizeFlightInput } from "../flights/normalize.ts";
+import { recomputeBookingSegmentCost } from "../flights/segment-cost.ts";
 import { createFlight } from "../flights/service.ts";
 import type {
   BookingInput,
@@ -183,7 +184,7 @@ async function sendRunNotification(
   if (bookingIds.length) {
     const { data: bks } = await supabase
       .from("bookings")
-      .select("id, booking_refs_airline, booking_ref_platform, raw_email")
+      .select("id, booking_refs_airline, booking_ref_platform, emails")
       .in("id", bookingIds as string[]);
     for (const b of (bks ?? []) as Array<Record<string, unknown>>) {
       bookingById.set(String(b.id), b);
@@ -202,7 +203,14 @@ async function sendRunNotification(
       const refs = (b?.booking_refs_airline ?? []) as Array<{ pnr?: string }>;
       const pnr = refs.map((x) => x?.pnr).filter(Boolean).join(",") ||
         (b?.booking_ref_platform as string | undefined) || "";
-      const mid = (b?.raw_email as { message_id?: string } | undefined)?.message_id;
+      const emails = (b?.emails ?? []) as Array<
+        { message_id?: string; kind?: string }
+      >;
+      // Link to the most relevant email: the cancellation for a cancelled leg,
+      // otherwise the original booking, falling back to whatever is recorded.
+      const preferKind = f.status === "cancelled" ? "cancellation" : "booking";
+      const mid = (emails.find((e) => e.kind === preferKind) ??
+        emails.find((e) => e.kind === "booking") ?? emails[0])?.message_id;
       const link = mid ? `https://mail.google.com/mail/u/0/#all/${mid}` : "";
       if (f.status === "cancelled") {
         return `${head}  (CANCELLED)${pnr ? `  PNR ${pnr}` : ""}${link ? `\n      ↳ ${link}` : ""}`;
@@ -371,7 +379,7 @@ async function processMessage(
     // Resolve a booking id: reuse the trip's existing booking when there's
     // exactly one; otherwise create a fresh one from this email's payload, but
     // only if a new flight needs it (or an existing flight has none yet).
-    const bookingInput = buildBookingInput(parsed, userId, message.id);
+    const bookingInput = buildBookingInput(parsed, userId, message);
     const wantsBooking =
       (newLegs.length > 0 || existingLegsNeedingBooking.length > 0) &&
       hasBookingContent(parsed);
@@ -411,6 +419,7 @@ async function processMessage(
     // only an explicit schedule-change does. A booking is backfilled onto an
     // existing flight that has none yet (e.g. boarding pass arrived first).
     const updatedIds: string[] = [];
+    const scheduleChangedBookingIds = new Set<string>();
     for (const plan of existingLegs) {
       const ex = plan.existing!;
       const changes: Record<string, unknown> = {};
@@ -421,6 +430,8 @@ async function processMessage(
       ) {
         changes.sched_dep = plan.normalized.sched_dep;
         changes.sched_arr = plan.normalized.sched_arr;
+        const bid = ex.booking_id ?? bookingId;
+        if (bid) scheduleChangedBookingIds.add(bid);
       }
       if (!ex.booking_id && bookingId) {
         changes.booking_id = bookingId;
@@ -439,9 +450,27 @@ async function processMessage(
       }
     }
 
+    // Record the schedule-change email on every booking it revised, so the
+    // booking carries its full email history (booking → change → cancel).
+    if (scheduleChangedBookingIds.size > 0) {
+      await appendBookingEmails(
+        supabase,
+        scheduleChangedBookingIds,
+        bookingEmailEntry(message, "schedule_change"),
+        warnings,
+      );
+    }
+
     // Don't leave a freshly-created booking unattached.
     if (createdFreshBooking && bookingId && !bookingUsed) {
       await supabase.from("bookings").delete().eq("id", bookingId);
+    }
+
+    // Split the booking's cost across its legs by great-circle distance. Run
+    // after linking so every leg that exists so far is included; re-runs as more
+    // legs of the booking arrive in later emails self-correct the split.
+    if (bookingId && bookingUsed) {
+      await recomputeBookingSegmentCost(supabase, bookingId);
     }
 
     if (createdIds.length > 0) {
@@ -494,6 +523,7 @@ async function processCancellation(
 ): Promise<WatchGmailMessageResult> {
   const warnings: string[] = [];
   const cancelledIds: string[] = [];
+  const cancelledBookingIds = new Set<string>();
 
   for (const f of parsed.flights ?? []) {
     const date = (f.flight_date ?? "").trim();
@@ -515,7 +545,10 @@ async function processCancellation(
     // not the airport code, so the airport pair can't be trusted; the flight
     // number already implies the route. Fall back to date+route only when the
     // refund has no usable flight number.
-    let query = supabase.from("flights").select("id, status").eq("flight_date", date);
+    let query = supabase.from("flights").select("id, status, booking_id").eq(
+      "flight_date",
+      date,
+    );
     if (/^[A-Z0-9]{2}$/.test(airline) && hasFlightNumber) {
       query = query.eq("airline_iata", airline).eq("flight_number", flightNumber);
     } else if (dep.length === 3 && arr.length === 3) {
@@ -535,8 +568,11 @@ async function processCancellation(
       continue;
     }
 
-    const matches = ((data ?? []) as Array<{ id: string; status: string }>)
-      .filter((r) => r.status !== "cancelled");
+    const matches =
+      ((data ?? []) as Array<
+        { id: string; status: string; booking_id: string | null }
+      >)
+        .filter((r) => r.status !== "cancelled");
     for (const m of matches) {
       const { error: updateError } = await supabase
         .from("flights")
@@ -546,6 +582,7 @@ async function processCancellation(
         warnings.push(`Failed to cancel ${m.id}: ${updateError.message}`);
       } else {
         cancelledIds.push(m.id);
+        if (m.booking_id) cancelledBookingIds.add(m.booking_id);
       }
     }
   }
@@ -600,7 +637,20 @@ async function processCancellation(
           cancelledIds.push(m.id);
         }
       }
+      if (matches.length > 0) {
+        for (const id of bookingIds) cancelledBookingIds.add(id);
+      }
     }
+  }
+
+  // Record the cancellation email on every booking it cancelled.
+  if (cancelledBookingIds.size > 0) {
+    await appendBookingEmails(
+      supabase,
+      cancelledBookingIds,
+      bookingEmailEntry(message, "cancellation"),
+      warnings,
+    );
   }
 
   return {
@@ -655,7 +705,7 @@ function buildFlightInput(
   };
 }
 
-// Real booking content worth a bookings row — excludes raw_email provenance,
+// Real booking content worth a bookings row — excludes email provenance,
 // which is always present. A boarding pass with no cost/PNR should not create one.
 function hasBookingContent(parsed: GeminiParsedBookingEmail): boolean {
   return Boolean(
@@ -672,7 +722,7 @@ function hasBookingContent(parsed: GeminiParsedBookingEmail): boolean {
 function buildBookingInput(
   parsed: GeminiParsedBookingEmail,
   userId: string | null,
-  messageId: string,
+  message: GmailMessage,
 ): BookingInput {
   return {
     user_id: userId,
@@ -683,8 +733,60 @@ function buildBookingInput(
     cost_currency: parsed.cost_currency ?? undefined,
     cost_points: parsed.cost_points ?? undefined,
     points_program: parsed.points_program ?? undefined,
-    raw_email: { message_id: messageId },
+    emails: [bookingEmailEntry(message, "booking")],
   };
+}
+
+// One provenance entry for the bookings.emails array.
+type BookingEmailKind = "booking" | "schedule_change" | "cancellation";
+function bookingEmailEntry(message: GmailMessage, kind: BookingEmailKind) {
+  return {
+    message_id: message.id,
+    subject: message.subject,
+    from: message.from,
+    date: message.date,
+    kind,
+  };
+}
+
+// Append an email provenance entry to each booking, idempotently (a given
+// message_id+kind is recorded once). Used when a schedule-change or cancellation
+// email touches a booking that already exists.
+async function appendBookingEmails(
+  supabase: SupabaseClient,
+  bookingIds: Iterable<string>,
+  entry: ReturnType<typeof bookingEmailEntry>,
+  warnings: string[],
+): Promise<void> {
+  for (const id of new Set([...bookingIds].filter(Boolean))) {
+    const { data, error } = await supabase
+      .from("bookings")
+      .select("emails")
+      .eq("id", id)
+      .single();
+    if (error) {
+      warnings.push(`Failed to load emails for booking ${id}: ${error.message}`);
+      continue;
+    }
+    const arr = Array.isArray((data as { emails?: unknown })?.emails)
+      ? (data as { emails: Array<Record<string, unknown>> }).emails
+      : [];
+    if (
+      arr.some((e) =>
+        e.message_id === entry.message_id && e.kind === entry.kind
+      )
+    ) {
+      continue;
+    }
+    arr.push(entry);
+    const { error: upErr } = await supabase
+      .from("bookings")
+      .update({ emails: arr })
+      .eq("id", id);
+    if (upErr) {
+      warnings.push(`Failed to append email to booking ${id}: ${upErr.message}`);
+    }
+  }
 }
 
 function parseLocalToUtc(date: string, time: string, timezone: string): string {

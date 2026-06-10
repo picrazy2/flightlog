@@ -4,6 +4,12 @@
 # working directory name when running `supabase init`.
 project_id = "flightlog"
 
+# These functions authenticate via a custom EDGE_FUNCTION_SECRET bearer (not a
+# Supabase JWT), so the gateway JWT check must stay off. Pinned here so a future
+# `supabase functions deploy` doesn't silently re-enable it.
+[functions.refresh-recent]
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.

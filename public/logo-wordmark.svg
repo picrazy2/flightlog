@@ -1,0 +1,38 @@
+<svg width="252" height="64" viewBox="0 0 252 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Journia</title>
+  <defs>
+    <linearGradient id="jw-bg" x1="30" y1="6" x2="30" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1B2533"/>
+      <stop offset="1" stop-color="#0A0E15"/>
+    </linearGradient>
+    <linearGradient id="jw-arc" x1="40" y1="15" x2="25" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5B9DFF"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
+    </linearGradient>
+    <radialGradient id="jw-amber" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC061" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFC061" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- mark -->
+  <g transform="translate(4 6)">
+    <rect x="0" y="0" width="52" height="52" rx="15" fill="url(#jw-bg)"/>
+    <rect x="0.5" y="0.5" width="51" height="51" rx="14.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.08"/>
+    <g transform="translate(26 26) scale(0.8125) translate(-32 -32)">
+      <g stroke="#7DB4FF" stroke-opacity="0.14" fill="none" stroke-width="1.1">
+        <circle cx="32" cy="32" r="20.5"/>
+        <ellipse cx="32" cy="32" rx="8" ry="20.5"/>
+      </g>
+      <path d="M43 16 L43 36 C43 44 36.5 48 27.5 45.6" stroke="url(#jw-arc)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+      <circle cx="27.5" cy="45.6" r="7" fill="url(#jw-amber)"/>
+      <circle cx="27.5" cy="45.6" r="3.4" fill="#FFC061" stroke="#0A0E15" stroke-width="1.4"/>
+      <g transform="translate(43 12) rotate(10)" fill="#EAF2FF">
+        <path d="M0 -5.6 C0.8 -5.6 1.5 -4.3 1.5 -2.8 L1.5 -1.4 L6.2 1.6 L6.2 3.2 L1.5 1.7 L1.5 3.8 L3 5 L3 6 L0 5.2 L-3 6 L-3 5 L-1.5 3.8 L-1.5 1.7 L-6.2 3.2 L-6.2 1.6 L-1.5 -1.4 L-1.5 -2.8 C-1.5 -4.3 -0.8 -5.6 0 -5.6 Z"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="70" y="42" font-family="'Space Grotesk', 'Geist', system-ui, sans-serif" font-size="32" font-weight="600" letter-spacing="-0.5" fill="#EAEDF3">Journia</text>
+</svg>

@@ -1,0 +1,44 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Journia</title>
+  <defs>
+    <linearGradient id="jr-bg" x1="32" y1="2" x2="32" y2="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1B2533"/>
+      <stop offset="1" stop-color="#0A0E15"/>
+    </linearGradient>
+    <linearGradient id="jr-arc" x1="43" y1="12" x2="27" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5B9DFF"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
+    </linearGradient>
+    <radialGradient id="jr-amber" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC061" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFC061" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="jr-soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+  </defs>
+
+  <!-- squircle -->
+  <rect x="2" y="2" width="60" height="60" rx="18" fill="url(#jr-bg)"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="17.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.08"/>
+
+  <!-- faint globe: equator + meridian -->
+  <g stroke="#7DB4FF" stroke-opacity="0.14" fill="none" stroke-width="1.1">
+    <circle cx="32" cy="32" r="20.5"/>
+    <ellipse cx="32" cy="32" rx="8" ry="20.5"/>
+  </g>
+
+  <!-- glow under the J flight path -->
+  <path d="M43 16 L43 36 C43 44 36.5 48 27.5 45.6" stroke="url(#jr-arc)" stroke-opacity="0.45" stroke-width="8" stroke-linecap="round" fill="none" filter="url(#jr-soft)"/>
+  <!-- J as a flight path -->
+  <path d="M43 16 L43 36 C43 44 36.5 48 27.5 45.6" stroke="url(#jr-arc)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+
+  <!-- origin node (amber) at the hook -->
+  <circle cx="27.5" cy="45.6" r="7" fill="url(#jr-amber)"/>
+  <circle cx="27.5" cy="45.6" r="3.4" fill="#FFC061" stroke="#0A0E15" stroke-width="1.4"/>
+
+  <!-- plane taking off at the top tip -->
+  <g transform="translate(43 12) rotate(10)" fill="#EAF2FF">
+    <path d="M0 -5.6 C0.8 -5.6 1.5 -4.3 1.5 -2.8 L1.5 -1.4 L6.2 1.6 L6.2 3.2 L1.5 1.7 L1.5 3.8 L3 5 L3 6 L0 5.2 L-3 6 L-3 5 L-1.5 3.8 L-1.5 1.7 L-6.2 3.2 L-6.2 1.6 L-1.5 -1.4 L-1.5 -2.8 C-1.5 -4.3 -0.8 -5.6 0 -5.6 Z"/>
+  </g>
+</svg>

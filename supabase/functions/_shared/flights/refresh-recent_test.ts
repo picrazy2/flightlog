@@ -130,6 +130,34 @@ Deno.test("refreshRecentFlights marks provider-enriched flights without tracks a
   assertEquals(supabase.db.tracks.length, 1);
 });
 
+Deno.test("refreshRecentFlights does NOT re-query old enriched flights still missing a track", async () => {
+  // enriched, no track, arrived long ago (> track-retry window) → must be ineligible
+  const supabase = createMockSupabaseClient({
+    flights: [
+      baseFlight("00000000-0000-4000-8000-000000000099", {
+        raw_provider: { provider: "aeroapi" },
+        status: "completed",
+      }),
+    ],
+  });
+
+  let called = 0;
+  const result = await refreshRecentFlights(
+    supabase as never,
+    {},
+    {
+      now: new Date("2026-05-01T00:00:00Z"), // ~6 weeks after the 2026-03-20 arrival
+      enrichFlight: async () => {
+        called += 1;
+        return { found: false, provider: "aeroapi", flight: null, track: null, warnings: [] };
+      },
+    },
+  );
+
+  assertEquals(result.eligible, 0);
+  assertEquals(called, 0);
+});
+
 Deno.test("refreshRecentFlights overwrites provider-owned fields but preserves user schedule", async () => {
   const supabase = createMockSupabaseClient({
     flights: [
