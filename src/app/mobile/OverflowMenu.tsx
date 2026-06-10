@@ -28,9 +28,11 @@ export function OverflowMenu() {
         <button
           onClick={toggle}
           aria-label="Menu"
-          className={cn("focus-ring grid h-9 w-9 place-items-center rounded-full text-ink", open ? "bg-surface-2" : "hover:bg-surface-2")}
+          className={cn("focus-ring flex h-9 w-9 flex-col items-center justify-center gap-[3px] rounded-full text-ink", open ? "bg-surface-2" : "hover:bg-surface-2")}
         >
-          <span className="text-xl leading-none">⋯</span>
+          <span className="h-[1.5px] w-[18px] rounded-full bg-current" />
+          <span className="h-[1.5px] w-[18px] rounded-full bg-current" />
+          <span className="h-[1.5px] w-[18px] rounded-full bg-current" />
         </button>
       )}
     >

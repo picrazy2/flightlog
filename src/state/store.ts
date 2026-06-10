@@ -18,10 +18,14 @@ export interface DateRange {
 
 export const ALL_TIME: DateRange = { start: null, end: null, label: "All time" };
 
-// the user whose log we're viewing comes from the URL path (/alex), default "alex"
+// the user whose log we're viewing comes from the URL path after the app's base
+// (e.g. /journia/alex → "alex"), default "alex"
+const BASE = import.meta.env.BASE_URL; // "/" in dev, "/journia/" in prod
 const userFromPath = (): string => {
   if (typeof window === "undefined") return "alex";
-  const seg = window.location.pathname.replace(/^\/+/, "").split("/")[0];
+  let path = window.location.pathname;
+  if (path.startsWith(BASE)) path = path.slice(BASE.length);
+  const seg = path.replace(/^\/+/, "").split("/")[0];
   return seg || "alex";
 };
 
@@ -127,7 +131,7 @@ export const useStore = create<AppState>()(
   toggleAirports: () => set((s) => ({ showAirports: !s.showAirports })),
   // switching user updates the URL (/alex) and resets drill-down view state
   setUserId: (userId) => {
-    if (typeof window !== "undefined") window.history.pushState(null, "", `/${userId}`);
+    if (typeof window !== "undefined") window.history.pushState(null, "", `${BASE}${userId}`);
     set({ userId, crossFilters: [], range: ALL_TIME, activeModuleId: null });
   },
   setMapSelection: (mapSelection) =>

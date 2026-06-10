@@ -2,9 +2,12 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
-// base: served from GitHub Pages under a repo subpath in prod, "/" in dev.
+// Served under /journia in prod (Cloudflare Pages on akguo.com/journia), "/" in dev.
+// The build emits into dist/journia so the on-disk paths match the URL paths; the
+// Cloudflare "build output directory" is `dist`, which also holds _redirects.
 export default defineConfig(({ mode }) => ({
-  base: mode === "production" ? "/flightlog/" : "/",
+  base: mode === "production" ? "/journia/" : "/",
+  build: { outDir: mode === "production" ? "dist/journia" : "dist", emptyOutDir: true },
   plugins: [react()],
   resolve: {
     alias: { "@": path.resolve(__dirname, "src") },
