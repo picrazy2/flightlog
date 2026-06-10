@@ -207,6 +207,14 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
       map.setProjection({ type: useStore.getState().projection });
       pushData();
 
+      // mobile first load: zoom out onto the most-visited airport (globe view)
+      if (isMobileRef.current) {
+        const top = [...ctxRef.current.airports.values()]
+          .filter((a) => a.lng != null && a.lat != null)
+          .sort((a, b) => b.visits - a.visits)[0];
+        if (top) map.jumpTo({ center: [top.lng!, top.lat!], zoom: 1.5 });
+      }
+
       // hover popups
       map.on("mousemove", "airports", (e) => {
         if (isMobileRef.current) return; // no hover popups on touch

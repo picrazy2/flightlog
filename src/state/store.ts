@@ -32,6 +32,9 @@ const userFromPath = (): string => {
 // legend toggles: per encoding key, which series are switched off
 export type LegendFilter = Record<string, boolean>; // key -> isOff
 
+// phone viewport at first load → drives mobile-only default state
+const MOBILE_INIT = typeof window !== "undefined" && window.innerWidth < 768;
+
 // mobile: which bottom drawer is expanded, and what map feature is selected (the
 // "popup" drawer's content). On desktop these are unused (popups render on the map).
 export type DrawerId = "legend" | "stats" | "popup";
@@ -86,14 +89,16 @@ export const useStore = create<AppState>()(
   settings: { units: "mi", showTracks: true, markEstimated: true },
   legendFilter: {},
   crossFilters: [],
-  projection: "mercator",
+  // mobile opens on the globe with the legend expanded (persisted projection wins for
+  // returning users); desktop defaults to the flat map with drawers collapsed
+  projection: MOBILE_INIT ? "globe" : "mercator",
   temporal: "all",
   dbOpen: false,
   immersive: false,
   showAirports: true,
   userId: userFromPath(),
   mapSelection: null,
-  mobileOpen: null,
+  mobileOpen: MOBILE_INIT ? "legend" : null,
 
   // Changing the range via the picker supersedes any year drill-down chip.
   setRange: (range) => set((s) => ({ range, crossFilters: s.crossFilters.filter((c) => !c.id.startsWith("year:")) })),

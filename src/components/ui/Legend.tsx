@@ -21,19 +21,22 @@ export function Legend({ model, fluid }: { model: LegendModel; fluid?: boolean }
     for (const f of facets) removeFacet(f);
   };
 
-  const onItem = (e: React.MouseEvent, id: string, filter: LegendModel["items"][number]["filter"]) => {
+  const onItem = (id: string, filter: LegendModel["items"][number]["filter"]) => {
+    // cross-filter items: toggle naturally isolates from "all shown", then ORs more in
     if (filter) {
       toggleCrossFilter(filter);
       return;
     }
-    // local show/hide: plain click isolates (or resets if already isolated), shift toggles one
-    if (e.shiftKey) {
-      toggleLegend(id);
+    // local show/hide: when everything's shown, a click isolates to that one; once a
+    // subset is showing, a click just adds/removes that one (clearing back to all if
+    // it was the last one still showing)
+    if (!anyOff) {
+      isolateLegend(id, allKeys);
       return;
     }
-    const isIsolated = !legendFilter[id] && allKeys.filter((k) => k !== id).every((k) => legendFilter[k]);
-    if (isIsolated) clearLegend();
-    else isolateLegend(id, allKeys);
+    const shown = allKeys.filter((k) => !legendFilter[k]);
+    if (!legendFilter[id] && shown.length === 1) clearLegend();
+    else toggleLegend(id);
   };
 
   return (
@@ -66,7 +69,7 @@ export function Legend({ model, fluid }: { model: LegendModel; fluid?: boolean }
           return (
             <li key={it.id}>
               <button
-                onClick={(e) => onItem(e, it.id, it.filter)}
+                onClick={() => onItem(it.id, it.filter)}
                 className={cn(
                   "focus-ring flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-label transition-opacity hover:bg-surface-2",
                   dimmed ? "opacity-35" : "opacity-100",
