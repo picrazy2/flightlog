@@ -5,6 +5,7 @@ import { ChartTooltip } from "./ChartTooltip";
 import { ChartLegend } from "./ChartLegend";
 import { PieSlices } from "./Pie";
 import { makeBarShape } from "./stackedBarShape";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 export interface BarRowData {
   id: string;
@@ -27,6 +28,8 @@ interface Props {
 
 // Horizontal, optionally stacked / 100%-stacked, interactive bar chart.
 export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit }: Props) {
+  // on mobile a tap is the only way to see a value (no hover), so don't let it filter
+  const pick = useIsMobile() ? undefined : onPick;
   const data = percent
     ? rows.map((r) => {
         const total = series.reduce((s, k) => s + (Number(r[k.key]) || 0), 0) || 1;
@@ -55,16 +58,16 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
   return (
     <div>
       <ChartLegend series={series} />
-      <div style={{ height: h, cursor: onPick ? "pointer" : undefined }}>
+      <div style={{ height: h, cursor: pick ? "pointer" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           layout="vertical"
           data={data}
           margin={{ left: 4, right: 8, top: 2, bottom: 2 }}
           barCategoryGap={6}
-          onClick={onPick ? (s: { activeTooltipIndex?: number | null } | null) => {
+          onClick={pick ? (s: { activeTooltipIndex?: number | null } | null) => {
             const i = s?.activeTooltipIndex;
-            if (i != null && i >= 0 && data[i]) onPick(data[i].id);
+            if (i != null && i >= 0 && data[i]) pick(data[i].id);
           } : undefined}
         >
           <CartesianGrid horizontal={false} stroke={CHART.grid} />
@@ -125,7 +128,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
               stackId="a"
               fill={s.color}
               isAnimationActive={false}
-              cursor={onPick ? "pointer" : undefined}
+              cursor={pick ? "pointer" : undefined}
               shape={makeBarShape({ keys: series.map((x) => x.key), thisKey: s.key, axis: "x", color: s.color, activeId, colorByRow })}
             />
           ))}

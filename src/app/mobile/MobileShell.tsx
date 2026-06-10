@@ -35,7 +35,7 @@ export function MobileShell({ ctx, encoding }: { ctx: StatContext; encoding: Map
       {/* top chrome: header is solid; cards + search/fullscreen float over the map */}
       <div className="pointer-events-none fixed inset-x-0 top-0 z-40">
         <header
-          className="pointer-events-auto flex items-center justify-between gap-2 border-b border-border bg-surface-0/95 px-3 py-2 backdrop-blur"
+          className="pointer-events-auto flex items-center justify-between gap-2 border-b border-border bg-surface-1 px-3 py-2"
           style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
         >
           <Wordmark markSize={26} />
