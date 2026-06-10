@@ -1,11 +1,11 @@
-// Post-build: write dist/_redirects for Cloudflare Pages.
-// - bare /journia (and trailing slash) → the default user
-// - SPA fallback so deep links like /journia/alex serve the app's index.html
+// Post-build: write dist/_redirects for Cloudflare Pages (served at the root of
+// journia.akguo.com).
+// - bare "/" → the default user (/alex)
+// - SPA fallback so deep links like /alex serve index.html
 import { mkdirSync, writeFileSync } from "node:fs";
 
-const rules = `/journia            /journia/alex          302
-/journia/           /journia/alex          302
-/journia/*          /journia/index.html    200
+const rules = `/        /alex          302
+/*       /index.html    200
 `;
 
 mkdirSync("dist", { recursive: true });
