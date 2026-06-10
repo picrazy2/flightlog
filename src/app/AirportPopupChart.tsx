@@ -47,6 +47,8 @@ interface Props {
 
 export function AirportPopupChart({ flights, iata, name, city, visits, years, fluid, hideHeader }: Props) {
   const touching = flights.filter((f) => f.dep_iata === iata || f.arr_iata === iata);
+  // distinct airports directly connected to this one (the other endpoint of each flight)
+  const destinations = new Set(touching.map((f) => (f.dep_iata === iata ? f.arr_iata : f.dep_iata))).size;
   const rows = yearly(flights, iata, years);
   // totals for the dep/arr/connections breakdown line
   const tot = rows.reduce(
@@ -69,7 +71,7 @@ export function AirportPopupChart({ flights, iata, name, city, visits, years, fl
         </div>
       )}
       <div style={{ fontSize: 12, color: "var(--ink-muted)", marginBottom: 4 }}>
-        {city} · {visits} visits
+        {city} · {visits} visits · {destinations} {destinations === 1 ? "destination" : "destinations"}
       </div>
       <div style={{ display: "flex", gap: 10, fontSize: 11, color: "var(--ink-muted)", marginBottom: 6 }}>
         <span><b style={{ color: color.accent }}>{tot.dep}</b> dep</span>
