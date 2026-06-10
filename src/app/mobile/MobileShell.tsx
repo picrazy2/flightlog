@@ -57,7 +57,7 @@ export function MobileShell({ ctx, encoding }: { ctx: StatContext; encoding: Map
           <button
             onClick={onFullscreen}
             aria-label="Fullscreen"
-            className="focus-ring pointer-events-auto grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border border-border bg-surface-2 text-label text-ink"
+            className="focus-ring pointer-events-auto grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-surface-1 text-ink"
           >
             ⛶
           </button>

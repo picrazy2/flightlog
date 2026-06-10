@@ -199,9 +199,9 @@ function MobileSearch({ q, setQ, children }: { q: string; setQ: (v: string) => v
           setOpen(true);
         }}
         aria-label="Search"
-        className="focus-ring grid h-[34px] w-[34px] place-items-center rounded-full border border-border bg-surface-2 text-ink"
+        className="focus-ring grid h-10 w-10 place-items-center rounded-full border border-border bg-surface-1 text-ink"
       >
-        <Icon name="magnifying-glass" size={16} />
+        <Icon name="magnifying-glass" size={18} />
       </button>
       {open &&
         createPortal(

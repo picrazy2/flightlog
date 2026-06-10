@@ -57,10 +57,8 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
         <button
           onClick={toggle}
           className={cn(
-            "focus-ring inline-flex h-[34px] items-center gap-2 rounded-full border px-3.5 text-label text-ink",
-            active
-              ? "border-accent bg-[rgba(91,157,255,0.16)] hover:bg-[rgba(91,157,255,0.26)]"
-              : "border-border bg-surface-2 hover:bg-surface-3",
+            "focus-ring inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-label text-ink md:h-[34px]",
+            active ? "border-accent bg-[#172338] hover:bg-[#1f3250]" : "border-border bg-surface-1 hover:bg-surface-2",
             open && !active && "border-border-strong",
           )}
         >

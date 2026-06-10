@@ -77,7 +77,7 @@ function FilterChipGroup({
       trigger={({ toggle, open }) => (
         <span
           className={cn(
-            "inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-accent pl-3 pr-1.5 text-label text-ink shadow-1 transition-colors",
+            "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-accent pl-3 pr-1.5 text-label text-ink shadow-1 transition-colors md:h-[34px]",
             open ? "bg-[#1f3250]" : "bg-[#172338] hover:bg-[#1f3250]",
           )}
         >
