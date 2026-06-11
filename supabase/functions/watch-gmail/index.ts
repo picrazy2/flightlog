@@ -25,53 +25,129 @@ export async function handleWatchGmailRequest(
     requireAuthorizedRequest(request);
     const body = await parseRequest(request);
     const supabase = dependencies?.supabase ?? createAdminClient();
-    const result = await watchGmail(supabase, buildConfig(body));
 
-    return jsonResponse<WatchGmailResult & { ok: true }>({ ok: true, ...result });
+    const shared = sharedConfig();
+    const accounts = await resolveAccounts(supabase, body.user_id ?? null);
+    if (accounts.length === 0) {
+      throw new HttpError(
+        404,
+        body.user_id
+          ? `No Gmail account configured for user "${body.user_id}"`
+          : "No Gmail accounts configured",
+      );
+    }
+
+    // Process each mailbox into its own log. One account failing (bad token, quota)
+    // must not abort the others, so per-account errors are captured, not thrown.
+    const per_user: Array<{ user_id: string | null } & Partial<WatchGmailResult> & { error?: string }> = [];
+    for (const account of accounts) {
+      try {
+        const result = await watchGmail(supabase, {
+          ...shared,
+          gmailRefreshToken: account.refreshToken,
+          userId: account.userId,
+          owner: account.owner,
+          lookbackDays: body.lookback_days,
+          after: body.after,
+          before: body.before,
+          notify: body.notify,
+        });
+        per_user.push({ user_id: account.userId, ...result });
+      } catch (error) {
+        per_user.push({
+          user_id: account.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const totals = per_user.reduce(
+      (acc, r) => ({
+        messages_scanned: acc.messages_scanned + (r.messages_scanned ?? 0),
+        imported: acc.imported + (r.imported ?? 0),
+        updated: acc.updated + (r.updated ?? 0),
+        cancelled: acc.cancelled + (r.cancelled ?? 0),
+        skipped: acc.skipped + (r.skipped ?? 0),
+        not_flight: acc.not_flight + (r.not_flight ?? 0),
+        failed: acc.failed + (r.failed ?? 0),
+      }),
+      { messages_scanned: 0, imported: 0, updated: 0, cancelled: 0, skipped: 0, not_flight: 0, failed: 0 },
+    );
+
+    return jsonResponse({ ok: true, accounts: accounts.length, totals, per_user });
   } catch (error) {
     const httpError = toHttpError(error);
     return jsonResponse({ ok: false, error: httpError.message }, httpError.status);
   }
 }
 
+interface GmailAccount {
+  userId: string;
+  refreshToken: string;
+  owner?: { name: string | null; email: string | null };
+}
+
+// Which mailboxes to scan. The env GOOGLE_REFRESH_TOKEN is the primary/legacy owner
+// (GMAIL_OWNER_USER_ID, default "alex"); additional people live in gmail_accounts. A
+// table row for the same user_id overrides the env token. targetUser (from body.user_id)
+// narrows to a single account; null = everyone.
+async function resolveAccounts(
+  supabase: ReturnType<typeof createAdminClient>,
+  targetUser: string | null,
+): Promise<GmailAccount[]> {
+  const byUser = new Map<string, GmailAccount>();
+
+  const envToken = Deno.env.get("GOOGLE_REFRESH_TOKEN");
+  if (envToken) {
+    const ownerName = Deno.env.get("GMAIL_OWNER_NAME");
+    const ownerEmail = Deno.env.get("GMAIL_OWNER_EMAIL");
+    const ownerUserId = Deno.env.get("GMAIL_OWNER_USER_ID") ?? "alex";
+    byUser.set(ownerUserId, {
+      userId: ownerUserId,
+      refreshToken: envToken,
+      owner: ownerName || ownerEmail ? { name: ownerName ?? null, email: ownerEmail ?? null } : undefined,
+    });
+  }
+
+  let query = supabase
+    .from("gmail_accounts")
+    .select("user_id, refresh_token, email, name")
+    .eq("enabled", true);
+  if (targetUser) query = query.eq("user_id", targetUser);
+  const { data, error } = await query;
+  if (error) throw new HttpError(500, `gmail_accounts lookup failed: ${error.message}`);
+
+  for (const row of (data ?? []) as Array<{ user_id: string; refresh_token: string; email: string | null; name: string | null }>) {
+    byUser.set(row.user_id, {
+      userId: row.user_id,
+      refreshToken: row.refresh_token,
+      owner: row.name || row.email ? { name: row.name, email: row.email } : undefined,
+    });
+  }
+
+  const accounts = [...byUser.values()];
+  return targetUser ? accounts.filter((a) => a.userId === targetUser) : accounts;
+}
+
 if (import.meta.main) {
   Deno.serve((request) => handleWatchGmailRequest(request));
 }
 
-function buildConfig(body: WatchGmailRequest) {
+// Credentials shared across every mailbox: one Google OAuth client + one Gemini key.
+// Per-user refresh tokens / owner identity are resolved separately (resolveAccounts).
+function sharedConfig() {
   const gmailClientId = Deno.env.get("GOOGLE_CLIENT_ID");
   const gmailClientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-  const gmailRefreshToken = Deno.env.get("GOOGLE_REFRESH_TOKEN");
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 
-  if (!gmailClientId || !gmailClientSecret || !gmailRefreshToken) {
-    throw new HttpError(
-      500,
-      "Missing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, or GOOGLE_REFRESH_TOKEN",
-    );
+  if (!gmailClientId || !gmailClientSecret) {
+    throw new HttpError(500, "Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET");
   }
-
   if (!geminiApiKey) {
     throw new HttpError(500, "Missing GEMINI_API_KEY");
   }
 
-  const ownerName = Deno.env.get("GMAIL_OWNER_NAME");
-  const ownerEmail = Deno.env.get("GMAIL_OWNER_EMAIL");
-
-  return {
-    gmailClientId,
-    gmailClientSecret,
-    gmailRefreshToken,
-    geminiApiKey,
-    userId: body.user_id ?? null,
-    lookbackDays: body.lookback_days,
-    after: body.after,
-    before: body.before,
-    notify: body.notify,
-    owner: ownerName || ownerEmail
-      ? { name: ownerName ?? null, email: ownerEmail ?? null }
-      : undefined,
-  };
+  return { gmailClientId, gmailClientSecret, geminiApiKey };
 }
 
 function createAdminClient() {
