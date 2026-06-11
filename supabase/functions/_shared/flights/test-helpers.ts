@@ -1,6 +1,8 @@
 type Filter =
   | { kind: "eq"; column: string; value: unknown }
+  | { kind: "neq"; column: string; value: unknown }
   | { kind: "is"; column: string; value: null }
+  | { kind: "notnull"; column: string }
   | { kind: "in"; column: string; values: unknown[] }
   | { kind: "contains"; column: string; value: unknown };
 
@@ -123,6 +125,7 @@ class MockQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
     null;
   private onConflict: string | null = null;
   private nullEqError: string | null = null;
+  private limitN: number | null = null;
 
   constructor(
     private readonly client: MockSupabaseClient,
@@ -143,8 +146,27 @@ class MockQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
     return this;
   }
 
+  neq(column: string, value: unknown) {
+    this.filters.push({ kind: "neq", column, value });
+    return this;
+  }
+
   is(column: string, value: null) {
     this.filters.push({ kind: "is", column, value });
+    return this;
+  }
+
+  // Only the `.not(col, "is", null)` form (column IS NOT NULL) is used / supported.
+  not(column: string, operator: string, value: unknown) {
+    if (operator !== "is" || value !== null) {
+      throw new Error(`Mock .not only supports ("col", "is", null); got ("${operator}", ${String(value)})`);
+    }
+    this.filters.push({ kind: "notnull", column });
+    return this;
+  }
+
+  limit(n: number) {
+    this.limitN = n;
     return this;
   }
 
@@ -331,9 +353,10 @@ class MockQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
   }
 
   private filteredRows() {
-    return this.client.db[this.table].filter((row) =>
+    const rows = this.client.db[this.table].filter((row) =>
       matchesFilters(row, this.filters)
     );
+    return this.limitN != null ? rows.slice(0, this.limitN) : rows;
   }
 }
 
@@ -355,8 +378,16 @@ function matchesFilters(row: Record<string, unknown>, filters: Filter[]) {
       return row[filter.column] === filter.value;
     }
 
+    if (filter.kind === "neq") {
+      return row[filter.column] !== filter.value;
+    }
+
     if (filter.kind === "is") {
       return (row[filter.column] ?? null) === filter.value;
+    }
+
+    if (filter.kind === "notnull") {
+      return (row[filter.column] ?? null) !== null;
     }
 
     if (filter.kind === "contains") {

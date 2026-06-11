@@ -54,11 +54,111 @@ export async function refreshRecentFlights(
     scanned: candidates.length,
     eligible: eligibleFlights.length,
     refreshed: countOutcome(results, "refreshed"),
+    reused: countOutcome(results, "reused"),
     not_found: countOutcome(results, "not_found"),
     skipped: countOutcome(results, "skipped"),
     failed: countOutcome(results, "failed"),
     results,
   };
+}
+
+// Provider-owned columns copied verbatim from an already-enriched twin (same physical
+// flight, another row). Excludes user-owned fields (sched_dep/arr, cabin, booking).
+const TWIN_COPY_COLUMNS = [
+  "provider_sched_dep",
+  "provider_sched_arr",
+  "provider_sched_takeoff",
+  "provider_sched_landing",
+  "actual_dep",
+  "actual_takeoff",
+  "actual_landing",
+  "actual_arr",
+  "aircraft_type_code",
+  "registration",
+  "terminal_origin",
+  "terminal_destination",
+  "gate_origin",
+  "gate_destination",
+  "actual_runway_off",
+  "actual_runway_on",
+  "route_distance_mi",
+  "diverted",
+  "provider_status",
+  "raw_provider",
+] as const;
+
+// Find another row for the exact same flight (date + airline + number + route) that the
+// provider has already resolved (provider_status set, incl. "not_found"). Lets us clone
+// that result instead of paying for a duplicate provider query — e.g. when two users
+// flew the same flight. Returns null when no such twin exists.
+async function findEnrichedTwin(
+  supabase: SupabaseClient,
+  flight: RefreshRecentCandidate,
+): Promise<(Record<string, unknown> & { id: string; status: string | null }) | null> {
+  const { data, error } = await supabase
+    .from("flights")
+    .select(`id, status, ${TWIN_COPY_COLUMNS.join(", ")}`)
+    .eq("flight_date", flight.flight_date)
+    .eq("airline_iata", flight.airline_iata)
+    .eq("flight_number", flight.flight_number)
+    .eq("dep_iata", flight.dep_iata)
+    .eq("arr_iata", flight.arr_iata)
+    .neq("id", flight.id)
+    .not("provider_status", "is", null)
+    .limit(1);
+
+  if (error) {
+    throw new HttpError(500, `Twin lookup failed for ${flight.id}: ${error.message}`);
+  }
+  // `data` is typed as a parse error because the select list is built dynamically;
+  // cast through unknown to the real row shape.
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown> & { id: string; status: string | null }>;
+  return rows[0] ?? null;
+}
+
+// Clone a twin's provider fields (and its track, if any) onto this flight. No API call.
+async function copyTwinEnrichment(
+  supabase: SupabaseClient,
+  flight: RefreshRecentCandidate,
+  twin: Record<string, unknown> & { id: string },
+) {
+  const changes: Record<string, unknown> = {};
+  for (const col of TWIN_COPY_COLUMNS) assignProviderValue(changes, col, twin[col]);
+
+  if (
+    flight.status !== "cancelled" &&
+    (changes.actual_dep || changes.actual_takeoff || changes.actual_landing || changes.actual_arr)
+  ) {
+    changes.status = "completed";
+  }
+
+  if (typeof changes.aircraft_type_code === "string" && changes.aircraft_type_code) {
+    await supabase
+      .from("aircraft_types")
+      .upsert({ code: changes.aircraft_type_code, name: changes.aircraft_type_code }, { onConflict: "code", ignoreDuplicates: true });
+  }
+
+  if (Object.keys(changes).length > 0) {
+    const { error } = await supabase.from("flights").update(changes).eq("id", flight.id);
+    if (error) {
+      throw new HttpError(400, `Failed to copy twin enrichment to ${flight.id}: ${error.message}`);
+    }
+  }
+
+  // Clone the twin's track too, if it has one and this flight doesn't.
+  if (!flight.has_track) {
+    const { data: tracks } = await supabase
+      .from("tracks")
+      .select("geojson, source, recorded_at")
+      .eq("flight_id", twin.id)
+      .limit(1);
+    const track = tracks?.[0] as { geojson: unknown; source: string; recorded_at: string } | undefined;
+    if (track) {
+      await supabase
+        .from("tracks")
+        .upsert({ flight_id: flight.id, geojson: track.geojson, source: track.source, recorded_at: track.recorded_at }, { onConflict: "flight_id" });
+    }
+  }
 }
 
 export function selectEligibleFlights(
@@ -118,6 +218,19 @@ async function refreshRecentFlight(
   }
 
   try {
+    // Cost saver: if the same flight is already enriched on another row (e.g. another
+    // user flew it), clone that result instead of paying for a duplicate provider query.
+    const twin = await findEnrichedTwin(supabase, flight);
+    if (twin) {
+      await copyTwinEnrichment(supabase, flight, twin);
+      return {
+        flight_id: flight.id,
+        outcome: "reused",
+        provider: null,
+        warnings: [`Reused provider data from existing flight ${twin.id}`],
+      };
+    }
+
     const enrichment = await enrichFlight({
       flight_date: flight.flight_date,
       airline_iata: flight.airline_iata,

@@ -59,10 +59,12 @@ if (import.meta.main) {
   Deno.serve((request) => handleRefreshRecentRequest(request));
 }
 
-// Notify the owner by email whenever the job actually queried the flight API (i.e. at
-// least one eligible flight). Stays silent (no email) on no-op runs and never throws.
+// Notify the owner by email whenever the job actually queried the flight API. Flights
+// filled from an already-enriched twin ("reused") cost nothing, so they don't count as
+// a query — stay silent on no-op / all-reused runs, and never throw.
 async function notifyRun(result: RefreshRecentResult) {
-  if (result.eligible <= 0) return;
+  const queried = result.eligible - result.reused;
+  if (queried <= 0) return;
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
   const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
   const refreshToken = Deno.env.get("GOOGLE_REFRESH_TOKEN");
@@ -74,16 +76,18 @@ async function notifyRun(result: RefreshRecentResult) {
   try {
     const token = await refreshGmailAccessToken(clientId, clientSecret, refreshToken);
     const lines = result.results.map((r) => `  • ${r.outcome}: ${r.flight_id}${r.error ? ` — ${r.error}` : ""}`).join("\n");
-    const subject = `Journia refresh-recent: ${result.eligible} queried, ${result.refreshed} enriched`;
+    const subject = `Journia refresh-recent: ${queried} queried, ${result.refreshed} enriched${result.reused ? `, ${result.reused} reused` : ""}`;
     const body = [
       "refresh-recent ran and sent at least one flight-API query.",
       "",
-      `scanned:            ${result.scanned}`,
-      `eligible (queried): ${result.eligible}`,
-      `refreshed:          ${result.refreshed}`,
-      `not found:          ${result.not_found}`,
-      `skipped:            ${result.skipped}`,
-      `failed:             ${result.failed}`,
+      `scanned:              ${result.scanned}`,
+      `eligible:             ${result.eligible}`,
+      `queried (paid):       ${queried}`,
+      `refreshed:            ${result.refreshed}`,
+      `reused (no query):    ${result.reused}`,
+      `not found:            ${result.not_found}`,
+      `skipped:              ${result.skipped}`,
+      `failed:               ${result.failed}`,
       "",
       lines,
     ].join("\n");

@@ -173,7 +173,9 @@ export type RefreshRecentCandidate = StoredFlightRow & {
 
 export type RefreshRecentFlightResult = {
   flight_id: string;
-  outcome: "refreshed" | "not_found" | "skipped" | "failed";
+  // "reused" = filled from an already-enriched copy of the same flight (typically
+  // another user's), with no provider/API call — see findEnrichedTwin in refresh-recent.
+  outcome: "refreshed" | "reused" | "not_found" | "skipped" | "failed";
   provider: FlightSource | null;
   warnings: string[];
   error?: string;
@@ -183,6 +185,7 @@ export type RefreshRecentResult = {
   scanned: number;
   eligible: number;
   refreshed: number;
+  reused: number;
   not_found: number;
   skipped: number;
   failed: number;
@@ -236,6 +239,7 @@ export type StoredFlightRow = {
   booking_id: string | null;
   status: FlightStatus;
   source: FlightSource;
+  provider_status: string | null;
   raw_provider: unknown;
 };
 

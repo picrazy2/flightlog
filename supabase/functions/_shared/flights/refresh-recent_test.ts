@@ -244,3 +244,61 @@ Deno.test("refreshRecentFlights reports not_found results without mutating the f
   assertEquals(supabase.db.flights[0].raw_provider, null);
   assertEquals(supabase.db.tracks.length, 0);
 });
+
+Deno.test("refreshRecentFlights reuses an enriched twin instead of querying the provider", async () => {
+  // A second user's copy of the same flight is already enriched (and has a track).
+  const twinId = "00000000-0000-4000-8000-0000000000aa";
+  const candidateId = "00000000-0000-4000-8000-0000000000bb";
+  const supabase = createMockSupabaseClient({
+    flights: [
+      baseFlight(twinId, {
+        user_id: "22222222-2222-4222-8222-222222222222",
+        sched_arr: "2026-03-20T19:00:00Z",
+        provider_sched_dep: "2026-03-20T10:05:00Z",
+        actual_takeoff: "2026-03-20T10:20:00Z",
+        actual_landing: "2026-03-20T19:50:00Z",
+        aircraft_type_code: "B789",
+        registration: "G-ABCD",
+        provider_status: "landed",
+        raw_provider: { provider: "fr24api" },
+      }),
+      baseFlight(candidateId, { sched_arr: "2026-03-20T19:00:00Z" }),
+    ],
+    tracks: [
+      {
+        id: "00000000-0000-4000-8000-0000000000cc",
+        flight_id: twinId,
+        geojson: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+        source: "fr24api",
+        recorded_at: "2026-03-20T19:50:00Z",
+      },
+    ],
+  });
+
+  let providerCalls = 0;
+  const result = await refreshRecentFlights(
+    supabase as never,
+    {},
+    {
+      now: new Date("2026-04-01T00:30:00Z"),
+      enrichFlight: async () => {
+        providerCalls += 1;
+        return { found: false, provider: "fr24api", warnings: [] };
+      },
+    },
+  );
+
+  // The unenriched candidate is the only eligible flight; it must reuse, not query.
+  assertEquals(result.eligible, 1);
+  assertEquals(result.reused, 1);
+  assertEquals(result.refreshed, 0);
+  assertEquals(providerCalls, 0);
+
+  // Candidate got the twin's provider fields + a cloned track; user schedule untouched.
+  const candidate = supabase.db.flights.find((f) => f.id === candidateId)!;
+  assertEquals(candidate.registration, "G-ABCD");
+  assertEquals(candidate.actual_landing, "2026-03-20T19:50:00Z");
+  assertEquals(candidate.provider_status, "landed");
+  assertEquals(candidate.sched_dep, "2026-03-20T10:00:00Z");
+  assertEquals(supabase.db.tracks.some((t) => t.flight_id === candidateId), true);
+});
