@@ -67,8 +67,7 @@ export const domesticIntl: StatModule = {
     }
     const pairRows = [...pairs.entries()]
       .map(([id, p]) => ({ id, label: p.label, flights: Math.round(p.v) }))
-      .sort((a, b) => b.flights - a.flights)
-      .slice(0, 8);
+      .sort((a, b) => b.flights - a.flights);
 
     return (
       <>
@@ -107,6 +106,7 @@ export const domesticIntl: StatModule = {
               rows={pairRows}
               series={[{ key: "flights", name: metricName[metric], color: color.secondary }]}
               unit={metricName[metric]}
+              cap={8}
               colorByRow={(row) => (String(row.id).endsWith("·dom") ? color.accent : color.secondary)}
             />
           ) : (

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CHART, axisTick, type Series } from "./chartTheme";
 import { formatDuration } from "@/lib/format";
@@ -24,22 +25,26 @@ interface Props {
   tickBadge?: (row: BarRowData) => { color: string } | undefined; // colored dot beside label
   colorByRow?: (row: BarRowData) => string | undefined; // per-bar color (single-series)
   unit?: string; // tooltip unit suffix
+  cap?: number; // show only the first `cap` rows with a "see all" toggle to reveal the rest
 }
 
 // Horizontal, optionally stacked / 100%-stacked, interactive bar chart.
-export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit }: Props) {
+export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit, cap }: Props) {
   // on touch (mobile/tablet) a tap is the only way to see a value, so don't let it filter
   const pick = useIsMobile(1024) ? undefined : onPick;
+  const [showAll, setShowAll] = useState(false);
+  const hasMore = cap != null && rows.length > cap;
+  const shown = hasMore && !showAll ? rows.slice(0, cap) : rows;
   const data = percent
-    ? rows.map((r) => {
+    ? shown.map((r) => {
         const total = series.reduce((s, k) => s + (Number(r[k.key]) || 0), 0) || 1;
         const out: BarRowData = { id: r.id, label: r.label };
         for (const k of series) out[k.key] = ((Number(r[k.key]) || 0) / total) * 100;
         return out;
       })
-    : rows;
+    : shown;
 
-  const h = height ?? Math.max(120, rows.length * 26 + 24);
+  const h = height ?? Math.max(120, shown.length * 26 + 24);
 
   // a single bar with a breakdown reads better as a donut of its composition
   if (rows.length === 1 && series.length > 1 && !percent) {
@@ -135,6 +140,14 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
         </BarChart>
       </ResponsiveContainer>
       </div>
+      {hasMore && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="focus-ring mt-1 px-1.5 text-caption text-accent hover:underline"
+        >
+          {showAll ? "Show less" : `See all ${rows.length}`}
+        </button>
+      )}
     </div>
   );
 }

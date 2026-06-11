@@ -24,7 +24,7 @@ const metricVal = (f: Flight, m: Metric) => (m === "flights" ? 1 : m === "distan
 
 // Top routes, each bar stacked by airline (top 8 airlines + Other), mirroring the
 // cities-by-airport breakdown.
-function routesByAirline(flights: Flight[], directed: boolean, metric: Metric, topN = 8): { rows: BarRowData[]; series: Series[] } {
+function routesByAirline(flights: Flight[], directed: boolean, metric: Metric): { rows: BarRowData[]; series: Series[] } {
   const byRoute = new Map<string, { label: string; dep: string; arr: string; inner: Map<string, number> }>();
   const nameOf = new Map<string, string>();
   for (const f of flights) {
@@ -38,8 +38,7 @@ function routesByAirline(flights: Flight[], directed: boolean, metric: Metric, t
   }
   const top = [...byRoute.entries()]
     .map(([id, g]) => ({ id, ...g, total: [...g.inner.values()].reduce((x, y) => x + y, 0) }))
-    .sort((x, y) => y.total - x.total)
-    .slice(0, topN);
+    .sort((x, y) => y.total - x.total);
   const airTotals = new Map<string, number>();
   for (const g of top) for (const [k, v] of g.inner) airTotals.set(k, (airTotals.get(k) ?? 0) + v);
   const topAir = [...airTotals.entries()].sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k]) => k);
@@ -182,6 +181,7 @@ export const routes: StatModule = {
           rows={main.rows}
           series={main.series}
           unit={metric === "flights" ? "flights" : metric === "distance" ? ctx.settings.units : "min"}
+          cap={8}
           onPick={(id) => {
             const r = main.rows.find((x) => x.id === id);
             if (r) toggleCrossFilter(routeFilter(String(r.dep), String(r.arr)));

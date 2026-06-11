@@ -87,9 +87,10 @@ export function isRefreshRecentEligible(
     return false;
   }
 
-  // Not yet enriched → always backfill once.
+  // Not yet enriched → backfill once. A flight the provider has no record of is marked
+  // 'not_found' (see refreshRecentFlight) so we never re-query — and re-bill — it.
   if (!isProviderEnriched(flight)) {
-    return true;
+    return flight.provider_status !== "not_found";
   }
 
   // Already enriched: only keep re-running to pick up a still-missing track while the
@@ -128,6 +129,11 @@ async function refreshRecentFlight(
     });
 
     if (!enrichment.found || !enrichment.flight) {
+      // Record the miss so this flight is never re-queried (and never re-billed). Only
+      // for not-yet-enriched flights; an already-enriched flight keeps its real status.
+      if (!isProviderEnriched(flight)) {
+        await supabase.from("flights").update({ provider_status: "not_found" }).eq("id", flight.id);
+      }
       return {
         flight_id: flight.id,
         outcome: "not_found",

@@ -111,8 +111,7 @@ export const airports: StatModule = {
           arrivals: a.arrivals - a.connections,
           connections: a.connections,
         }))
-        .sort((a, b) => b.departures + b.arrivals + b.connections - (a.departures + a.arrivals + a.connections))
-        .slice(0, TOP);
+        .sort((a, b) => b.departures + b.arrivals + b.connections - (a.departures + a.arrivals + a.connections));
       return (
         <>
           {groupControl}
@@ -121,6 +120,7 @@ export const airports: StatModule = {
             percent={percent}
             activeId={airportActive}
             unit="visits"
+            cap={TOP}
             series={[
               { key: "departures", name: "Departures", color: color.accent },
               { key: "arrivals", name: "Arrivals", color: color.secondary },
@@ -137,8 +137,7 @@ export const airports: StatModule = {
       const byAirport = visitClassByAirport(ctx.flights);
       const rows: BarRowData[] = [...byAirport.entries()]
         .map(([iata, x]) => ({ id: iata, label: iata, domestic: x.dom, international: x.intl }))
-        .sort((a, b) => b.domestic + b.international - (a.domestic + a.international))
-        .slice(0, TOP);
+        .sort((a, b) => b.domestic + b.international - (a.domestic + a.international));
       return (
         <>
           {groupControl}
@@ -147,6 +146,7 @@ export const airports: StatModule = {
             percent={percent}
             activeId={airportActive}
             unit="visits"
+            cap={TOP}
             series={[
               { key: "domestic", name: "Domestic", color: color.accent },
               { key: "international", name: "International", color: color.secondary },
@@ -223,12 +223,11 @@ export const airports: StatModule = {
         row.__total = total;
         return row;
       })
-      .sort((a, b) => Number(b.__total) - Number(a.__total))
-      .slice(0, TOP);
+      .sort((a, b) => Number(b.__total) - Number(a.__total));
     return (
       <>
         {groupControl}
-        <BarsH rows={rows} percent={percent} series={series} activeId={airportActive} unit="visits" onPick={(id) => toggleCrossFilter(airportFilter(id))} />
+        <BarsH rows={rows} percent={percent} series={series} activeId={airportActive} unit="visits" cap={TOP} onPick={(id) => toggleCrossFilter(airportFilter(id))} />
       </>
     );
   },

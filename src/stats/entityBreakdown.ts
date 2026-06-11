@@ -26,8 +26,7 @@ interface Built {
 function assemble(byGroup: Map<string, { name: string; inner: Map<string, number> }>, innerLabel?: (k: string) => string): Built {
   const top = [...byGroup.entries()]
     .map(([id, g]) => ({ id, name: g.name, inner: g.inner, total: [...g.inner.values()].reduce((x, y) => x + y, 0) }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, TOP);
+    .sort((a, b) => b.total - a.total);
   const innerTotals = new Map<string, number>();
   for (const g of top) for (const [k, v] of g.inner) innerTotals.set(k, (innerTotals.get(k) ?? 0) + v);
   const topInner = [...innerTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, TOP).map(([k]) => k);
@@ -75,8 +74,7 @@ export function buildCount(airports: Map<string, AirportAgg>, level: EntityLevel
   }
   const rows = [...m.entries()]
     .map(([id, g]) => ({ id, label: g.name, value: g.set.size }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, TOP);
+    .sort((a, b) => b.value - a.value);
   return {
     rows,
     series: [{ key: "value", name: innerMode === "airport" ? "Airports" : "Cities", color: color.accent }],
@@ -95,8 +93,7 @@ export function buildVisits(airports: Map<string, AirportAgg>, level: EntityLeve
   }
   const rows = [...m.entries()]
     .map(([id, x]) => ({ id, label: x.name, visits: x.visits }))
-    .sort((a, b) => b.visits - a.visits)
-    .slice(0, TOP);
+    .sort((a, b) => b.visits - a.visits);
   return { rows, series: [{ key: "visits", name: "Visits", color: color.accent }], names: new Map(rows.map((r) => [r.id, r.label])) };
 }
 
@@ -113,8 +110,7 @@ export function buildVisitTypeStack(airports: Map<string, AirportAgg>, level: En
   }
   const rows = [...m.entries()]
     .map(([id, x]) => ({ id, label: x.name, departures: x.departures, arrivals: x.arrivals, connections: x.connections }))
-    .sort((a, b) => b.departures + b.arrivals + b.connections - (a.departures + a.arrivals + a.connections))
-    .slice(0, TOP);
+    .sort((a, b) => b.departures + b.arrivals + b.connections - (a.departures + a.arrivals + a.connections));
   return {
     rows,
     series: [
@@ -182,8 +178,7 @@ export function buildTypeStack(flights: Flight[], level: EntityLevel): Built {
   }
   const rows = [...m.entries()]
     .map(([id, x]) => ({ id, label: x.name, domestic: x.domestic, international: x.international }))
-    .sort((a, b) => b.domestic + b.international - (a.domestic + a.international))
-    .slice(0, TOP);
+    .sort((a, b) => b.domestic + b.international - (a.domestic + a.international));
   return {
     rows,
     series: [

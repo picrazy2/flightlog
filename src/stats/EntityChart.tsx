@@ -16,11 +16,12 @@ interface Props {
   percent?: boolean; // 100%-stacked bar
   tickIcon?: (row: BarRowData) => string | undefined;
   topPie?: number; // top N slices before "Other"
+  cap?: number; // bar: show top N rows with a "see all" toggle
 }
 
 // Shared entity visual: horizontal stacked bars OR a top-N + "Other" donut.
 // The pie value for each row is the sum of all bar series (i.e. its total).
-export function EntityChart({ rows, series, chartType, onPick, activeId, unit, percent, tickIcon, topPie = 9 }: Props) {
+export function EntityChart({ rows, series, chartType, onPick, activeId, unit, percent, tickIcon, topPie = 9, cap = 12 }: Props) {
   if (chartType === "pie") {
     const totals = rows
       .map((r) => ({ id: r.id, label: r.label, value: series.reduce((s, k) => s + (Number(r[k.key]) || 0), 0) }))
@@ -40,6 +41,7 @@ export function EntityChart({ rows, series, chartType, onPick, activeId, unit, p
       activeId={activeId}
       unit={unit}
       tickIcon={tickIcon}
+      cap={cap}
       onPick={onPick}
     />
   );

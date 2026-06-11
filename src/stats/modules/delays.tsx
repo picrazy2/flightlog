@@ -98,15 +98,14 @@ export const delays: StatModule = {
       byAirline.set(f.airline_iata, cur);
     }
     const worst = [...byAirline.entries()]
-      .filter(([, a]) => a.n >= 10)
+      .filter(([, a]) => a.n >= 8)
       .map(([iata, a]) => ({
         id: iata,
         label: a.label,
         value: airlineMetric === "mins" ? Math.round(a.sum / a.n) : Math.round((a.late / a.n) * 100),
         sub: `${a.late} of ${a.n} flights delayed`,
       }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
+      .sort((a, b) => b.value - a.value);
 
     // distribution of arrival punctuality across timed flights
     const timed = ctx.flights.filter((f) => actualArr(f));
@@ -182,7 +181,7 @@ export const delays: StatModule = {
         {worst.length > 0 && (
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-eyebrow tracking-[0.01em] text-ink-faint">By airline (≥10)</span>
+              <span className="min-w-0 truncate text-eyebrow tracking-[0.01em] text-ink-faint">By airline (≥8)</span>
               <Segmented
                 aria-label="Airline metric"
                 size="sm"
@@ -199,6 +198,7 @@ export const delays: StatModule = {
               rows={worst}
               series={[{ key: "value", name: airlineMetric === "mins" ? "min" : "%", color: color.routeIntl }]}
               unit={airlineMetric === "mins" ? "min" : "%"}
+              cap={10}
               onPick={(id) => {
                 const a = worst.find((x) => x.id === id);
                 if (a) toggleCrossFilter(airlineFilter(id, a.label));

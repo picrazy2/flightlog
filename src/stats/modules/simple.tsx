@@ -186,9 +186,8 @@ export const aircraft: StatModule = {
     const typeRows = [...types.entries()]
       .map(([id, x]) => ({ id, label: x.label, domestic: Math.round(x.domestic), international: Math.round(x.international), wide: x.wide }))
       .filter((r) => body === "all" || (body === "wide" ? r.wide === 1 : r.wide === 0))
-      .sort((a, b) => b.domestic + b.international - (a.domestic + a.international))
-      .slice(0, 10);
-    // most-flown tails: only those flown 3+ times, top 5; hover lists the flights
+      .sort((a, b) => b.domestic + b.international - (a.domestic + a.international));
+    // most-flown tails: only those flown 3+ times; hover lists the flights
     const regRows = [...regFlights.entries()]
       .filter(([, fs]) => fs.length > 2)
       .map(([id, fs]) => {
@@ -198,8 +197,7 @@ export const aircraft: StatModule = {
           .map((f) => `${f.airline_iata}${f.flight_number}  ${f.dep_iata}→${f.arr_iata}  ${f.flight_date}`);
         return { id, label: id, flights: fs.length, sub: list.join("\n") };
       })
-      .sort((a, b) => b.flights - a.flights)
-      .slice(0, 5);
+      .sort((a, b) => b.flights - a.flights);
 
     const cards = [
       { label: "Widebody flights", value: String(wideFlights), color: WIDE_COLOR },
@@ -241,6 +239,7 @@ export const aircraft: StatModule = {
           ]}
           activeId={activeId}
           unit={metricName[metric]}
+          cap={10}
           onPick={(id) => {
             const r = typeRows.find((x) => x.id === id);
             toggleCrossFilter(aircraftFilter(id, r?.label ?? id));
@@ -249,7 +248,7 @@ export const aircraft: StatModule = {
         {regRows.length > 0 && (
           <div>
             <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">Most-flown tail numbers</div>
-            <BarsH rows={regRows} series={[{ key: "flights", name: "flights", color: color.secondary }]} unit="flights" />
+            <BarsH rows={regRows} series={[{ key: "flights", name: "flights", color: color.secondary }]} unit="flights" cap={5} />
           </div>
         )}
       </>

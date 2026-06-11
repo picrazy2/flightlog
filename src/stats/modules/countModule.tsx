@@ -46,7 +46,7 @@ export function countModule(opts: {
     Panel: ({ ctx }) => {
       const { toggleCrossFilter, crossFilters } = useStore();
       const { metric, control } = useMetricToggle();
-      const ranked = rank(ctx, metric).slice(0, 12);
+      const ranked = rank(ctx, metric);
       const activeId = crossFilters.find((c) => c.id.startsWith(`${opts.facet}:`))?.id.split(":")[1] ?? null;
       return (
         <>
@@ -56,6 +56,7 @@ export function countModule(opts: {
             series={[{ key: "count", name: metricName[metric], color: color.accent }]}
             activeId={activeId}
             unit={metricName[metric]}
+            cap={12}
             tickIcon={opts.tickIcon ? (row) => opts.tickIcon!(row.id) : undefined}
             onPick={(id) => {
               const row = ranked.find((r) => r.id === id);
