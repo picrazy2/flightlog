@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { enrichFlight } from "../_shared/flights/enrich.ts";
 import { HttpError, toHttpError } from "../_shared/flights/http.ts";
+import { requireAuthedUser } from "../_shared/auth.ts";
 import { importCsvFlights } from "../_shared/flights/import-csv.ts";
 import { createAeroApiProvider } from "../_shared/flights/providers/aeroapi.ts";
 import { createFR24Provider } from "../_shared/flights/providers/fr24api.ts";
@@ -28,7 +29,7 @@ export async function handleImportCsvRequest(
   }
 
   try {
-    requireAuthorizedRequest(request);
+    await requireAuthedUser(request);
     const body = await parseRequest(request);
     const supabase = dependencies?.supabase ?? createAdminClient();
     const result = await importCsvFlights(supabase, body, {
@@ -83,17 +84,6 @@ function createAdminClient() {
   });
 }
 
-function requireAuthorizedRequest(request: Request) {
-  const expectedToken = Deno.env.get("EDGE_FUNCTION_SECRET");
-  if (!expectedToken) {
-    throw new HttpError(500, "Missing EDGE_FUNCTION_SECRET");
-  }
-
-  const authorization = request.headers.get("authorization");
-  if (authorization !== `Bearer ${expectedToken}`) {
-    throw new HttpError(401, "Unauthorized");
-  }
-}
 
 async function parseRequest(request: Request): Promise<ImportCsvRequest> {
   if (request.method !== "POST") {

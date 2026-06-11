@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { HttpError, toHttpError } from "../_shared/flights/http.ts";
+import { requireAuthedUser } from "../_shared/auth.ts";
 import { updateFlight } from "../_shared/flights/service.ts";
 import type { UpdateFlightRequest } from "../_shared/flights/types.ts";
 
@@ -28,7 +29,7 @@ export async function handleUpdateFlightRequest(
   }
 
   try {
-    requireAuthorizedRequest(request);
+    await requireAuthedUser(request);
     const body = await parseRequest(request);
     const supabase = dependencies?.supabase ?? createAdminClient();
     const result = await updateFlight(supabase, body);
@@ -73,17 +74,6 @@ function createAdminClient() {
   });
 }
 
-function requireAuthorizedRequest(request: Request) {
-  const expectedToken = Deno.env.get("EDGE_FUNCTION_SECRET");
-  if (!expectedToken) {
-    throw new HttpError(500, "Missing EDGE_FUNCTION_SECRET");
-  }
-
-  const authorization = request.headers.get("authorization");
-  if (authorization !== `Bearer ${expectedToken}`) {
-    throw new HttpError(401, "Unauthorized");
-  }
-}
 
 async function parseRequest(request: Request): Promise<UpdateFlightRequest> {
   if (request.method !== "POST") {

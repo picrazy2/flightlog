@@ -6,7 +6,8 @@ import { useStore } from "@/state/store";
 import { useFlights } from "@/data/useFlights";
 import { useBookings } from "@/data/useBookings";
 import { useCreateFlight, useUpdateFlight, useDeleteFlight, type FlightFormValues } from "@/data/mutations";
-import { invokeFunction, writesEnabled } from "@/lib/supabase";
+import { invokeFunction } from "@/lib/supabase";
+import { useAuth, signInWithGoogle, signOut } from "@/lib/auth";
 import type { Flight } from "@/lib/types";
 import { FlightForm } from "./FlightForm";
 
@@ -34,6 +35,8 @@ function toForm(f: Flight): Partial<FlightFormValues> & { id: string } {
 
 export function DatabaseModal() {
   const setDbOpen = useStore((s) => s.setDbOpen);
+  const { user } = useAuth();
+  const canWrite = !!user; // writing requires a signed-in (allowed) Google account
   const [tab, setTab] = useState<Tab>("flights");
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<(Partial<FlightFormValues> & { id?: string }) | null>(null);
@@ -93,11 +96,21 @@ export function DatabaseModal() {
         />
       }
     >
-      {!writesEnabled && (
-        <div className="border-b border-border bg-[rgba(251,191,36,0.1)] px-5 py-2 text-caption text-warning">
-          Read-only: set VITE_EDGE_FUNCTION_SECRET in .env.local to enable add / edit / delete.
-        </div>
-      )}
+      <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-2/40 px-5 py-2 text-caption">
+        {canWrite ? (
+          <>
+            <span className="text-ink-muted">Signed in as <span className="text-ink">{user!.email}</span></span>
+            <button onClick={() => signOut()} className="focus-ring text-accent hover:underline">Sign out</button>
+          </>
+        ) : (
+          <>
+            <span className="text-ink-muted">Read-only — sign in to add / edit / delete.</span>
+            <button onClick={() => signInWithGoogle()} className="focus-ring rounded-md border border-border bg-surface-1 px-2.5 py-1 text-label text-ink hover:bg-surface-2">
+              Sign in with Google
+            </button>
+          </>
+        )}
+      </div>
 
       {tab === "flights" && (
         <div className="flex flex-col gap-3 p-5">
@@ -113,7 +126,7 @@ export function DatabaseModal() {
               <Button
                 variant="primary"
                 size="sm"
-                disabled={!writesEnabled}
+                disabled={!canWrite}
                 onClick={() => setEditing(editing && !editing.id ? null : {})}
               >
                 ＋ Add flight
@@ -159,13 +172,13 @@ export function DatabaseModal() {
                     <td className={`${td} text-ink-muted`}>{f.status}</td>
                     <td className={`${td} tnum text-ink-muted`}>{f.distance_mi?.toLocaleString() ?? "—"}</td>
                     <td className={`${td} whitespace-nowrap text-right`}>
-                      <Button variant="ghost" size="sm" disabled={!writesEnabled} onClick={() => setEditing(toForm(f))}>
+                      <Button variant="ghost" size="sm" disabled={!canWrite} onClick={() => setEditing(toForm(f))}>
                         Edit
                       </Button>
                       <Button
                         variant="danger"
                         size="sm"
-                        disabled={!writesEnabled || deleteM.isPending}
+                        disabled={!canWrite || deleteM.isPending}
                         onClick={() => {
                           if (confirm(`Delete ${f.airline_iata}${f.flight_number} on ${f.flight_date}?`))
                             deleteM.mutate(f.id);
@@ -231,7 +244,7 @@ export function DatabaseModal() {
             className="focus-ring w-full rounded-md border border-border bg-surface-2 p-3 font-mono text-caption text-ink placeholder:text-ink-faint"
           />
           <div className="flex items-center gap-3">
-            <Button variant="primary" disabled={!writesEnabled || !csv.trim()} onClick={runImport}>
+            <Button variant="primary" disabled={!canWrite || !csv.trim()} onClick={runImport}>
               Import CSV
             </Button>
             {csvResult && <span className="text-label text-ink-muted">{csvResult}</span>}
