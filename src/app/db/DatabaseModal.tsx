@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
@@ -43,6 +43,8 @@ export function DatabaseModal() {
   const [editing, setEditing] = useState<(Partial<FlightFormValues> & { id?: string }) | null>(null);
   const [csv, setCsv] = useState("");
   const [csvResult, setCsvResult] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const flights = useFlights();
   const bookings = useBookings();
@@ -65,17 +67,51 @@ export function DatabaseModal() {
     action.then(() => setEditing(null)).catch(() => {});
   };
 
+  const loadFile = async (file?: File | null) => {
+    if (!file) return;
+    const text = await file.text();
+    setCsv(text);
+    const n = text.split(/\r?\n/).filter((l) => l.trim()).length - 1;
+    setCsvResult(`Loaded ${file.name} — ${n > 0 ? n : 0} row(s). Click Import.`);
+  };
+
+  // Import in small batches so a large file doesn't exceed the function/gateway timeout
+  // (which leaves the request hanging). duplicate_mode "skip" makes this idempotent, so
+  // a failed batch can be safely retried by re-importing.
   const runImport = async () => {
-    setCsvResult("Importing…");
+    const lines = csv.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) {
+      setCsvResult("Need a header row plus at least one flight.");
+      return;
+    }
+    const [header, ...rows] = lines;
+    const CHUNK = 20;
+    const totals = { created: 0, updated: 0, skipped: 0, failed: 0 };
+    setCsvResult(`Importing 0/${rows.length}…`);
     try {
-      const r = await invokeFunction<{ created: number; updated: number; skipped: number; failed: number }>(
-        "import-csv",
-        { csv_text: csv, user_id: userId, duplicate_mode: "skip", enrichment_mode: "none" },
-      );
-      setCsvResult(`Created ${r.created}, updated ${r.updated}, skipped ${r.skipped}, failed ${r.failed}.`);
-      flights.refetch();
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const r = await invokeFunction<{ created: number; updated: number; skipped: number; failed: number }>(
+          "import-csv",
+          {
+            csv_text: [header, ...rows.slice(i, i + CHUNK)].join("\n"),
+            user_id: userId,
+            duplicate_mode: "skip",
+            enrichment_mode: "none",
+          },
+        );
+        totals.created += r.created;
+        totals.updated += r.updated;
+        totals.skipped += r.skipped;
+        totals.failed += r.failed;
+        setCsvResult(
+          `Importing ${Math.min(i + CHUNK, rows.length)}/${rows.length}… ` +
+            `(created ${totals.created}, skipped ${totals.skipped}, failed ${totals.failed})`,
+        );
+        flights.refetch();
+      }
+      setCsvResult(`Done — created ${totals.created}, updated ${totals.updated}, skipped ${totals.skipped}, failed ${totals.failed}.`);
     } catch (e) {
-      setCsvResult(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setCsvResult(`Stopped after ${totals.created + totals.skipped + totals.failed} rows: ${e instanceof Error ? e.message : String(e)}. Re-import to resume (dupes skip).`);
     }
   };
 
@@ -234,19 +270,47 @@ export function DatabaseModal() {
       {tab === "import" && (
         <div className="flex flex-col gap-3 p-5">
           <p className="text-label text-ink-muted">
-            Paste CSV with headers: date, scheduled_dep_time_local, scheduled_arr_time_local, airline, flight,
-            dep_airport, arr_airport (+ optional class, aircraft, registration). Duplicate rows are skipped.
+            Drop a .csv file, choose one, or paste below. Headers: date, scheduled_dep_time_local,
+            scheduled_arr_time_local, airline, flight, dep_airport, arr_airport (+ optional class, aircraft,
+            registration). Imports in batches; duplicate rows are skipped.
           </p>
-          <textarea
-            value={csv}
-            onChange={(e) => setCsv(e.target.value)}
-            rows={10}
-            placeholder="date,scheduled_dep_time_local,..."
-            className="focus-ring w-full rounded-md border border-border bg-surface-2 p-3 font-mono text-caption text-ink placeholder:text-ink-faint"
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              loadFile(e.target.files?.[0]);
+              e.target.value = "";
+            }}
           />
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              loadFile(e.dataTransfer.files?.[0]);
+            }}
+            className={dragOver ? "rounded-md ring-2 ring-accent" : ""}
+          >
+            <textarea
+              value={csv}
+              onChange={(e) => setCsv(e.target.value)}
+              rows={10}
+              placeholder={dragOver ? "Drop CSV to load…" : "Drop a .csv here, or paste rows…"}
+              className="focus-ring w-full rounded-md border border-border bg-surface-2 p-3 font-mono text-caption text-ink placeholder:text-ink-faint"
+            />
+          </div>
           <div className="flex items-center gap-3">
             <Button variant="primary" disabled={!canWrite || !csv.trim()} onClick={runImport}>
               Import CSV
+            </Button>
+            <Button variant="secondary" disabled={!canWrite} onClick={() => fileInput.current?.click()}>
+              Choose file…
             </Button>
             {csvResult && <span className="text-label text-ink-muted">{csvResult}</span>}
           </div>
