@@ -15,36 +15,59 @@ and a `users` row for <user_id> already inserted.
 import glob, json, os, sys, urllib.parse, urllib.request, webbrowser, http.server, socketserver, threading
 
 SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+# Fixed loopback port so the redirect URI is stable and can be registered on the OAuth
+# client (a Web client rejects un-registered redirects -> redirect_uri_mismatch).
+PORT = 8765
+REDIRECT = f"http://127.0.0.1:{PORT}"
+ENV = os.path.join(os.path.dirname(__file__), "..", ".env")
+
+
+def production_client_id():
+    # The token must be minted with the SAME client watch-gmail uses to refresh it.
+    if os.environ.get("GOOGLE_CLIENT_ID"):
+        return os.environ["GOOGLE_CLIENT_ID"]
+    if os.path.exists(ENV):
+        for line in open(ENV):
+            if line.startswith("GOOGLE_CLIENT_ID="):
+                return line.split("=", 1)[1].strip()
+    return None
 
 
 def load_client():
-    # MUST be a Desktop-app OAuth client (key "installed") — it allows the random
-    # 127.0.0.1 loopback redirect this script uses. A Web client (key "web", used for
-    # Supabase Google sign-in) only permits its registered redirect and fails with
-    # redirect_uri_mismatch. Also: use the SAME desktop client as the production
-    # GOOGLE_CLIENT_ID/SECRET, since watch-gmail refreshes every token with that client.
     cand = glob.glob(os.path.expanduser("~/Downloads/client_secret_*.json"))
     if not cand:
         sys.exit("No client_secret_*.json found in ~/Downloads")
-    desktop = []
+    clients = []
     for path in cand:
         try:
             d = json.load(open(path))
         except Exception:
             continue
-        if "installed" in d:
-            desktop.append((path, d["installed"]))
-    if not desktop:
+        c = d.get("installed") or d.get("web")
+        if c:
+            clients.append((path, c))
+    if not clients:
+        sys.exit("No usable OAuth client JSON in ~/Downloads")
+
+    # Pick the one matching the production GOOGLE_CLIENT_ID so the token refreshes in
+    # watch-gmail. Without that match a token still mints but later fails to refresh.
+    want = production_client_id()
+    if want:
+        for path, c in clients:
+            if c["client_id"] == want:
+                return c["client_id"], c["client_secret"]
         sys.exit(
-            "No Desktop-app OAuth client found in ~/Downloads (only Web clients).\n"
-            "Create one: Google Cloud Console -> Credentials -> Create OAuth client ID\n"
-            "-> Application type: Desktop app -> download its JSON to ~/Downloads.\n"
-            "Use the SAME client as your production GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET."
+            f"None of the client_secret_*.json in ~/Downloads match the production\n"
+            f"GOOGLE_CLIENT_ID ({want[:28]}...). Download THAT client's JSON\n"
+            "(Google Cloud Console -> Credentials -> the client -> Download JSON)."
         )
-    if len(desktop) > 1:
-        print("Multiple Desktop clients found; using:", desktop[0][0])
-    c = desktop[0][1]
-    return c["client_id"], c["client_secret"]
+    if len(clients) > 1:
+        sys.exit(
+            "Multiple OAuth clients in ~/Downloads and no GOOGLE_CLIENT_ID to disambiguate.\n"
+            "Set GOOGLE_CLIENT_ID=<production client id> and re-run, or leave only the\n"
+            "correct client_secret_*.json in ~/Downloads."
+        )
+    return clients[0][1]["client_id"], clients[0][1]["client_secret"]
 
 
 def main():
@@ -67,15 +90,20 @@ def main():
         def log_message(self, *a):
             pass
 
-    httpd = socketserver.TCPServer(("127.0.0.1", 0), Handler)
-    port = httpd.server_address[1]
-    redirect = f"http://127.0.0.1:{port}"
+    try:
+        httpd = socketserver.TCPServer(("127.0.0.1", PORT), Handler)
+    except OSError:
+        sys.exit(f"Port {PORT} is in use; close whatever's using it and re-run.")
+    redirect = REDIRECT
 
     auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
         "client_id": cid, "redirect_uri": redirect, "response_type": "code",
         "scope": SCOPE, "access_type": "offline", "prompt": "consent",
         "login_hint": email,
     })
+    print(f"\n⚠️  First, register this redirect URI on the OAuth client in Google Cloud")
+    print(f"    Console (Credentials -> your client -> Authorized redirect URIs):")
+    print(f"      {redirect}\n")
     print(f"\nOpening browser. Sign in as {email} ({name}) and click Allow.")
     print("(If you see an 'unverified app' screen: Advanced -> Go to ... (unsafe).)\n")
     print("If the browser didn't open, paste this URL:\n" + auth_url + "\n")
