@@ -28,8 +28,8 @@ interface Props {
 
 // Horizontal, optionally stacked / 100%-stacked, interactive bar chart.
 export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit }: Props) {
-  // on mobile a tap is the only way to see a value (no hover), so don't let it filter
-  const pick = useIsMobile() ? undefined : onPick;
+  // on touch (mobile/tablet) a tap is the only way to see a value, so don't let it filter
+  const pick = useIsMobile(1024) ? undefined : onPick;
   const data = percent
     ? rows.map((r) => {
         const total = series.reduce((s, k) => s + (Number(r[k.key]) || 0), 0) || 1;

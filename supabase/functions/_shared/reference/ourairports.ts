@@ -15,7 +15,15 @@ const AIRPORT_CITY_OVERRIDES: Record<string, string> = {
   SFO: "San Francisco Bay",
   SJC: "San Francisco Bay",
   OAK: "San Francisco Bay",
+  // airports whose municipality is a different locality than the metro they serve
+  MXP: "Milan",
+  XIY: "Xi'an",
+  XNN: "Xining",
 };
+
+// OurAirports municipalities often carry a "(District)" suffix (e.g. "Shanghai
+// (Pudong)"), which splits multi-airport cities. Strip it so they aggregate as one.
+const cleanCity = (m: string | null): string | null => (m ? m.replace(/\s*\(.*\)\s*$/, "").trim() || m : m);
 
 type CountryRow = {
   code: string;
@@ -114,7 +122,7 @@ export async function refreshAirports(
     const continent = parseContinent(row.continent);
     const name = cleanString(row.name);
     const city = AIRPORT_CITY_OVERRIDES[iata] ??
-      cleanString(row.municipality) ?? name;
+      cleanCity(cleanString(row.municipality)) ?? name;
     const isoRegion = cleanString(row.iso_region);
     const latitude = parseNumber(row.latitude_deg);
     const longitude = parseNumber(row.longitude_deg);

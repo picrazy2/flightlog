@@ -18,9 +18,9 @@ interface Props {
 
 // Donut chart with a legend list. Caller supplies the slices (incl. an "Other").
 export function PieSlices({ slices, onPick, unit, height }: Props) {
-  // on mobile, tapping a slice shows its tooltip (the only "hover"), so it shouldn't
-  // filter; the legend list below stays tappable for filtering
-  const pick = useIsMobile() ? undefined : onPick;
+  // on touch (mobile/tablet), tapping a slice shows its tooltip (the only "hover"), so it
+  // shouldn't filter; the legend list below stays tappable for filtering
+  const pick = useIsMobile(1024) ? undefined : onPick;
   return (
     <div>
       <div style={{ height: height ?? 180 }}>

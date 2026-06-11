@@ -27,7 +27,7 @@ export function Modal({ title, onClose, children, actions, className }: Props) {
 
   // Mobile: full-screen sheet with a back button. Desktop: centered card.
   const body = mobile ? (
-    <div className="fixed inset-0 z-50 flex flex-col bg-surface-0" role="dialog" aria-modal="true" aria-label={title} style={{ paddingTop: "env(safe-area-inset-top)" }}>
+    <div className="fixed inset-0 z-50 flex flex-col bg-surface-1" role="dialog" aria-modal="true" aria-label={title} style={{ paddingTop: "env(safe-area-inset-top)" }}>
       <header className="flex items-center gap-2 border-b border-border px-3 py-3">
         <button onClick={onClose} aria-label="Back" className="focus-ring -ml-1 grid h-9 w-9 place-items-center rounded-full text-ink hover:bg-surface-2">
           <Chevron dir="left" size={16} />

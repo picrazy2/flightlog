@@ -135,8 +135,9 @@ export const routes: StatModule = {
       arr: r.arr,
       tripType: r.tripType,
       country: r.tripType === "domestic" ? r.sampleFlight.dep_country_name ?? r.sampleFlight.dep_country ?? "" : "",
-      distance: r.distanceMi / r.flights,
-      time: r.minutes / r.flights,
+      // great-circle distance (constant per route; actual filed distance varies per flight)
+      distance: r.sampleFlight.distance_mi ?? 0,
+      time: r.minutes / r.flights, // average air time across the route's flights
     }));
     const rankRows = undirected
       .filter((r) => rankTrip === "all" || r.tripType === rankTrip)
@@ -268,10 +269,6 @@ export const routes: StatModule = {
                   series={[{ key: "value", name: rankMetric, color: color.accent }]}
                   unit={rankMetric === "distance" ? ctx.settings.units : "min"}
                   colorByRow={(row) => rankColor(String(row.tripType ?? ""), String(row.country ?? ""))}
-                  onPick={(id) => {
-                    const r = rankRows.find((x) => x.id === id);
-                    if (r) toggleCrossFilter(routeFilter(r.dep, r.arr));
-                  }}
                 />
               </div>
             </div>

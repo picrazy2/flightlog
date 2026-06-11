@@ -14,6 +14,29 @@ const QUARTERS: [string, string][] = [
   ["10-01", "12-31"],
 ];
 
+const isoOf = (d: Date) => d.toISOString().slice(0, 10);
+const fmtDay = (iso: string, withYear = false) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric", ...(withYear ? { year: "numeric" } : {}) });
+const fmtMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString([], { month: "short", year: "numeric" });
+
+// compact "Mar 1 – Apr 15" (adds years when they differ)
+function compactRange(start: string | null, end: string | null): string {
+  if (!start && !end) return "All time";
+  if (start && end) {
+    const sameYear = start.slice(0, 4) === end.slice(0, 4);
+    return `${fmtDay(start, !sameYear)} – ${fmtDay(end, true)}`;
+  }
+  return start ? `From ${fmtDay(start, true)}` : `Until ${fmtDay(end!, true)}`;
+}
+
+// the immediately-preceding equal-length window (matches context.ts compare logic)
+function prevPeriod(start: string | null, end: string | null): { start: string; end: string } | null {
+  if (!start || !end) return null;
+  const s = new Date(`${start}T00:00:00`).getTime();
+  const span = new Date(`${end}T00:00:00`).getTime() - s;
+  return { start: isoOf(new Date(s - 86_400_000 - span)), end: isoOf(new Date(s - 86_400_000)) };
+}
+
 function presets(years: number[]): DateRange[] {
   const now = new Date();
   const y = now.getFullYear();
@@ -41,13 +64,22 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
   const years = [...new Set(all.map((f) => Number(f.flight_date.slice(0, 4))))].sort();
   const options = presets(years);
   const isAllTime = !range.start && !range.end;
+  // effective span of all logged flights → shown on the All-time option
+  const dates = all.map((f) => f.flight_date);
+  const firstDate = dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : null;
+  const lastDate = dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+  const allTimeSpan = firstDate && lastDate ? `${fmtMonth(firstDate)} – ${fmtMonth(lastDate)}` : null;
+  // custom ranges show their dates compactly in the pill instead of "Custom"
   const pillLabel = isAllTime
     ? temporal === "past"
       ? "Past"
       : temporal === "future"
         ? "Future"
         : "All time"
-    : range.label;
+    : range.label === "Custom"
+      ? compactRange(range.start, range.end)
+      : range.label;
+  const prev = compare ? prevPeriod(range.start, range.end) : null;
   // styled like an active filter chip whenever a range/temporal selection is in effect
   const active = !isAllTime || temporal !== "all";
 
@@ -90,21 +122,25 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
           ) : (
             <>
           <div className="max-h-[280px] overflow-y-auto">
-            {options.map((o) => (
-              <button
-                key={o.label}
-                onClick={() => {
-                  setRange(o);
-                  close();
-                }}
-                className={cn(
-                  "focus-ring block w-full rounded-md px-2.5 py-1.5 text-left text-label hover:bg-surface-2",
-                  o.label === range.label ? "text-accent" : "text-ink",
-                )}
-              >
-                {o.label}
-              </button>
-            ))}
+            {options.map((o) => {
+              const isAllTimeOpt = !o.start && !o.end;
+              return (
+                <button
+                  key={o.label}
+                  onClick={() => {
+                    setRange(o);
+                    close();
+                  }}
+                  className={cn(
+                    "focus-ring flex w-full items-baseline justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-label hover:bg-surface-2",
+                    o.label === range.label ? "text-accent" : "text-ink",
+                  )}
+                >
+                  <span>{o.label}</span>
+                  {isAllTimeOpt && allTimeSpan && <span className="text-caption text-ink-faint">{allTimeSpan}</span>}
+                </button>
+              );
+            })}
           </div>
           <div className="mt-2 flex flex-col gap-1.5 border-t border-border px-2.5 pt-2.5">
             <span className="text-caption text-ink-faint">Custom range</span>
@@ -129,9 +165,12 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
             </div>
           </div>
           {(range.start || range.end) && (
-            <div className="mt-2 flex items-center justify-between border-t border-border px-2.5 pt-2.5">
-              <span className="text-label text-ink-muted">Compare to prev.</span>
-              <Switch checked={compare} onChange={toggleCompare} />
+            <div className="mt-2 flex flex-col gap-1 border-t border-border px-2.5 pt-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-label text-ink-muted">Compare to prev.</span>
+                <Switch checked={compare} onChange={toggleCompare} />
+              </div>
+              {compare && prev && <span className="text-caption text-ink-faint">vs {compactRange(prev.start, prev.end)}</span>}
             </div>
           )}
             </>
