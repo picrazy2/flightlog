@@ -1869,6 +1869,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@supabase/supabase-js@^2.108.1",
         "npm:@tanstack/react-query@^5.59.0",
         "npm:@turf/great-circle@^7.1.0",
         "npm:@turf/helpers@^7.1.0",

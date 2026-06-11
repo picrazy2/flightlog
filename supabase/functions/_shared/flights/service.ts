@@ -80,6 +80,9 @@ export async function createFlight(
     booking_id: bookingId,
     distance_mi: calculateDistanceMiles(depAirport, arrAirport),
   };
+  // user_id is NOT NULL with a column default; drop the key when absent so the
+  // default applies rather than inserting an explicit null.
+  if (row.user_id == null) delete (row as { user_id?: string | null }).user_id;
 
   const { data: insertedFlight, error: insertError } = await supabase
     .from("flights")

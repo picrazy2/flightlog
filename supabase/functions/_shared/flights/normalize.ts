@@ -58,7 +58,7 @@ export function normalizeFlightInput(
   const actualArr = parseOptionalTimestamp(request.actual_arr, "actual_arr");
 
   return {
-    user_id: parseOptionalUuid(request.user_id, "user_id"),
+    user_id: parseOptionalUserId(request.user_id),
     flight_date: flightDate,
     airline_iata: airlineIata,
     flight_number: normalizeFlightNumber(request.flight_number, airlineIata),
@@ -430,6 +430,12 @@ function parseOptionalInteger(
   }
 
   return value;
+}
+
+// user_id is a short text slug (e.g. "alex"), a FK to public.users(id) — not a UUID.
+// Null/blank means "let the flights.user_id column default apply" (see createFlight).
+function parseOptionalUserId(value: string | null | undefined) {
+  return cleanString(value);
 }
 
 function parseOptionalUuid(value: string | null | undefined, field: string) {

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { invokeFunction } from "@/lib/supabase";
+import { useStore } from "@/state/store";
 
 // Shape the DB modal's add/edit form collects.
 export interface FlightFormValues {
@@ -23,9 +24,10 @@ function refresh(qc: ReturnType<typeof useQueryClient>) {
 
 export function useCreateFlight() {
   const qc = useQueryClient();
+  const userId = useStore((s) => s.userId); // file the new flight under the active log
   return useMutation({
     mutationFn: (v: FlightFormValues) =>
-      invokeFunction("create-flight", { ...v, enrichment_mode: "none" }),
+      invokeFunction("create-flight", { ...v, user_id: userId, enrichment_mode: "none" }),
     onSuccess: () => refresh(qc),
   });
 }

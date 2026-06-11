@@ -35,6 +35,7 @@ function toForm(f: Flight): Partial<FlightFormValues> & { id: string } {
 
 export function DatabaseModal() {
   const setDbOpen = useStore((s) => s.setDbOpen);
+  const userId = useStore((s) => s.userId); // active log; new rows/imports file under it
   const { user } = useAuth();
   const canWrite = !!user; // writing requires a signed-in (allowed) Google account
   const [tab, setTab] = useState<Tab>("flights");
@@ -69,7 +70,7 @@ export function DatabaseModal() {
     try {
       const r = await invokeFunction<{ created: number; updated: number; skipped: number; failed: number }>(
         "import-csv",
-        { csv_text: csv, duplicate_mode: "skip", enrichment_mode: "none" },
+        { csv_text: csv, user_id: userId, duplicate_mode: "skip", enrichment_mode: "none" },
       );
       setCsvResult(`Created ${r.created}, updated ${r.updated}, skipped ${r.skipped}, failed ${r.failed}.`);
       flights.refetch();
