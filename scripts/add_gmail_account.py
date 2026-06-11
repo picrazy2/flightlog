@@ -18,11 +18,32 @@ SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 
 
 def load_client():
+    # MUST be a Desktop-app OAuth client (key "installed") — it allows the random
+    # 127.0.0.1 loopback redirect this script uses. A Web client (key "web", used for
+    # Supabase Google sign-in) only permits its registered redirect and fails with
+    # redirect_uri_mismatch. Also: use the SAME desktop client as the production
+    # GOOGLE_CLIENT_ID/SECRET, since watch-gmail refreshes every token with that client.
     cand = glob.glob(os.path.expanduser("~/Downloads/client_secret_*.json"))
     if not cand:
         sys.exit("No client_secret_*.json found in ~/Downloads")
-    d = json.load(open(cand[0]))
-    c = d.get("installed") or d.get("web")
+    desktop = []
+    for path in cand:
+        try:
+            d = json.load(open(path))
+        except Exception:
+            continue
+        if "installed" in d:
+            desktop.append((path, d["installed"]))
+    if not desktop:
+        sys.exit(
+            "No Desktop-app OAuth client found in ~/Downloads (only Web clients).\n"
+            "Create one: Google Cloud Console -> Credentials -> Create OAuth client ID\n"
+            "-> Application type: Desktop app -> download its JSON to ~/Downloads.\n"
+            "Use the SAME client as your production GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET."
+        )
+    if len(desktop) > 1:
+        print("Multiple Desktop clients found; using:", desktop[0][0])
+    c = desktop[0][1]
     return c["client_id"], c["client_secret"]
 
 
