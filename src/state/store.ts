@@ -134,10 +134,12 @@ export const useStore = create<AppState>()(
   setDbOpen: (dbOpen) => set({ dbOpen }),
   toggleImmersive: () => set((s) => ({ immersive: !s.immersive })),
   toggleAirports: () => set((s) => ({ showAirports: !s.showAirports })),
-  // switching user updates the URL (/alex) and resets drill-down view state
+  // switching user updates the URL (/alex) and keeps the current view (filters, date
+  // range, open panel); only the map popup is cleared since it points at a specific
+  // feature that may not exist for the other user.
   setUserId: (userId) => {
     if (typeof window !== "undefined") window.history.pushState(null, "", `${BASE}${userId}`);
-    set({ userId, crossFilters: [], range: ALL_TIME, activeModuleId: null });
+    set({ userId, mapSelection: null });
   },
   setMapSelection: (mapSelection) =>
     set((s) => ({ mapSelection, mobileOpen: mapSelection ? "popup" : s.mobileOpen === "popup" ? null : s.mobileOpen })),

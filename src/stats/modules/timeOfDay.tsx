@@ -2,7 +2,7 @@ import type { StatModule } from "../types";
 import type { Flight } from "@/lib/types";
 import { Lines, type ChartBand } from "@/components/charts/Lines";
 import { MiniStats } from "@/components/ui/MiniStat";
-import { formatPct, localHour, actualDep, actualArr } from "@/lib/format";
+import { formatPct, localHour, actualDep, actualArr, schedDep, schedArr } from "@/lib/format";
 import { color } from "@/lib/palette";
 
 const isMorning = (h: number) => h >= 5 && h < 12;
@@ -50,7 +50,7 @@ export const timeOfDay: StatModule = {
   card: (ctx) => {
     const pctAM = (fs: Flight[]) => {
       let morning = 0;
-      for (const f of fs) if (isMorning(localHour(f.sched_dep, f.dep_timezone))) morning++;
+      for (const f of fs) if (isMorning(localHour(schedDep(f), f.dep_timezone))) morning++;
       return fs.length ? (morning / fs.length) * 100 : 0;
     };
     return {
@@ -62,8 +62,8 @@ export const timeOfDay: StatModule = {
     };
   },
   Panel: ({ ctx }) => {
-    const dep = hourPair(ctx.flights, (f) => f.sched_dep, (f) => actualDep(f), (f) => f.dep_timezone);
-    const arr = hourPair(ctx.flights, (f) => f.sched_arr, (f) => actualArr(f), (f) => f.arr_timezone);
+    const dep = hourPair(ctx.flights, (f) => schedDep(f), (f) => actualDep(f), (f) => f.dep_timezone);
+    const arr = hourPair(ctx.flights, (f) => schedArr(f), (f) => actualArr(f), (f) => f.arr_timezone);
     const series = [
       { key: "Scheduled", name: "Scheduled", color: color.accent },
       { key: "Actual", name: "Actual", color: color.secondary },
@@ -72,7 +72,7 @@ export const timeOfDay: StatModule = {
     // % of all flights (by local departure hour) in each part of the day
     const counts = new Array(WINDOWS.length).fill(0) as number[];
     for (const f of ctx.flights) {
-      const h = localHour(f.sched_dep, f.dep_timezone);
+      const h = localHour(schedDep(f), f.dep_timezone);
       const idx = WINDOWS.findIndex((w) => w.test(h));
       if (idx >= 0) counts[idx]++;
     }
@@ -107,8 +107,8 @@ export const timeOfDay: StatModule = {
   },
   // Per-flight colouring by local departure window.
   map: {
-    colorFlight: (f) => WINDOWS.find((w) => w.test(localHour(f.sched_dep, f.dep_timezone)))?.color ?? "#5C6575",
-    flightLegendId: (f) => WINDOWS.find((w) => w.test(localHour(f.sched_dep, f.dep_timezone)))?.id ?? "other",
+    colorFlight: (f) => WINDOWS.find((w) => w.test(localHour(schedDep(f), f.dep_timezone)))?.color ?? "#5C6575",
+    flightLegendId: (f) => WINDOWS.find((w) => w.test(localHour(schedDep(f), f.dep_timezone)))?.id ?? "other",
     legend: () => ({
       title: "Departure",
       items: WINDOWS.map((w) => ({ id: w.id, label: `${w.label} · ${w.sub}`, color: w.color, swatch: "line" as const })),

@@ -9,7 +9,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type Body = { user_id?: string; limit?: number; months_before?: number };
+type Body = { user_id?: string; message_ids?: string[] };
 
 export async function handleRequest(request: Request) {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -21,6 +21,7 @@ export async function handleRequest(request: Request) {
     const userId = body.user_id?.trim();
     if (!userId) throw new HttpError(400, "user_id is required");
 
+    const messageIds = Array.isArray(body.message_ids) ? body.message_ids : [];
     const supabase = createAdminClient();
     const account = await loadGmailAccount(supabase, userId);
 
@@ -31,8 +32,7 @@ export async function handleRequest(request: Request) {
       gmailRefreshToken: account.refreshToken,
       geminiApiKey: requireEnv("GEMINI_API_KEY"),
       owner: account.name || account.email ? { name: account.name, email: account.email } : undefined,
-      limit: body.limit,
-      monthsBefore: body.months_before,
+      messageIds,
     });
 
     return json({ ok: true, ...result });

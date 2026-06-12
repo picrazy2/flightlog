@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { StatModule } from "../types";
 import type { Flight } from "@/lib/types";
-import { sumDistanceMi, sumMinutes, routesFrom } from "@/lib/aggregate";
-import { formatDistance, formatDuration, formatDurationCompact, localHour, flightDistanceMi, flightMinutes } from "@/lib/format";
+import { sumDistanceMi, routesFrom } from "@/lib/aggregate";
+import { formatDistance, formatDuration, localHour, schedDep, flightDistanceMi, flightMinutes } from "@/lib/format";
 import { Segmented } from "@/components/ui/Segmented";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { BarsV } from "@/components/charts/BarsV";
@@ -51,7 +51,7 @@ function funFacts(flights: Flight[], settings: { units: "mi" | "km" }): Fact[] {
   }
 
   const redeyes = flights.filter((f) => {
-    const h = localHour(f.sched_dep, f.dep_timezone);
+    const h = localHour(schedDep(f), f.dep_timezone);
     return h >= 22 || h < 5;
   }).length;
   if (redeyes) facts.push({ label: "Red-eyes (dep 10pm–5am)", value: `${redeyes}` });
@@ -145,14 +145,12 @@ export const overall: StatModule = {
   card: (ctx) => {
     const flights = ctx.flights.length;
     const dist = sumDistanceMi(ctx.flights);
-    const mins = sumMinutes(ctx.flights);
     const prev = ctx.compareFlights;
     return {
       eyebrow: "Overall",
       stats: [
         { value: flights, unit: "flights", compareValue: prev ? prev.length : null },
         { value: dist, format: (n, s) => formatDistance(n, s), compareValue: prev ? sumDistanceMi(prev) : null },
-        { value: mins, format: (n) => formatDurationCompact(n), compareValue: prev ? sumMinutes(prev) : null },
       ],
     };
   },

@@ -141,8 +141,7 @@ export function normalizeBookingInput(
 
   return {
     ...(booking.id ? { id: requireUuid(booking.id, "booking.id") } : {}),
-    user_id: parseOptionalUuid(booking.user_id, "booking.user_id") ??
-      defaultUserId,
+    user_id: parseOptionalUserId(booking.user_id) ?? defaultUserId,
     booking_refs_airline: bookingRefsAirline,
     booking_ref_platform: cleanString(booking.booking_ref_platform),
     booking_platform: cleanString(booking.booking_platform),
