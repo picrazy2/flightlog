@@ -12,3 +12,8 @@ dist/
 
 # claude code session data
 .claude/
+
+# python
+__pycache__/
+*.pyc
+.venv/

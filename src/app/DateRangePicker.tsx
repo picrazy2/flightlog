@@ -114,7 +114,7 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
       )}
     >
       {(close) => (
-        <div className="w-[220px]">
+        <div className="w-[252px]">
           <Segmented
             aria-label="Time"
             size="sm"
