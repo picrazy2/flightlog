@@ -50,7 +50,11 @@ export function useStatContext(): { ctx: StatContext | null; isLoading: boolean;
     // (a ▲/▼ delta). All-time has no meaningful previous period → no comparison.
     let compareFlights: Flight[] | null = null;
     let compareMode: "delta" | "recent" | null = null;
-    if (compare && (range.start || range.end)) {
+    if (compare && temporal === "future") {
+      // upcoming view: the delta is the future total vs everything already flown
+      compareFlights = data.filter((f) => f.flight_date <= today && passesCross(f));
+      compareMode = "delta";
+    } else if (compare && (range.start || range.end)) {
       const prev = previousRange(range);
       if (prev) {
         compareFlights = data.filter((f) => inRange(f, prev) && passesTemporal(f) && passesCross(f));

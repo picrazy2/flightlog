@@ -131,7 +131,14 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
             ]}
           />
           {temporal === "future" ? (
-            <p className="px-2.5 py-1 text-caption text-ink-faint">Showing all upcoming flights.</p>
+            <div className="px-2.5 py-1">
+              <p className="text-caption text-ink-faint">Showing all upcoming flights.</p>
+              <div className="mt-2 flex items-center justify-between border-t border-border pt-2.5">
+                <span className="text-label text-ink-muted">Compare to past</span>
+                <Switch checked={compare} onChange={toggleCompare} />
+              </div>
+              {compare && <span className="text-caption text-ink-faint">Deltas are future vs everything flown.</span>}
+            </div>
           ) : (
             <>
           <div className="max-h-[280px] overflow-y-auto">
