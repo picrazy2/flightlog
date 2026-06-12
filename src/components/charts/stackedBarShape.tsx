@@ -7,6 +7,7 @@ interface ShapeOpts {
   color: string;
   activeId?: string | null;
   colorByRow?: (row: BarRowData) => string | undefined;
+  baseOpacity?: number; // per-series opacity (e.g. a lighter "extra" segment of the same color)
 }
 
 interface RechartsShapeProps {
@@ -59,7 +60,7 @@ export function makeBarShape(opts: ShapeOpts) {
     const r = round ? Math.min(4, width / 2, height / 2) : 0;
     const side: Side = opts.axis === "x" ? (negative ? "left" : "right") : negative ? "bottom" : "top";
     const fill = (payload && opts.colorByRow?.(payload)) ?? opts.color;
-    const opacity = opts.activeId && payload?.id !== opts.activeId ? 0.35 : 1;
+    const opacity = (opts.activeId && payload?.id !== opts.activeId ? 0.35 : 1) * (opts.baseOpacity ?? 1);
     return <path d={path(x, y, width, height, r, side)} fill={fill} fillOpacity={opacity} />;
   };
 }

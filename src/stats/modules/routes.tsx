@@ -165,12 +165,27 @@ export const routes: StatModule = {
         arr: f.arr_iata,
         tripType: f.trip_type ?? "",
         country: f.trip_type === "domestic" ? f.dep_country_name ?? f.dep_country ?? "" : "",
+        gc: Math.round(f.distance_mi ?? 0),
         value: Math.round(rankMetric === "distance" ? flightDistanceMi(f) : flightMinutes(f)),
       }))
       .sort((a, b) => (rankDir === "longest" ? b.value - a.value : a.value - b.value))
       .map((r, i) => ({ ...r, label: `${i + 1}. ${r.label}` }));
 
     const rankingRows = rankScope === "flights" ? flightRankRows : rankRows;
+    // flights-by-distance: stack great-circle + the extra flown over it (lighter shade)
+    const splitGc = rankScope === "flights" && rankMetric === "distance";
+    const rankSeries: Series[] = splitGc
+      ? [
+          { key: "gc", name: "Great-circle", color: color.accent },
+          { key: "extra", name: "Extra vs GC", color: color.accent, opacity: 0.4 },
+        ]
+      : [{ key: "value", name: rankMetric, color: color.accent }];
+    const rankModalRows: BarRowData[] = rankingRows.map((r): BarRowData => {
+      const gc = "gc" in r ? Number((r as { gc: number }).gc) : 0;
+      return splitGc
+        ? { id: r.id, label: r.label, gc, extra: Math.max(0, r.value - gc), tripType: r.tripType, country: r.country }
+        : { id: r.id, label: r.label, value: r.value, tripType: r.tripType, country: r.country };
+    });
 
     return (
       <>
@@ -303,10 +318,11 @@ export const routes: StatModule = {
               </div>
               <div className="overflow-y-auto" style={{ maxHeight: "62vh" }}>
                 <BarsH
-                  rows={rankingRows.map((r) => ({ id: r.id, label: r.label, value: r.value, tripType: r.tripType, country: r.country }))}
-                  series={[{ key: "value", name: rankMetric, color: color.accent }]}
+                  rows={rankModalRows}
+                  series={rankSeries}
                   unit={rankMetric === "distance" ? ctx.settings.units : "min"}
                   colorByRow={(row) => rankColor(String(row.tripType ?? ""), String(row.country ?? ""))}
+                  topAxis
                 />
               </div>
             </div>

@@ -12,4 +12,5 @@ export interface Series {
   key: string;
   name: string;
   color: string;
+  opacity?: number; // per-series fill opacity (e.g. a lighter "extra" stack segment)
 }

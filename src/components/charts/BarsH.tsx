@@ -28,10 +28,11 @@ interface Props {
   cap?: number; // show only the first `cap` rows with a "see all" toggle to reveal the rest
   barSize?: number; // fixed bar thickness (px); default lets recharts size it
   rowPx?: number; // vertical space per row (px); default 26 — smaller = skinnier/tighter
+  topAxis?: boolean; // put the value axis at the top (visible above a tall scrolling list)
 }
 
 // Horizontal, optionally stacked / 100%-stacked, interactive bar chart.
-export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit, cap, barSize, rowPx }: Props) {
+export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit, cap, barSize, rowPx, topAxis }: Props) {
   // on touch (mobile/tablet) a tap is the only way to see a value, so don't let it filter
   const pick = useIsMobile(1024) ? undefined : onPick;
   const [showAll, setShowAll] = useState(false);
@@ -80,6 +81,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
           <CartesianGrid horizontal={false} stroke={CHART.grid} />
           <XAxis
             type="number"
+            orientation={topAxis ? "top" : "bottom"}
             tick={axisTick}
             axisLine={false}
             tickLine={false}
@@ -138,7 +140,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
               isAnimationActive={false}
               barSize={barSize}
               cursor={pick ? "pointer" : undefined}
-              shape={makeBarShape({ keys: series.map((x) => x.key), thisKey: s.key, axis: "x", color: s.color, activeId, colorByRow })}
+              shape={makeBarShape({ keys: series.map((x) => x.key), thisKey: s.key, axis: "x", color: s.color, activeId, colorByRow, baseOpacity: s.opacity })}
             />
           ))}
         </BarChart>
