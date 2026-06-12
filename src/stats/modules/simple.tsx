@@ -63,8 +63,7 @@ export const airlines: StatModule = {
     }
     const ranked = [...acc.entries()]
       .map(([id, x]) => ({ id, label: x.label, domestic: Math.round(x.domestic), international: Math.round(x.international), total: x.domestic + x.international }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 12);
+      .sort((a, b) => b.total - a.total);
     const activeId = crossFilters.find((c) => c.id.startsWith("airline:"))?.id.split(":")[1] ?? null;
 
     return (
