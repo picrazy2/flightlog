@@ -25,6 +25,7 @@ import { CHART, axisTick } from "@/components/charts/chartTheme";
 import { useStore, ALL_TIME } from "@/state/store";
 import { yearRange, yearOfRange } from "../filters";
 import { color } from "@/lib/palette";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 type Metric = "flights" | "spend";
 type Basis = "total" | "flight" | "km" | "hour";
@@ -113,6 +114,8 @@ export const cost: StatModule = {
       };
     });
     const yearActive = yearOfRange(range);
+    // on touch (mobile/tablet) a tap is the only way to read a bar's value, so don't filter
+    const noPick = useIsMobile(1024);
     const onYear = (id: string) => setRange(yearActive === id ? ALL_TIME : yearRange(id));
     // pie compares cash vs points by flight share — only meaningful for the flights metric
     const showPie = metric === "flights" && chartType === "pie";
@@ -200,9 +203,9 @@ export const cost: StatModule = {
                 )}
                 <Tooltip content={<ChartTooltip units={tipUnits} />} cursor={{ fill: CHART.cursor }} />
                 <Bar yAxisId="cash" dataKey="cash" name={cashName} fill={CASH_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false}
-                  cursor="pointer" onClick={(_: unknown, i: number) => onYear(rows[i].id)} />
+                  cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
                 <Bar yAxisId={metric === "spend" ? "points" : "cash"} dataKey="points" name={pointsName} fill={POINTS_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false}
-                  cursor="pointer" onClick={(_: unknown, i: number) => onYear(rows[i].id)} />
+                  cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
               </ComposedChart>
             ) : (
               <PieChart>

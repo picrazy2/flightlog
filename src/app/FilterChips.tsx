@@ -1,10 +1,16 @@
 import { useMemo, useState } from "react";
 import { useStore } from "@/state/store";
 import { useFlights } from "@/data/useFlights";
+import { useIsMobile } from "@/lib/useIsMobile";
 import { Popover } from "@/components/ui/Popover";
 import { Chevron } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import { facetOptions, FACET_LABELS, type FacetCand } from "@/stats/facetOptions";
+
+// The short, code-like value for a chip (e.g. "UA", "BOS", "US") — the part of the
+// filter id after the facet prefix. Cabin class has no clean code, so keep its label.
+const chipCode = (facet: string, id: string, label: string) =>
+  facet === "class" ? label : id.slice(facet.length + 1);
 
 // Active drill-down filters, grouped by facet. Each chip is an OR group: clicking it
 // opens a multi-select to add/remove values of that type; chips of different types AND.
@@ -12,6 +18,7 @@ export function FilterChips() {
   const { crossFilters, toggleCrossFilter, removeFacet, clearCrossFilters } = useStore();
   const all = useFlights().data ?? [];
   const options = useMemo(() => facetOptions(all), [all]);
+  const isMobile = useIsMobile();
 
   // group active filters by facet, preserving the order facets first appeared
   const groups: { facet: string; ids: Set<string>; labels: string[] }[] = [];
@@ -38,6 +45,7 @@ export function FilterChips() {
           facet={g.facet}
           ids={g.ids}
           labels={g.labels}
+          compact={isMobile}
           options={options[g.facet] ?? []}
           onToggle={toggleCrossFilter}
           onRemove={() => removeFacet(g.facet)}
@@ -56,6 +64,7 @@ function FilterChipGroup({
   facet,
   ids,
   labels,
+  compact,
   options,
   onToggle,
   onRemove,
@@ -63,11 +72,14 @@ function FilterChipGroup({
   facet: string;
   ids: Set<string>;
   labels: string[];
+  compact?: boolean; // mobile: hide the facet word and show an abbreviated value
   options: FacetCand[];
   onToggle: (f: FacetCand["filter"]) => void;
   onRemove: () => void;
 }) {
   const [q, setQ] = useState("");
+  const firstId = [...ids][0];
+  const value = compact ? chipCode(facet, firstId, labels[0]) : labels[0];
   const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const shown = options.filter((o) => tokens.every((t) => o.label.toLowerCase().includes(t)));
 
@@ -88,9 +100,9 @@ function FilterChipGroup({
             }}
             className="focus-ring inline-flex items-center gap-1.5"
           >
-            <span className="text-accent">{FACET_LABELS[facet] ?? facet}</span>
+            {!compact && <span className="text-accent">{FACET_LABELS[facet] ?? facet}</span>}
             <span className="max-w-[200px] truncate font-medium">
-              {labels[0]}
+              {value}
               {labels.length > 1 && <span className="text-ink-muted"> +{labels.length - 1}</span>}
             </span>
             <Chevron dir="down" size={10} color="var(--accent)" />
