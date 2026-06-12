@@ -1,9 +1,9 @@
 import type { StatModule, StatContext } from "../types";
-import { uniqueCount } from "@/lib/aggregate";
 import { EntityVisitsPanel } from "../EntityVisitsPanel";
 import { CATEGORICAL, color } from "@/lib/palette";
 import { countryFilter } from "../filters";
 import { TOTAL_COUNTRIES } from "./continents";
+import { COUNTRY_GEO, sovereignOf } from "@/lib/continents";
 
 const INTL = color.secondary;
 // country palette excludes the international colour (secondary) so no country matches it
@@ -26,10 +26,10 @@ export const countries: StatModule = {
   id: "countries",
   order: 5,
   card: (ctx) => {
-    const n = uniqueCount([...ctx.airports.values()], (a) => a.country);
-    const prev = ctx.compareFlights
-      ? uniqueCount(ctx.compareFlights.flatMap((f) => [f.dep_country, f.arr_country]), (x) => x)
-      : 0;
+    // count distinct sovereign countries (territories resolve to their parent)
+    const distinct = (isos: (string | null)[]) => new Set(isos.map(sovereignOf).filter((s): s is string => !!s && !!COUNTRY_GEO[s])).size;
+    const n = distinct([...ctx.airports.values()].map((a) => a.country));
+    const prev = ctx.compareFlights ? distinct(ctx.compareFlights.flatMap((f) => [f.dep_country, f.arr_country])) : 0;
     return { eyebrow: "Countries", headline: `${n}/${TOTAL_COUNTRIES} Countries`, stats: [{ value: n, compareValue: ctx.compareFlights ? prev : null }] };
   },
   Panel: ({ ctx }) => (

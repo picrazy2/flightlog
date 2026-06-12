@@ -3,7 +3,7 @@ import type { CrossFilter } from "@/state/store";
 import { airlineFilter, aircraftFilter, airportFilter, cityFilter, countryFilter, classFilter, tripTypeFilter, routeFilter, continentFilter, regionFilter } from "./filters";
 import { CABIN_LABELS } from "@/lib/cabin";
 import { routeKeyUndirected } from "@/lib/geo";
-import { COUNTRY_GEO, CONTINENTS } from "@/lib/continents";
+import { COUNTRY_GEO, CONTINENTS, sovereignOf } from "@/lib/continents";
 
 const CONT_NAME: Record<string, string> = Object.fromEntries(CONTINENTS.map((c) => [c.code, c.name]));
 
@@ -70,7 +70,8 @@ export function facetOptions(flights: Flight[]): Record<string, FacetCand[]> {
     const conts = new Set<string>();
     const regs = new Set<string>();
     for (const iso of [f.dep_country, f.arr_country]) {
-      const g = iso ? COUNTRY_GEO[iso] : undefined;
+      const sov = sovereignOf(iso); // territory counts toward its parent
+      const g = sov ? COUNTRY_GEO[sov] : undefined;
       if (g) {
         conts.add(g.continent);
         regs.add(g.subregion);

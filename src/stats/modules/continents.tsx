@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { StatModule, StatContext } from "../types";
-import { CONTINENTS, COUNTRY_GEO, type ContinentCode } from "@/lib/continents";
+import { CONTINENTS, COUNTRY_GEO, TERRITORY_PARENT, sovereignOf, type ContinentCode } from "@/lib/continents";
 import { BarsV } from "@/components/charts/BarsV";
 import { BarsH, type BarRowData } from "@/components/charts/BarsH";
 import { Segmented } from "@/components/ui/Segmented";
@@ -30,11 +30,16 @@ export function geoFilterFillColors(filters: CrossFilter[]): Map<string, string>
     const val = f.id.slice(sep + 1);
     if (kind === "country") {
       const cont = COUNTRY_GEO[val]?.continent;
-      if (cont) m.set(val, CONT_COLOR[cont]);
+      if (cont) {
+        m.set(val, CONT_COLOR[cont]);
+        for (const [t, p] of Object.entries(TERRITORY_PARENT)) if (p === val) m.set(t, CONT_COLOR[cont]); // its territories too
+      }
     } else if (kind === "continent") {
       for (const [iso, g] of Object.entries(COUNTRY_GEO)) if (g.continent === val) m.set(iso, CONT_COLOR[val as ContinentCode]);
+      for (const [t, p] of Object.entries(TERRITORY_PARENT)) if (COUNTRY_GEO[p]?.continent === val) m.set(t, CONT_COLOR[val as ContinentCode]);
     } else if (kind === "region") {
       for (const [iso, g] of Object.entries(COUNTRY_GEO)) if (g.subregion === val) m.set(iso, CONT_COLOR[g.continent]);
+      for (const [t, p] of Object.entries(TERRITORY_PARENT)) { const g = COUNTRY_GEO[p]; if (g?.subregion === val) m.set(t, CONT_COLOR[g.continent]); }
     }
   }
   return m;
@@ -57,14 +62,18 @@ export const TOTAL_REGIONS = TOTAL_BY_SUBREGION.size;
 function visitedCountries(ctx: StatContext) {
   const m = new Map<string, { visits: number; name: string }>();
   for (const a of ctx.airports.values()) {
-    if (!a.country || !COUNTRY_GEO[a.country]) continue;
-    const cur = m.get(a.country) ?? { visits: 0, name: a.countryName ?? a.country };
+    const sov = sovereignOf(a.country); // a territory counts toward its parent
+    if (!sov || !COUNTRY_GEO[sov]) continue;
+    const cur = m.get(sov) ?? { visits: 0, name: a.countryName ?? sov };
     cur.visits += a.visits;
-    m.set(a.country, cur);
+    m.set(sov, cur);
   }
   return m;
 }
-const contOf = (iso: string | null) => (iso ? COUNTRY_GEO[iso]?.continent ?? null : null);
+const contOf = (iso: string | null) => {
+  const s = sovereignOf(iso);
+  return s ? COUNTRY_GEO[s]?.continent ?? null : null;
+};
 
 export const continents: StatModule = {
   id: "continents",

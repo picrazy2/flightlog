@@ -1,6 +1,15 @@
 import type { CrossFilter, DateRange } from "@/state/store";
 import { routeKeyUndirected } from "@/lib/geo";
-import { COUNTRY_GEO } from "@/lib/continents";
+import { COUNTRY_GEO, sovereignOf } from "@/lib/continents";
+
+const contOf = (iso: string | null) => {
+  const s = sovereignOf(iso);
+  return s ? COUNTRY_GEO[s]?.continent ?? null : null;
+};
+const regionOf = (iso: string | null) => {
+  const s = sovereignOf(iso);
+  return s ? COUNTRY_GEO[s]?.subregion ?? null : null;
+};
 
 // Centralized drill-down filter builders. Modules use these on chart-bar clicks so
 // predicates stay consistent and the shell needs no per-facet logic.
@@ -40,17 +49,13 @@ export const countryFilter = (iso: string, name: string): CrossFilter => ({
 export const continentFilter = (code: string, name: string): CrossFilter => ({
   id: `continent:${code}`,
   label: name,
-  test: (f) =>
-    (f.dep_country ? COUNTRY_GEO[f.dep_country]?.continent : null) === code ||
-    (f.arr_country ? COUNTRY_GEO[f.arr_country]?.continent : null) === code,
+  test: (f) => contOf(f.dep_country) === code || contOf(f.arr_country) === code,
 });
 
 export const regionFilter = (region: string): CrossFilter => ({
   id: `region:${region}`,
   label: region,
-  test: (f) =>
-    (f.dep_country ? COUNTRY_GEO[f.dep_country]?.subregion : null) === region ||
-    (f.arr_country ? COUNTRY_GEO[f.arr_country]?.subregion : null) === region,
+  test: (f) => regionOf(f.dep_country) === region || regionOf(f.arr_country) === region,
 });
 
 export const airlineFilter = (iata: string, name: string): CrossFilter => ({
