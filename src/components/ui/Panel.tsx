@@ -20,8 +20,9 @@ export function PanelFooter({ children }: { children: ReactNode }) {
   const node = useContext(FooterSlot);
   if (node) return createPortal(children, node);
   // mobile fallback (no fixed footer slot): render inline and let it scroll with the
-  // content rather than sticking to the bottom of the drawer
-  return <div className="-mx-5 -mb-4 mt-3 border-t border-border bg-surface-1 px-4 py-3">{children}</div>;
+  // content rather than sticking to the bottom of the drawer. Negative margins match the
+  // mobile drawer's px-4 padding so the full-bleed border doesn't overflow horizontally.
+  return <div className="-mx-4 -mb-4 mt-3 border-t border-border bg-surface-1 px-4 py-3">{children}</div>;
 }
 
 // Bottom-left detail panel: header → scrollable body → (optional) fixed footer.
