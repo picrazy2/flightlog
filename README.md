@@ -52,5 +52,5 @@ countries from OurAirports, airlines from OpenFlights, aircraft types from an op
 database, FX from the @fawazahmed0 currency API, and flight schedules / actual times /
 flown tracks from AeroAPI (FlightAware).
 
-`scripts/` contains one-off Python/Node utilities for CSV↔Gmail reconciliation and
-backfills (not part of the app build).
+`scripts/` holds build helpers (`cf-redirects.mjs`). One-off reconciliation/backfill
+utilities and scratch data live in `scratch/` (gitignored, local only).
