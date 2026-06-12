@@ -72,7 +72,7 @@ function runPile(Matter: any, el: HTMLElement): () => void {
       restitution: 0.08,
       chamfer: { radius: Math.min(bw, bh) * 0.2 },
       angle: (Math.random() - 0.5) * 0.7,
-      render: { sprite: { texture, xScale: scale, yScale: scale } },
+      render: { opacity: 0.62 + Math.random() * 0.16, sprite: { texture, xScale: scale, yScale: scale } },
     });
     Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.22);
     Composite.add(engine.world, body);
