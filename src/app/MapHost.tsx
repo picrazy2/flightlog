@@ -455,7 +455,10 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
         const layers = ["airports", "routes-hit"].filter((l) => map.getLayer(l));
         if (map.queryRenderedFeatures(e.point, { layers }).length === 0) {
           if (isMobileRef.current) useStore.getState().setMapSelection(null);
-          else clickPopup.current?.remove();
+          else {
+            clickPopup.current?.remove();
+            restoreHighlight(); // also clears a lingering highlight left by a minimized popup
+          }
         }
       });
     });
