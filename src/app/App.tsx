@@ -33,7 +33,7 @@ export function App() {
   }
   if (!ctx) {
     return isLoading ? (
-      <SplashScreen loading />
+      <SplashScreen />
     ) : (
       <div className="grid h-full place-items-center text-ink-muted">No data</div>
     );
