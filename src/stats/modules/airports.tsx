@@ -4,16 +4,18 @@ import type { Flight } from "@/lib/types";
 import { uniqueCount, airportsFrom } from "@/lib/aggregate";
 import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { OptionsButton } from "@/components/ui/OptionsButton";
 import { BarsH, type BarRowData } from "@/components/charts/BarsH";
-import { useStore, ALL_TIME } from "@/state/store";
-import { airportFilter, spanRange, rangeMatchesSpan } from "../filters";
+import { BarsV } from "@/components/charts/BarsV";
+import { useStore } from "@/state/store";
+import { airportFilter } from "../filters";
 import { color, categoricalFor } from "@/lib/palette";
 import { buildYearGroups } from "@/lib/yearGroups";
 import { visitClassByAirport } from "../entityBreakdown";
+import { yearStack } from "../yearStack";
 
-type View = "type" | "domintl" | "year";
-const TOP = 12;
+const TOP = 8;
 const CONNECTION_MS = 16 * 60 * 60 * 1000;
 
 const CONTINENTS: { code: string; name: string }[] = [
@@ -25,6 +27,7 @@ const CONTINENTS: { code: string; name: string }[] = [
   { code: "AF", name: "Africa" },
   { code: "AN", name: "Antarctica" },
 ];
+const CONT_NAME: Record<string, string> = Object.fromEntries(CONTINENTS.map((c) => [c.code, c.name]));
 
 // Group consecutive years when there are many of them (>10 → pairs, >20 → triples…).
 // Per-airport, per-year connection-deduped visits (visits = dep + arr − connections).
@@ -66,168 +69,188 @@ export const airports: StatModule = {
     };
   },
   Panel: ({ ctx }) => {
-    const [view, setView] = useState<View>("type");
+    const [metric, setMetric] = useState<"visits" | "destinations">("visits");
+    const [vBreak, setVBreak] = useState<"type" | "domintl" | "year">("type");
+    const [dBreak, setDBreak] = useState<"domintl" | "country" | "continent">("domintl");
     const [percent, setPercent] = useState(false);
-    const [yearByYear, setYearByYear] = useState(false); // year view: flip to one bar per year
-    const { toggleCrossFilter, crossFilters, range, setRange } = useStore();
+    const { toggleCrossFilter, crossFilters } = useStore();
     // airport charts exclude the airport facet so selecting airports doesn't hide the rest
     const airportFlights = ctx.facetFlights("airport");
-    const airports = [...airportsFrom(airportFlights).values()];
+    const aggs = [...airportsFrom(airportFlights).values()];
     const airportActive = crossFilters.filter((c) => c.id.startsWith("airport:")).map((c) => c.id.slice("airport:".length));
 
-    const groupControl = (
-      <>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Segmented
-          aria-label="Breakdown"
-          size="sm"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: "type", label: "Visit type" },
-            { value: "domintl", label: "Dom·Intl" },
-            { value: "year", label: "Year" },
-          ]}
-        />
-        <OptionsButton>
-          <div className="flex items-center justify-between">
-            <span className="text-label text-ink-muted">100% stacked</span>
-            <Switch checked={percent} onChange={setPercent} />
-          </div>
-          {view === "year" && (
-            <div className="flex items-center justify-between">
-              <span className="text-label text-ink-muted">One bar per year</span>
-              <Switch checked={yearByYear} onChange={setYearByYear} />
-            </div>
-          )}
-        </OptionsButton>
-      </div>
-      <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Most-visited airports — choose how to break each bar down</div>
-      </>
-    );
+    // build the first chart's rows + series from the metric + breakdown
+    let rows: BarRowData[] = [];
+    let series: { key: string; name: string; color: string }[] = [];
+    const unit = metric === "destinations" ? "destinations" : "visits";
 
-    // Visit type → one airport per bar, stacked departures / arrivals / connections.
-    if (view === "type") {
-      const rows: BarRowData[] = airports
-        .map((a) => ({
-          id: a.iata,
-          label: a.iata,
-          departures: a.departures - a.connections,
-          arrivals: a.arrivals - a.connections,
-          connections: a.connections,
-        }))
+    if (metric === "visits" && vBreak === "type") {
+      series = [
+        { key: "departures", name: "Departures", color: color.accent },
+        { key: "arrivals", name: "Arrivals", color: color.secondary },
+        { key: "connections", name: "Connections", color: "#A78BFA" },
+      ];
+      rows = aggs
+        .map((a) => ({ id: a.iata, label: a.iata, departures: a.departures - a.connections, arrivals: a.arrivals - a.connections, connections: a.connections }))
         .sort((a, b) => b.departures + b.arrivals + b.connections - (a.departures + a.arrivals + a.connections));
-      return (
-        <>
-          {groupControl}
-          <BarsH
-            rows={rows}
-            percent={percent}
-            activeId={airportActive}
-            unit="visits"
-            cap={TOP}
-            series={[
-              { key: "departures", name: "Departures", color: color.accent },
-              { key: "arrivals", name: "Arrivals", color: color.secondary },
-              { key: "connections", name: "Connections", color: "#A78BFA" },
-            ]}
-            onPick={(id) => toggleCrossFilter(airportFilter(id))}
-          />
-        </>
-      );
-    }
-
-    // Dom·Intl → one airport per bar, stacked domestic / international (connection-aware).
-    if (view === "domintl") {
-      const byAirport = visitClassByAirport(airportFlights);
-      const rows: BarRowData[] = [...byAirport.entries()]
+    } else if (metric === "visits" && vBreak === "domintl") {
+      series = [
+        { key: "domestic", name: "Domestic", color: color.accent },
+        { key: "international", name: "International", color: color.secondary },
+      ];
+      rows = [...visitClassByAirport(airportFlights).entries()]
         .map(([iata, x]) => ({ id: iata, label: iata, domestic: x.dom, international: x.intl }))
         .sort((a, b) => b.domestic + b.international - (a.domestic + a.international));
-      return (
-        <>
-          {groupControl}
-          <BarsH
-            rows={rows}
-            percent={percent}
-            activeId={airportActive}
-            unit="visits"
-            cap={TOP}
-            series={[
-              { key: "domestic", name: "Domestic", color: color.accent },
-              { key: "international", name: "International", color: color.secondary },
-            ]}
-            onPick={(id) => toggleCrossFilter(airportFilter(id))}
-          />
-        </>
-      );
+    } else if (metric === "visits") {
+      // year(-group) visits
+      const allYears = [...new Set(airportFlights.map((f) => f.flight_date.slice(0, 4)))].sort();
+      const { groups } = buildYearGroups(allYears);
+      series = groups.map((g, i) => ({ key: g.key, name: g.label, color: categoricalFor(g.key, i) }));
+      const vby = visitsByAirportYear(airportFlights);
+      rows = [...vby.entries()]
+        .map(([iata, ym]) => {
+          const row: BarRowData = { id: iata, label: iata };
+          let total = 0;
+          for (const g of groups) {
+            const v = g.members.reduce((s, y) => s + (ym.get(y) ?? 0), 0);
+            row[g.key] = v;
+            total += v;
+          }
+          row.__total = total;
+          return row;
+        })
+        .sort((a, b) => Number(b.__total) - Number(a.__total));
+    } else {
+      // DESTINATIONS: per airport, the distinct other airports it connects to, stacked by
+      // the destination's dom/intl (relative to the home airport), country, or continent.
+      const homeCountry = new Map<string, string | null>();
+      const dests = new Map<string, Map<string, { country: string | null; countryName: string | null; continent: string | null }>>();
+      const add = (a: string, b: string, info: { country: string | null; countryName: string | null; continent: string | null }) => {
+        const m = dests.get(a) ?? new Map();
+        if (!m.has(b)) m.set(b, info);
+        dests.set(a, m);
+      };
+      for (const f of airportFlights) {
+        homeCountry.set(f.dep_iata, f.dep_country ?? null);
+        homeCountry.set(f.arr_iata, f.arr_country ?? null);
+        add(f.dep_iata, f.arr_iata, { country: f.arr_country ?? null, countryName: f.arr_country_name ?? null, continent: f.arr_continent ?? null });
+        add(f.arr_iata, f.dep_iata, { country: f.dep_country ?? null, countryName: f.dep_country_name ?? null, continent: f.dep_continent ?? null });
+      }
+      const bucket = (home: string, info: { country: string | null; countryName: string | null; continent: string | null }) =>
+        dBreak === "domintl"
+          ? info.country && info.country === homeCountry.get(home) ? "domestic" : "international"
+          : dBreak === "country"
+          ? info.countryName ?? info.country ?? "—"
+          : CONT_NAME[info.continent ?? ""] ?? "—";
+      // per-airport bucket counts
+      const perAirport = new Map<string, Map<string, number>>();
+      const bucketTotal = new Map<string, number>();
+      for (const [iata, dm] of dests) {
+        const bm = new Map<string, number>();
+        for (const info of dm.values()) {
+          const k = bucket(iata, info);
+          bm.set(k, (bm.get(k) ?? 0) + 1);
+          bucketTotal.set(k, (bucketTotal.get(k) ?? 0) + 1);
+        }
+        perAirport.set(iata, bm);
+      }
+      if (dBreak === "domintl") {
+        series = [
+          { key: "domestic", name: "Domestic", color: color.accent },
+          { key: "international", name: "International", color: color.secondary },
+        ];
+      } else {
+        const top = [...bucketTotal.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k]) => k);
+        series = [...top.map((k, i) => ({ key: k, name: k, color: categoricalFor(k, i) })), { key: "__other", name: "Other", color: "#475569" }];
+      }
+      const topKeys = new Set(series.map((s) => s.key));
+      rows = [...perAirport.entries()]
+        .map(([iata, bm]) => {
+          const row: BarRowData = { id: iata, label: iata };
+          let total = 0;
+          for (const s of series) row[s.key] = 0;
+          for (const [k, n] of bm) {
+            const key = topKeys.has(k) ? k : "__other";
+            row[key] = (Number(row[key]) || 0) + n;
+            total += n;
+          }
+          row.__total = total;
+          return row;
+        })
+        .sort((a, b) => Number(b.__total) - Number(a.__total));
     }
 
-    // Year views bucket consecutive years when there are many of them.
-    const allYears = [...new Set(ctx.flights.map((f) => f.flight_date.slice(0, 4)))].sort();
-    const { groups } = buildYearGroups(allYears);
+    // second chart: per-year, by top airport (visits = sum; destinations = unique airports/yr)
+    const yc = yearStack({
+      flights: airportFlights,
+      entities: (f) => [f.dep_iata, f.arr_iata],
+      value: () => 1,
+      label: (id) => id,
+      color: (id, i) => categoricalFor(id, i),
+      mode: metric === "destinations" ? "unique" : "sum",
+      topN: 8,
+    });
 
-    // Year flipped → one bar per INDIVIDUAL year (no bucketing), stacked by continent
-    // (unique airports). The default chart below keeps the grouped-year view.
-    if (yearByYear) {
-      const contOf = new Map<string, string>();
-      for (const f of ctx.flights) {
-        contOf.set(f.dep_iata, f.dep_continent ?? "??");
-        contOf.set(f.arr_iata, f.arr_continent ?? "??");
-      }
-      const perYear = new Map<string, Map<string, Set<string>>>(); // year → continent → airports
-      for (const f of ctx.flights) {
-        const y = f.flight_date.slice(0, 4);
-        const ym = perYear.get(y) ?? new Map<string, Set<string>>();
-        for (const iata of [f.dep_iata, f.arr_iata]) {
-          const c = contOf.get(iata) ?? "??";
-          const set = ym.get(c) ?? new Set<string>();
-          set.add(iata);
-          ym.set(c, set);
-        }
-        perYear.set(y, ym);
-      }
-      const present = CONTINENTS.filter((c) => [...perYear.values()].some((ym) => (ym.get(c.code)?.size ?? 0) > 0));
-      const series = present.map((c, i) => ({ key: c.code, name: c.name, color: categoricalFor(c.code, i) }));
-      const rows: BarRowData[] = allYears.map((y) => {
-        const ym = perYear.get(y);
-        const row: BarRowData = { id: y, label: y };
-        for (const c of present) row[c.code] = ym?.get(c.code)?.size ?? 0;
-        return row;
-      });
-      const yearActive = allYears.find((y) => rangeMatchesSpan(range, y, y)) ?? null;
-      const toggleSingleYear = (y: string) => setRange(rangeMatchesSpan(range, y, y) ? ALL_TIME : spanRange(y, y, y));
-      return (
-        <BarsH
-          rows={rows}
-          percent={percent}
-          series={series}
-          activeId={yearActive}
-          unit="airports"
-          onPick={(id) => toggleSingleYear(id)}
-        />
-      );
-    }
-
-    // Year (default) → one airport per bar, stacked by year(-group) visits.
-    const vby = visitsByAirportYear(airportFlights);
-    const series = groups.map((g, i) => ({ key: g.key, name: g.label, color: categoricalFor(g.key, i) }));
-    const rows: BarRowData[] = [...vby.entries()]
-      .map(([iata, ym]) => {
-        const row: BarRowData = { id: iata, label: iata };
-        let total = 0;
-        for (const g of groups) {
-          const v = g.members.reduce((s, y) => s + (ym.get(y) ?? 0), 0);
-          row[g.key] = v;
-          total += v;
-        }
-        row.__total = total;
-        return row;
-      })
-      .sort((a, b) => Number(b.__total) - Number(a.__total));
     return (
       <>
-        {groupControl}
-        <BarsH rows={rows} percent={percent} series={series} activeId={airportActive} unit="visits" cap={TOP} onPick={(id) => toggleCrossFilter(airportFilter(id))} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Segmented
+            aria-label="Metric"
+            size="sm"
+            value={metric}
+            onChange={setMetric}
+            options={[
+              { value: "visits", label: "Visits" },
+              { value: "destinations", label: "Destinations" },
+            ]}
+          />
+          <div className="flex items-center gap-2">
+            {metric === "visits" ? (
+              <Dropdown
+                aria-label="Breakdown"
+                size="sm"
+                value={vBreak}
+                onChange={setVBreak}
+                options={[
+                  { value: "type", label: "Visit type" },
+                  { value: "domintl", label: "Dom·Intl" },
+                  { value: "year", label: "Year" },
+                ]}
+              />
+            ) : (
+              <Dropdown
+                aria-label="Breakdown"
+                size="sm"
+                value={dBreak}
+                onChange={setDBreak}
+                options={[
+                  { value: "domintl", label: "Dom·Intl" },
+                  { value: "country", label: "Countries" },
+                  { value: "continent", label: "Continents" },
+                ]}
+              />
+            )}
+            <OptionsButton>
+              <div className="flex items-center justify-between">
+                <span className="text-label text-ink-muted">100% stacked</span>
+                <Switch checked={percent} onChange={setPercent} />
+              </div>
+            </OptionsButton>
+          </div>
+        </div>
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
+          {metric === "visits" ? "Most-visited airports" : "Airports by distinct destinations reached"}
+        </div>
+        <BarsH rows={rows} percent={percent} series={series} activeId={airportActive} unit={unit} cap={TOP} onPick={(id) => toggleCrossFilter(airportFilter(id))} />
+
+        {yc.rows.length > 1 && (
+          <>
+            <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
+              {metric === "destinations" ? "Unique airports" : "Visits"} per year, by top airport
+            </div>
+            <BarsV rows={yc.rows} series={yc.series} unit={metric === "destinations" ? "airports" : "visits"} />
+          </>
+        )}
       </>
     );
   },
