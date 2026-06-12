@@ -6,10 +6,9 @@ whole app**. Frontend is React + Vite + Tailwind + Recharts; backend is Supabase
 + Edge Functions). Deployed on Cloudflare Pages at **[journia.co](https://journia.co)**.
 
 ## Docs
-- `DECISIONS.md` — log of architectural/product decisions.
 - `docs/ARCHITECTURE.md` — the registry pattern (no per-stat branching).
 - `docs/DESIGN_SYSTEM.md` — tokens, type, color, motion, component rules.
-- `docs/PRODUCT_SPEC.md` — feature spec / backlog.
+- `docs/DECISIONS.md` — log of architectural/product decisions.
 
 ## What it does
 - **Interactive map** — great-circle routes + real flown tracks on a globe or flat map

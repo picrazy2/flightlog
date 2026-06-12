@@ -21,14 +21,15 @@ src/
 │   └── modules/                # ONE FILE PER STAT — the only place stat logic lives
 │       ├── overall.tsx
 │       ├── airports.tsx
-│       ├── airlines.tsx
-│       ├── cities.tsx
+│       ├── simple.tsx          # airlines, cities, aircraft (share countModule)
+│       ├── countModule.tsx     # factory: count-style card + ranked-bar panel
 │       ├── countries.tsx
+│       ├── continents.tsx
 │       ├── routes.tsx
 │       ├── domesticIntl.tsx
 │       ├── delays.tsx
+│       ├── cabinClass.tsx
 │       ├── timeOfDay.tsx
-│       ├── aircraft.tsx
 │       └── cost.tsx
 ├── components/ui/       # leaf components (Button, Segmented, Card, StatCard, Panel, Legend…)
 ├── map/                 # MapLibre setup, layers, colorBy is driven BY the active module
