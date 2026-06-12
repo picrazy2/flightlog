@@ -94,7 +94,7 @@ export const useStore = create<AppState>()(
   persist(
     (set) => ({
   range: ALL_TIME,
-  compare: true, // comparison on by default; grey deltas when the range has no valid prior period
+  compare: false, // off by default (all-time / future); picking a bounded range turns it on
   activeModuleId: null,
   settings: { units: "mi", showTracks: true, markEstimated: true, currency: "USD" },
   legendFilter: {},
@@ -170,7 +170,6 @@ export const useStore = create<AppState>()(
       partialize: (s) => ({
         settings: s.settings,
         showAirports: s.showAirports,
-        compare: s.compare,
       }),
       // deep-merge so settings keys added in future builds keep their defaults
       merge: (persisted, current) => {
