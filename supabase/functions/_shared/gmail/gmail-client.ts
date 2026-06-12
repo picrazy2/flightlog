@@ -214,7 +214,7 @@ async function getCurrentHistoryId(accessToken: string): Promise<string> {
 
 const EMPTY_PAGE_RETRIES = 2;
 
-async function listMessageIdsBySearch(
+export async function listMessageIdsBySearch(
   accessToken: string,
   q: string,
   maxResults = MAX_IDS_PER_QUERY,
@@ -280,7 +280,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchMessages(
+export async function fetchMessages(
   accessToken: string,
   messageIds: string[],
 ): Promise<GmailMessage[]> {

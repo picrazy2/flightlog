@@ -707,7 +707,7 @@ function buildFlightInput(
 
 // Real booking content worth a bookings row — excludes email provenance,
 // which is always present. A boarding pass with no cost/PNR should not create one.
-function hasBookingContent(parsed: GeminiParsedBookingEmail): boolean {
+export function hasBookingContent(parsed: GeminiParsedBookingEmail): boolean {
   return Boolean(
     parsed.cost_cash != null ||
       parsed.cost_points != null ||
@@ -719,7 +719,7 @@ function hasBookingContent(parsed: GeminiParsedBookingEmail): boolean {
   );
 }
 
-function buildBookingInput(
+export function buildBookingInput(
   parsed: GeminiParsedBookingEmail,
   userId: string | null,
   message: GmailMessage,
@@ -739,7 +739,7 @@ function buildBookingInput(
 
 // One provenance entry for the bookings.emails array.
 type BookingEmailKind = "booking" | "schedule_change" | "cancellation";
-function bookingEmailEntry(message: GmailMessage, kind: BookingEmailKind) {
+export function bookingEmailEntry(message: GmailMessage, kind: BookingEmailKind) {
   return {
     message_id: message.id,
     subject: message.subject,
@@ -911,7 +911,7 @@ function instantsDiffer(a: string, b: string): boolean {
   return Math.abs(ta - tb) > 60_000; // ignore sub-minute jitter
 }
 
-async function linkBooking(
+export async function linkBooking(
   supabase: SupabaseClient,
   flightId: string,
   bookingId: string,
