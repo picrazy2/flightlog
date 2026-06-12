@@ -98,6 +98,12 @@ export const cost: StatModule = {
       b.hours += hoursOf(f);
       buckets.set(key, b);
     }
+    // all flights per bucket (priced or not) → "priced / total" in the hover
+    const totalByKey = new Map<string, number>();
+    for (const f of sourceFlights) {
+      const key = group === "year" ? f.flight_date.slice(0, 4) : f.cabin_class ?? "unknown";
+      totalByKey.set(key, (totalByKey.get(key) ?? 0) + 1);
+    }
     const denom = (b: { flights: number; dist: number; hours: number }) =>
       basis === "total" ? 1 : basis === "flight" ? b.flights || 1 : basis === "km" ? b.dist || 1 : b.hours || 1;
     const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -116,6 +122,7 @@ export const cost: StatModule = {
         international: r2(conv(b.intl / denom(b))),
         combined: r2(conv((b.dom + b.intl) / denom(b))),
         flights: b.flights,
+        flightsTotal: totalByKey.get(id) ?? b.flights,
       }))
       .sort((a, b) => (buckets.get(a.id)!.sort - buckets.get(b.id)!.sort));
     if (pct) {
