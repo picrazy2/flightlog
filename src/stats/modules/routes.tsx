@@ -11,7 +11,7 @@ import { BarsH, type BarRowData } from "@/components/charts/BarsH";
 import { BarsV } from "@/components/charts/BarsV";
 import type { Series } from "@/components/charts/chartTheme";
 import { useStore } from "@/state/store";
-import { routeFilter, distanceBinFilter, timeBinFilter } from "../filters";
+import { routeFilter, directedRouteFilter, distanceBinFilter, timeBinFilter } from "../filters";
 import { color, categoricalFor } from "@/lib/palette";
 import { routeKeyUndirected } from "@/lib/geo";
 import { flightDistanceMi, flightMinutes, compact } from "@/lib/format";
@@ -326,7 +326,12 @@ export const routes: StatModule = {
           cap={8}
           onPick={(id) => {
             const r = main.rows.find((x) => x.id === id);
-            if (r) toggleCrossFilter(routeFilter(String(r.dep), String(r.arr)));
+            if (r)
+              toggleCrossFilter(
+                directed === "directed"
+                  ? directedRouteFilter(String(r.dep), String(r.arr))
+                  : routeFilter(String(r.dep), String(r.arr)),
+              );
           }}
         />
 

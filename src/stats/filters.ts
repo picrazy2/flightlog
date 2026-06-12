@@ -114,3 +114,10 @@ export const routeFilter = (dep: string, arr: string): CrossFilter => ({
   label: `${dep} · ${arr}`,
   test: (f) => routeKeyUndirected(f.dep_iata, f.arr_iata) === routeKeyUndirected(dep, arr),
 });
+
+// Directed: only flights flown dep → arr (used by the Routes "Directed" view).
+export const directedRouteFilter = (dep: string, arr: string): CrossFilter => ({
+  id: `route:${dep}>${arr}`,
+  label: `${dep} → ${arr}`,
+  test: (f) => f.dep_iata === dep && f.arr_iata === arr,
+});

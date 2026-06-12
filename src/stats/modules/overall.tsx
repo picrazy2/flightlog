@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { StatModule } from "../types";
 import type { Flight } from "@/lib/types";
 import { sumDistanceMi, routesFrom } from "@/lib/aggregate";
-import { formatDistance, formatDuration, flightDistanceMi, flightMinutes } from "@/lib/format";
+import { formatDistance, formatDuration, flightDistanceMi, flightMinutes, schedDep, schedArr } from "@/lib/format";
 import { Segmented } from "@/components/ui/Segmented";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { BarsV } from "@/components/charts/BarsV";
@@ -89,13 +89,17 @@ function funFacts(flights: Flight[], settings: { units: "mi" | "km" }): Fact[] {
   }
   if (closest) facts.push({ label: "Closest route to avg length", value: closest.label, sub: `${conv(closest.per)} ${u}` });
 
-  // shortest layover from connections (arrive→depart same airport within 16h)
-  const chrono = [...flights].sort((a, b) => a.sched_dep.localeCompare(b.sched_dep));
+  // shortest layover from connections (arrive→depart same airport within 16h). Use the
+  // provider (airline) scheduled times when present — manually-imported flights often have
+  // 00:00 placeholder sched times that would otherwise produce bogus 0-min layovers.
+  const chrono = [...flights].sort((a, b) => schedDep(a).localeCompare(schedDep(b)));
   let shortLay: { min: number; iata: string } | null = null;
   for (let i = 0; i < chrono.length - 1; i++) {
     if (chrono[i].arr_iata !== chrono[i + 1].dep_iata) continue;
-    const gap = (new Date(chrono[i + 1].sched_dep).getTime() - new Date(chrono[i].sched_arr).getTime()) / 60000;
-    if (gap < 0 || gap > 16 * 60) continue;
+    // only trust a pair when BOTH legs have real airline-provided times
+    if (!chrono[i].provider_sched_arr || !chrono[i + 1].provider_sched_dep) continue;
+    const gap = (new Date(schedDep(chrono[i + 1])).getTime() - new Date(schedArr(chrono[i])).getTime()) / 60000;
+    if (gap <= 0 || gap > 16 * 60) continue;
     if (!shortLay || gap < shortLay.min) shortLay = { min: gap, iata: chrono[i].arr_iata };
   }
   if (shortLay) {

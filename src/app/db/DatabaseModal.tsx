@@ -5,16 +5,26 @@ import { Segmented } from "@/components/ui/Segmented";
 import { useStore } from "@/state/store";
 import { useFlights } from "@/data/useFlights";
 import { useBookings } from "@/data/useBookings";
-import { useCreateFlight, useUpdateFlight, useDeleteFlight, type FlightFormValues } from "@/data/mutations";
+import { useCreateFlight, useUpdateFlight, usePatchFlight, useDeleteFlight, type FlightFormValues } from "@/data/mutations";
 import { invokeFunction } from "@/lib/supabase";
 import { useAuth, signInWithGoogle, signOut } from "@/lib/auth";
 import type { Flight } from "@/lib/types";
 import { FlightForm } from "./FlightForm";
+import { BookingsTab } from "./BookingsTab";
 
 type Tab = "flights" | "bookings" | "import";
 
 const th = "px-3 py-2 text-left text-caption font-medium text-ink-faint";
 const td = "px-3 py-1.5 text-label text-ink";
+
+const CABIN_LABELS: Record<string, string> = {
+  economy: "Economy",
+  premium_economy: "Premium",
+  lie_flat_business: "Business",
+  recliner_first: "First (recliner)",
+  international_first: "First",
+};
+const CABIN_OPTS = ["", "economy", "premium_economy", "lie_flat_business", "recliner_first", "international_first"];
 
 function toForm(f: Flight): Partial<FlightFormValues> & { id: string } {
   return {
@@ -50,6 +60,7 @@ export function DatabaseModal() {
   const bookings = useBookings();
   const createM = useCreateFlight();
   const updateM = useUpdateFlight();
+  const patchM = usePatchFlight();
   const deleteM = useDeleteFlight();
   const busy = createM.isPending || updateM.isPending;
 
@@ -172,13 +183,17 @@ export function DatabaseModal() {
           </div>
 
           {editing && (
-            <FlightForm
-              initial={editing}
-              submitLabel={editing.id ? "Save changes" : "Add flight"}
-              busy={busy}
-              onSubmit={save}
-              onCancel={() => setEditing(null)}
-            />
+            <Modal title={editing.id ? "Edit flight" : "Add flight"} onClose={() => setEditing(null)} className="w-[min(640px,95vw)]">
+              <div className="p-5">
+                <FlightForm
+                  initial={editing}
+                  submitLabel={editing.id ? "Save changes" : "Add flight"}
+                  busy={busy}
+                  onSubmit={save}
+                  onCancel={() => setEditing(null)}
+                />
+              </div>
+            </Modal>
           )}
 
           <div className="overflow-x-auto rounded-lg border border-border">
@@ -205,7 +220,24 @@ export function DatabaseModal() {
                     <td className={td}>
                       {f.dep_iata} → {f.arr_iata}
                     </td>
-                    <td className={`${td} text-ink-muted`}>{f.cabin_class ?? "—"}</td>
+                    <td className={`${td} text-ink-muted`}>
+                      {canWrite ? (
+                        <select
+                          value={f.cabin_class ?? ""}
+                          disabled={patchM.isPending}
+                          onChange={(e) => patchM.mutate({ id: f.id, cabin_class: e.target.value || null })}
+                          className="focus-ring rounded-md border border-border bg-surface-2 px-1.5 py-1 text-label text-ink"
+                        >
+                          {CABIN_OPTS.map((c) => (
+                            <option key={c} value={c}>
+                              {c ? CABIN_LABELS[c] ?? c : "—"}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        CABIN_LABELS[f.cabin_class ?? ""] ?? f.cabin_class ?? "—"
+                      )}
+                    </td>
                     <td className={`${td} text-ink-muted`}>{f.status}</td>
                     <td className={`${td} tnum text-ink-muted`}>{f.distance_mi?.toLocaleString() ?? "—"}</td>
                     <td className={`${td} whitespace-nowrap text-right`}>
@@ -233,38 +265,15 @@ export function DatabaseModal() {
       )}
 
       {tab === "bookings" && (
-        <div className="p-5">
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full border-collapse">
-              <thead className="sticky top-0 bg-surface-2">
-                <tr>
-                  <th className={th}>PNR</th>
-                  <th className={th}>Platform</th>
-                  <th className={th}>Cash</th>
-                  <th className={th}>Points</th>
-                  <th className={th}>Program</th>
-                  <th className={th}>Emails</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(bookings.data ?? []).map((b) => (
-                  <tr key={b.id} className="border-t border-border hover:bg-surface-2/60">
-                    <td className={`${td} font-mono`}>
-                      {b.booking_refs_airline?.map((r) => r.pnr).join(", ") || "—"}
-                    </td>
-                    <td className={`${td} text-ink-muted`}>{b.booking_platform ?? b.booking_ref_platform ?? "—"}</td>
-                    <td className={`${td} tnum`}>
-                      {b.cost_cash != null ? `${b.cost_cash.toLocaleString()} ${b.cost_currency ?? ""}` : "—"}
-                    </td>
-                    <td className={`${td} tnum`}>{b.cost_points != null ? b.cost_points.toLocaleString() : "—"}</td>
-                    <td className={`${td} text-ink-muted`}>{b.points_program ?? "—"}</td>
-                    <td className={`${td} text-ink-muted`}>{b.emails?.length ?? 0}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <BookingsTab
+          bookings={bookings.data ?? []}
+          flights={flights.data ?? []}
+          canWrite={canWrite}
+          onChanged={() => {
+            bookings.refetch();
+            flights.refetch();
+          }}
+        />
       )}
 
       {tab === "import" && (
