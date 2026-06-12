@@ -8,6 +8,7 @@ const FEATURES: { icon: IconName; color: string; title: string; desc: string }[]
   { icon: "globe", color: "#5B9DFF", title: "Interactive map", desc: "Great-circle routes and real flown tracks on a globe or flat map, coloured by any dimension." },
   { icon: "growth", color: "#2DD4BF", title: "Deep statistics", desc: "Airports, cities, countries, airlines, aircraft, routes, cabins, delays, cost — each its own panel." },
   { icon: "filter", color: "#A78BFA", title: "Filter & search", desc: "Click almost anything to filter every chart and the map at once, search for any flight, airport or route, and drill into any year." },
+  { icon: "calendar", color: "#22D3EE", title: "Period comparison", desc: "Every stat shows a ▲/▼ delta vs the previous period, your whole past, or what your upcoming flights will add." },
   { icon: "dollar-symbol", color: "#FFC061", title: "Cost & points", desc: "Cash and award spend per booking, in any display currency at the historical rate on the day you flew." },
   { icon: "wall-clock", color: "#34D399", title: "Punctuality", desc: "Departure & arrival delays, on-time rates, and your most- and least-delayed flights." },
   { icon: "mail", color: "#FB7185", title: "Hands-off email import", desc: "AI reads your booking & check-in emails and adds flights automatically — no forwarding or data entry." },
@@ -39,7 +40,7 @@ export function AboutModal() {
 
         {/* the why */}
         <p className="text-label leading-relaxed text-ink-muted">
-          I'm passionate about aviation. I fly as often as I can and love travel in general. The app{" "}
+          I'm passionate about aviation and love to travel. The app{" "}
           <span className="text-ink">Flighty</span> is what made me fall for tracking my flights, but I wanted
           something I could bend to my own curiosity, where every chart is cross-filterable, every metric is
           switchable, and every fare and point is accounted for. <span className="text-ink">Journia</span> is that
