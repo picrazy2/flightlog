@@ -65,6 +65,62 @@ export function airportsFrom(flights: Flight[]): Map<string, AirportAgg> {
   return m;
 }
 
+// Connection-deduped visits per arbitrary key (airport / city / country / continent) per
+// year. `keyOf(f, end)` maps an endpoint to its bucket id; a connection subtracts one from
+// the connecting airport's bucket. Used by every "visits per year" chart.
+export function visitsByKeyYear(
+  flights: Flight[],
+  keyOf: (f: Flight, end: "dep" | "arr") => string | null | undefined,
+): Map<string, Map<string, number>> {
+  const m = new Map<string, Map<string, number>>();
+  const bump = (key: string, year: string, d: number) => {
+    const ym = m.get(key) ?? new Map<string, number>();
+    ym.set(year, (ym.get(year) ?? 0) + d);
+    m.set(key, ym);
+  };
+  for (const f of flights) {
+    const y = f.flight_date.slice(0, 4);
+    const dk = keyOf(f, "dep");
+    if (dk) bump(dk, y, 1);
+    const ak = keyOf(f, "arr");
+    if (ak) bump(ak, y, 1);
+  }
+  const chrono = [...flights].sort((a, b) => schedDep(a).localeCompare(schedDep(b)));
+  for (let i = 0; i < chrono.length - 1; i++) {
+    const cur = chrono[i];
+    const next = chrono[i + 1];
+    if (cur.arr_iata !== next.dep_iata) continue;
+    const gap = new Date(schedDep(next)).getTime() - new Date(schedArr(cur)).getTime();
+    if (gap >= 0 && gap <= CONNECTION_WINDOW_MS) {
+      const key = keyOf(cur, "arr"); // the connecting airport's bucket
+      if (key) bump(key, cur.flight_date.slice(0, 4), -1);
+    }
+  }
+  return m;
+}
+
+// Build BarsV rows/series (top-N keys stacked) from a key→year→value map.
+type YearBarRow = { id: string; label: string; [k: string]: string | number };
+export function topYearBars(
+  byKeyYear: Map<string, Map<string, number>>,
+  opts: { topN: number; label: (k: string) => string; color: (k: string, i: number) => string },
+): { rows: YearBarRow[]; series: { key: string; name: string; color: string }[] } {
+  const top = [...byKeyYear.entries()]
+    .map(([k, ym]) => [k, [...ym.values()].reduce((s, v) => s + v, 0)] as const)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, opts.topN)
+    .map(([k]) => k);
+  const years = [...new Set([...byKeyYear.values()].flatMap((ym) => [...ym.keys()]))].sort();
+  return {
+    series: top.map((k, i) => ({ key: k, name: opts.label(k), color: opts.color(k, i) })),
+    rows: years.map((y) => {
+      const row: YearBarRow = { id: y, label: y };
+      for (const k of top) row[k] = byKeyYear.get(k)?.get(y) ?? 0;
+      return row;
+    }),
+  };
+}
+
 export interface RouteAgg {
   key: string;
   dep: string;

@@ -10,6 +10,7 @@ import { categoricalFor, color } from "@/lib/palette";
 import { useStore, type CrossFilter } from "@/state/store";
 import { continentFilter, regionFilter } from "../filters";
 import { yearStack } from "../yearStack";
+import { visitsByKeyYear, topYearBars } from "@/lib/aggregate";
 
 const CONT_NAME: Record<string, string> = Object.fromEntries(CONTINENTS.map((c) => [c.code, c.name]));
 
@@ -286,16 +287,21 @@ export const continents: StatModule = {
         </div>
         {(() => {
           const uniqueMode = metric === "countries";
-          const yc = yearStack({
-            flights: ctx.flights,
-            entities: (f) =>
-              [contOf(f.dep_country), contOf(f.arr_country)].filter(Boolean).map((c) => ({ id: c as string, group: c as string })),
-            value: () => 1,
-            label: (id) => CONT_NAME[id] ?? id,
-            color: (id) => CONT_COLOR[id as ContinentCode] ?? color.secondary,
-            mode: uniqueMode ? "unique" : "sum",
-            topN: 6,
-          });
+          const yc = uniqueMode
+            ? yearStack({
+                flights: ctx.flights,
+                entities: (f) =>
+                  [contOf(f.dep_country), contOf(f.arr_country)].filter(Boolean).map((c) => ({ id: c as string, group: c as string })),
+                value: () => 1,
+                label: (id) => CONT_NAME[id] ?? id,
+                color: (id) => CONT_COLOR[id as ContinentCode] ?? color.secondary,
+                mode: "unique",
+                topN: 6,
+              })
+            : topYearBars(
+                visitsByKeyYear(ctx.flights, (f, end) => contOf(end === "dep" ? f.dep_country : f.arr_country)),
+                { topN: 6, label: (id) => CONT_NAME[id] ?? id, color: (id) => CONT_COLOR[id as ContinentCode] ?? color.secondary },
+              );
           return yc.rows.length > 0 ? (
             <div>
               <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">

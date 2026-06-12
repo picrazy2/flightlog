@@ -25,10 +25,12 @@ export const cabinClass: StatModule = {
   id: "class",
   order: 8.5, // between Delays (8) and Time of day (9)
   card: (ctx) => {
-    const pctPremium = (fs: typeof ctx.flights) => {
+    // % of flight TIME spent in premium cabins (premium economy + business + first)
+    const premTime = (fs: typeof ctx.flights) => {
       const wc = fs.filter((f) => f.cabin_class);
-      const prem = wc.filter((f) => f.cabin_class !== "economy").length;
-      return wc.length ? (prem / wc.length) * 100 : 0;
+      const tot = wc.reduce((s, f) => s + flightMinutes(f), 0);
+      const prem = wc.filter((f) => f.cabin_class !== "economy").reduce((s, f) => s + flightMinutes(f), 0);
+      return tot ? (prem / tot) * 100 : 0;
     };
     const classes = new Set(ctx.flights.map((f) => f.cabin_class).filter(Boolean)).size;
     return {
@@ -36,7 +38,7 @@ export const cabinClass: StatModule = {
       title: "Class",
       headline: `${classes} Cabin ${classes === 1 ? "class" : "classes"}`,
       stats: [
-        { value: pctPremium(ctx.flights), format: (n) => formatPct(n), compareValue: ctx.compareFlights ? pctPremium(ctx.compareFlights) : null },
+        { value: premTime(ctx.flights), format: (n) => formatPct(n), compareValue: ctx.compareFlights ? premTime(ctx.compareFlights) : null },
       ],
     };
   },
@@ -51,12 +53,12 @@ export const cabinClass: StatModule = {
     const econN = withCabin.filter((f) => f.cabin_class === "economy").length;
     const bizN = withCabin.filter((f) => isBizFirst(f.cabin_class)).length;
     const totMin = withCabin.reduce((s, f) => s + flightMinutes(f), 0);
-    const bizMin = withCabin.filter((f) => isBizFirst(f.cabin_class)).reduce((s, f) => s + flightMinutes(f), 0);
+    const premMin = withCabin.filter((f) => f.cabin_class !== "economy").reduce((s, f) => s + flightMinutes(f), 0);
     const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : 0);
     const cards = [
       { label: "Economy", value: `${pct(econN, withCabin.length)}%`, color: CLASS_COLORS.economy },
       { label: "Business + First", value: `${pct(bizN, withCabin.length)}%`, color: CLASS_COLORS.lie_flat_business },
-      { label: "Time in Biz + First", value: `${pct(bizMin, totMin)}%`, color: CLASS_COLORS.international_first },
+      { label: "Time in premium", value: `${pct(premMin, totMin)}%`, color: CLASS_COLORS.international_first },
     ];
 
     const agg = new Map<string, { domestic: number; international: number }>();

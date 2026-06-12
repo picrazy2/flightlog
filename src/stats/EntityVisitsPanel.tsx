@@ -9,7 +9,7 @@ import { useStore, ALL_TIME } from "@/state/store";
 import type { CrossFilter } from "@/state/store";
 import { yearRange, yearOfRange } from "./filters";
 import type { StatContext } from "./types";
-import { airportsFrom } from "@/lib/aggregate";
+import { airportsFrom, visitsByKeyYear, topYearBars } from "@/lib/aggregate";
 import { buildStack, buildCount, buildTypeStack, buildVisitTypeStack, buildVisits, type EntityLevel } from "./entityBreakdown";
 import { yearStack } from "./yearStack";
 import { sovereignOf, COUNTRY_GEO, CONTINENTS } from "@/lib/continents";
@@ -143,30 +143,42 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
       {(() => {
         const isCity = level === "city";
         const uniqueMode = yearMode === "unique"; // this chart's own toggle, not the first chart's
-        // unique mode stacks by the parent geography (cities → country, countries → continent);
-        // visits mode stacks by the top entity itself.
-        const yc = yearStack({
-          flights: ctx.flights,
-          entities: (f) => {
-            if (isCity) {
-              const mk = (city: string | null, cName: string | null, iso: string | null) =>
-                city ? { id: city, group: uniqueMode ? cName ?? iso ?? "—" : city } : null;
-              return [mk(f.dep_city, f.dep_country_name, f.dep_country), mk(f.arr_city, f.arr_country_name, f.arr_country)].filter(
-                (x): x is { id: string; group: string } => !!x,
-              );
-            }
-            const mk = (iso: string | null) => {
-              const s = sovereignOf(iso);
-              return s ? { id: s, group: uniqueMode ? contOf(s) ?? "—" : s } : null;
-            };
-            return [mk(f.dep_country), mk(f.arr_country)].filter((x): x is { id: string; group: string } => !!x);
-          },
-          value: () => 1,
-          label: (g) => (isCity ? g : uniqueMode ? CONT_NAME[g] ?? g : countryNm(g)),
-          color: (g, i) => (!isCity && uniqueMode ? CONT_COLOR[g as keyof typeof CONT_COLOR] ?? categoricalFor(g, i) : categoricalFor(g, i)),
-          mode: uniqueMode ? "unique" : "sum",
-          topN: 6,
-        });
+        // unique mode stacks by the parent geography (cities → country, countries → continent)
+        // and counts distinct entities; visits mode stacks by the top entity and uses
+        // connection-deduped visits.
+        const yc = uniqueMode
+          ? yearStack({
+              flights: ctx.flights,
+              entities: (f) => {
+                if (isCity) {
+                  const mk = (city: string | null, cName: string | null, iso: string | null) =>
+                    city ? { id: city, group: cName ?? iso ?? "—" } : null;
+                  return [mk(f.dep_city, f.dep_country_name, f.dep_country), mk(f.arr_city, f.arr_country_name, f.arr_country)].filter(
+                    (x): x is { id: string; group: string } => !!x,
+                  );
+                }
+                const mk = (iso: string | null): { id: string; group: string } | null => {
+                  const s = sovereignOf(iso);
+                  return s ? { id: s, group: (contOf(s) ?? "—") as string } : null;
+                };
+                return [mk(f.dep_country), mk(f.arr_country)].filter((x): x is { id: string; group: string } => !!x);
+              },
+              value: () => 1,
+              label: (g) => (isCity ? g : CONT_NAME[g] ?? g),
+              color: (g, i) => (!isCity ? CONT_COLOR[g as keyof typeof CONT_COLOR] ?? categoricalFor(g, i) : categoricalFor(g, i)),
+              mode: "unique",
+              topN: 6,
+            })
+          : topYearBars(
+              visitsByKeyYear(ctx.flights, (f, end) =>
+                isCity
+                  ? end === "dep"
+                    ? f.dep_city
+                    : f.arr_city
+                  : sovereignOf(end === "dep" ? f.dep_country : f.arr_country),
+              ),
+              { topN: 6, label: (k) => (isCity ? k : countryNm(k)), color: (_k, i) => categoricalFor(_k, i) },
+            );
         return yc.rows.length > 0 ? (
           <>
             <div className="flex items-start justify-between gap-2">
