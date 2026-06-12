@@ -75,10 +75,15 @@ export default {
         shimmer: {
           "100%": { transform: "translateX(100%)" },
         },
+        // intro splash (the inline-referenced draw/pop/splash-bob live in index.css)
+        "splash-mark": { "0%": { opacity: "0", transform: "scale(.82)" }, "100%": { opacity: "1", transform: "scale(1)" } },
+        "splash-word": { from: { opacity: "0", transform: "translateY(8px)" }, to: { opacity: "1", transform: "translateY(0)" } },
       },
       animation: {
         "panel-in": "panel-in 260ms cubic-bezier(.16,1,.3,1)",
         "fade-in": "fade-in 200ms cubic-bezier(.16,1,.3,1)",
+        "splash-mark": "splash-mark 600ms cubic-bezier(.16,1,.3,1) both",
+        "splash-word": "splash-word 560ms cubic-bezier(.16,1,.3,1) 260ms both",
       },
     },
   },

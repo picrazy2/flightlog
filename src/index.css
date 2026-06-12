@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* intro splash — referenced via inline `animation` (not tailwind utilities) */
+@keyframes draw { from { stroke-dashoffset: 64; } to { stroke-dashoffset: 0; } }
+@keyframes pop { 0% { opacity: 0; transform: scale(0.3); } 70% { opacity: 1; } 100% { opacity: 1; transform: scale(1); } }
+@keyframes splash-bob { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
 /* ── Design tokens (see docs/DESIGN_SYSTEM.md) ───────────────────────────── */
 :root {
   /* surfaces & ink */

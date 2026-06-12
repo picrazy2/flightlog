@@ -8,6 +8,7 @@ import { StatCardsRow } from "./StatCardsRow";
 import { DetailPanelHost } from "./DetailPanelHost";
 import { DatabaseModal } from "./db/DatabaseModal";
 import { AboutModal } from "./AboutModal";
+import { SplashScreen } from "./SplashScreen";
 import { MobileShell } from "./mobile/MobileShell";
 import { Legend } from "@/components/ui/Legend";
 import { Button } from "@/components/ui/Button";
@@ -31,10 +32,10 @@ export function App() {
     );
   }
   if (!ctx) {
-    return (
-      <div className="grid h-full place-items-center text-ink-muted">
-        {isLoading ? "Loading flights…" : "No data"}
-      </div>
+    return isLoading ? (
+      <SplashScreen loading />
+    ) : (
+      <div className="grid h-full place-items-center text-ink-muted">No data</div>
     );
   }
 

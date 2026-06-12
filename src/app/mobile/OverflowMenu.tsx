@@ -1,6 +1,7 @@
 import { Popover } from "@/components/ui/Popover";
 import { Switch } from "@/components/ui/Switch";
 import { Icon } from "@/components/ui/Icon";
+import { LogoMark } from "@/components/ui/Logo";
 import { CurrencyInline } from "@/components/ui/CurrencyPicker";
 import { useStore } from "@/state/store";
 import { useUsers } from "@/data/useUsers";
@@ -44,7 +45,7 @@ export function OverflowMenu() {
             <Switch checked={settings.showTracks} onChange={(v) => setSettings({ showTracks: v })} />
           </Row>
           {settings.showTracks && (
-            <Row label="Estimated paths">
+            <Row label="Mark estimated">
               <Switch checked={settings.markEstimated} onChange={(v) => setSettings({ markEstimated: v })} />
             </Row>
           )}
@@ -74,7 +75,7 @@ export function OverflowMenu() {
             }}
             className="focus-ring flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left text-label text-ink hover:bg-surface-2"
           >
-            <Icon name="airplane" size={16} color="var(--accent)" />
+            <LogoMark size={18} />
             About Journia
           </button>
 

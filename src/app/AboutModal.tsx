@@ -28,11 +28,12 @@ export function AboutModal() {
 
         {/* the why */}
         <p className="text-label leading-relaxed text-ink-muted">
-          I'm passionate about aviation — I fly as often as I can and love travel in general. The app{" "}
+          I'm passionate about aviation. I fly as often as I can and love travel in general. The app{" "}
           <span className="text-ink">Flighty</span> is what made me fall for tracking my flights, but I wanted
-          something I could bend to my own curiosity: every chart cross-filterable, every metric switchable, every
-          fare and point accounted for. <span className="text-ink">Journia</span> is that personal flight log — the
-          whole map and every statistic reshaping themselves around whatever I'm curious about.
+          something I could bend to my own curiosity, where every chart is cross-filterable, every metric is
+          switchable, and every fare and point is accounted for. <span className="text-ink">Journia</span> is that
+          personal flight log, with the whole map and every statistic reshaping themselves around whatever I'm
+          curious about.
         </p>
 
         {/* what it does */}
@@ -40,11 +41,11 @@ export function AboutModal() {
           <div className="text-eyebrow tracking-[0.01em] text-ink-faint">What it does</div>
           <ul className="flex flex-col gap-3">
             <Feature title="Interactive map" desc="Great-circle routes and real flown tracks on a globe or flat map, coloured by any dimension you pick." />
-            <Feature title="Deep statistics" desc="Airports, cities, countries, continents, airlines, aircraft, routes, cabin, delays, cost, time of day, and more — each its own panel." />
-            <Feature title="Cross-filtering" desc="Click almost anything — a bar, a slice, a row, an airport — to filter every chart and the map at once, and drill into any year." />
+            <Feature title="Deep statistics" desc="Airports, cities, countries, continents, airlines, aircraft, routes, cabin, delays, cost, time of day, and more, each its own panel." />
+            <Feature title="Cross-filtering" desc="Click almost anything (a bar, a slice, a row, an airport) to filter every chart and the map at once, and drill into any year." />
             <Feature title="Cost & points" desc="Cash and award spend tracked per booking and converted to any display currency at the historical rate on the day you flew." />
-            <Feature title="Punctuality" desc="Departure and arrival delays, on-time rates, and your most- and least-delayed flights." />
-            <Feature title="Bring your own data" desc="Add flights by hand, import from CSV or your inbox, and auto-enrich them with airline, aircraft, and route detail." />
+            <Feature title="Punctuality" desc="Departure and arrival delays, on-time rates, and your most and least delayed flights." />
+            <Feature title="Hands-off email import" desc="The standout feature: AI reads your booking and check-in emails and adds flights automatically, no forwarding or data entry, then enriches each one with airline, aircraft, and route detail. You can still add or import flights by hand whenever you like." />
           </ul>
         </div>
       </div>
