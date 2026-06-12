@@ -42,17 +42,30 @@ export const flightMinutes = (f: Flight): number =>
 const MI_TO_KM = 1.60934;
 
 // Compact, max 3 significant figures: 492, 1.23, 49.2, 1.21k, 121k, 32.1m, 1.59b.
+// Decimal places by magnitude: ≥100 → 0, 10–100 → 1, <10 → 2.
+export const smartDecimals = (n: number): number => {
+  const a = Math.abs(n);
+  return a >= 100 ? 0 : a >= 10 ? 1 : 2;
+};
+
+// Full number (locale-grouped) rounded by magnitude — e.g. 52345.6 → "52,346", 5.234 → "5.23".
+export function smartNum(n: number): string {
+  if (!isFinite(n)) return "0";
+  return n.toLocaleString(undefined, { maximumFractionDigits: smartDecimals(n) });
+}
+
 export function compact(n: number): string {
   if (!isFinite(n)) return "0";
   const sign = n < 0 ? "-" : "";
   let x = Math.abs(n);
+  const dp = smartDecimals(x); // by the value's magnitude, so big numbers carry no decimals
   const units = ["", "k", "m", "b", "t"];
   let u = 0;
   while (x >= 1000 && u < units.length - 1) {
     x /= 1000;
     u += 1;
   }
-  let s = x.toPrecision(3);
+  let s = x.toFixed(dp);
   if (s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, "");
   return sign + s + units[u];
 }

@@ -1,9 +1,9 @@
 import type { TooltipProps } from "recharts";
-import { formatDuration } from "@/lib/format";
+import { formatDuration, smartNum } from "@/lib/format";
 
-// minutes → standardized "45 min" / "12h 30m" / "3d 4h"
+// minutes → standardized "45 min" / "12h 30m" / "3d 4h"; else a magnitude-rounded number
 const fmt = (v: number, unit?: string) =>
-  unit === "min" ? formatDuration(v).value : `${v.toLocaleString()}${unit ? ` ${unit}` : ""}`;
+  unit === "min" ? formatDuration(v).value : `${smartNum(v)}${unit ? ` ${unit}` : ""}`;
 
 // Themed tooltip. `unit` (e.g. "flights", "mi", "min") formats/labels each value.
 // `total` adds a summed row — only meaningful for a single-unit stacked bar, so callers

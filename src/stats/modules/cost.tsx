@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   Bar,
   CartesianGrid,
@@ -120,6 +120,16 @@ export const cost: StatModule = {
     // pie compares cash vs points by flight share — only meaningful for the flights metric
     const showPie = metric === "flights" && chartType === "pie";
 
+    // many years → make the grouped bars horizontally scrollable, opened at the most
+    // recent (right-most) year
+    const PER_YEAR = 52;
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const scrollable = !showPie && rows.length > 10;
+    useLayoutEffect(() => {
+      const el = scrollRef.current;
+      if (scrollable && el) el.scrollLeft = el.scrollWidth;
+    }, [scrollable, rows.length]);
+
     const cashName = metric === "flights" ? "Cash flights" : "Cash spend";
     const pointsName = metric === "flights" ? "Points flights" : "Points";
     const legend = [
@@ -191,32 +201,38 @@ export const cost: StatModule = {
 
         <div className="text-eyebrow tracking-[0.01em] text-ink-faint">{showPie ? title.replace(", by year", " — all time") : title}</div>
         <ChartLegend series={legend} />
-        <div style={{ height: 210 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            {!showPie ? (
-              <ComposedChart data={rows} margin={{ left: -10, right: metric === "spend" ? -10 : 8, top: 6, bottom: 2 }}>
-                <CartesianGrid stroke={CHART.grid} vertical={false} />
-                <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={16} />
-                <YAxis yAxisId="cash" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => compact(Number(v))} />
-                {metric === "spend" && (
-                  <YAxis yAxisId="points" orientation="right" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => compact(Number(v))} />
-                )}
-                <Tooltip content={<ChartTooltip units={tipUnits} />} cursor={{ fill: CHART.cursor }} />
-                <Bar yAxisId="cash" dataKey="cash" name={cashName} fill={CASH_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false}
-                  cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
-                <Bar yAxisId={metric === "spend" ? "points" : "cash"} dataKey="points" name={pointsName} fill={POINTS_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false}
-                  cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
-              </ComposedChart>
-            ) : (
+        {showPie ? (
+          <div style={{ height: 210 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2} stroke="none" isAnimationActive={false}>
                   {pieData.map((s) => <Cell key={s.id} fill={s.color} />)}
                 </Pie>
                 <Tooltip content={<ChartTooltip unit="flights" />} />
               </PieChart>
-            )}
-          </ResponsiveContainer>
-        </div>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div ref={scrollRef} className={scrollable ? "overflow-x-auto" : ""} style={{ height: 210 }}>
+            <div style={{ width: scrollable ? rows.length * PER_YEAR : "100%", height: "100%" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={rows} barGap={2} barCategoryGap="14%" margin={{ left: -10, right: metric === "spend" ? -10 : 8, top: 6, bottom: 2 }}>
+                  <CartesianGrid stroke={CHART.grid} vertical={false} />
+                  <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} interval={scrollable ? 0 : "preserveStartEnd"} minTickGap={16} />
+                  <YAxis yAxisId="cash" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => compact(Number(v))} />
+                  {metric === "spend" && (
+                    <YAxis yAxisId="points" orientation="right" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => compact(Number(v))} />
+                  )}
+                  <Tooltip content={<ChartTooltip units={tipUnits} />} cursor={{ fill: CHART.cursor }} />
+                  <Bar yAxisId="cash" dataKey="cash" name={cashName} fill={CASH_COLOR} radius={[3, 3, 0, 0]} maxBarSize={14} isAnimationActive={false}
+                    cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
+                  <Bar yAxisId={metric === "spend" ? "points" : "cash"} dataKey="points" name={pointsName} fill={POINTS_COLOR} radius={[3, 3, 0, 0]} maxBarSize={14} isAnimationActive={false}
+                    cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {curRows.length > 0 && (
           <div>
