@@ -6,6 +6,7 @@ import { Segmented } from "@/components/ui/Segmented";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { PanelFooter } from "@/components/ui/Panel";
 import { BarsH, type BarRowData } from "@/components/charts/BarsH";
 import { BarsV } from "@/components/charts/BarsV";
 import type { Series } from "@/components/charts/chartTheme";
@@ -256,16 +257,18 @@ export const routes: StatModule = {
           }}
         />
 
-        <div className="sticky bottom-0 -mx-5 -mb-4 mt-auto flex shrink-0 gap-2 border-t border-border bg-surface-1 px-5 py-3">
-          <Button variant="secondary" size="sm" className="flex-1" onClick={() => { setRankScope("routes"); setShowRankings(true); }}>
-            Longest &amp; shortest routes
-          </Button>
-          {showTracks && (
-            <Button variant="secondary" size="sm" className="flex-1" onClick={() => { setRankScope("flights"); setShowRankings(true); }}>
-              Longest &amp; shortest flights
+        <PanelFooter>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" className="flex-1" onClick={() => { setRankScope("routes"); setShowRankings(true); }}>
+              Longest &amp; shortest routes
             </Button>
-          )}
-        </div>
+            {showTracks && (
+              <Button variant="secondary" size="sm" className="flex-1" onClick={() => { setRankScope("flights"); setShowRankings(true); }}>
+                Longest &amp; shortest flights
+              </Button>
+            )}
+          </div>
+        </PanelFooter>
 
         {showRankings && (
           <Modal title={rankScope === "flights" ? "Flight rankings" : "Route rankings"} onClose={() => setShowRankings(false)} className="w-[min(720px,95vw)]">

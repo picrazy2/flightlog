@@ -17,6 +17,7 @@ import { FlightPopup } from "@/app/FlightPopup";
 import { formatPct, formatDuration, actualArr, arrivalDelayMin, departureDelayMin } from "@/lib/format";
 import { BarsH } from "@/components/charts/BarsH";
 import { MiniStats } from "@/components/ui/MiniStat";
+import { PanelFooter } from "@/components/ui/Panel";
 import { Segmented } from "@/components/ui/Segmented";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -120,10 +121,15 @@ export const delays: StatModule = {
     const totTimed = timed.length || 1;
     const pct = (n: number) => `${Math.round((n / totTimed) * 100)}%`;
     const netDur = formatDuration(Math.abs(netMin)).value;
+    const delayVals = timed.map((f) => delayMin(f) ?? 0);
+    const maxDelay = delayVals.length ? Math.max(...delayVals) : 0;
+    const minDelay = delayVals.length ? Math.min(...delayVals) : 0;
     const cards = [
       { label: "Early", value: pct(early), color: GREEN },
       { label: "Delayed (≤1h)", value: pct(delayed), color: color.secondary },
       { label: "Very delayed (>1h)", value: pct(veryLate), color: RED },
+      { label: "Most delayed", value: maxDelay > 0 ? `+${formatDuration(maxDelay).value}` : "—", color: RED },
+      { label: "Earliest", value: minDelay < 0 ? `−${formatDuration(-minDelay).value}` : "—", color: GREEN },
       { label: netMin >= 0 ? "Net time lost" : "Net time saved", value: `${netMin >= 0 ? "+" : "−"}${netDur}`, color: netMin >= 0 ? RED : GREEN },
     ];
 
@@ -135,7 +141,7 @@ export const delays: StatModule = {
     if (rows.length === 0) {
       return (
         <>
-          <MiniStats items={cards} />
+          <MiniStats items={cards} cols={3} />
           <p className="text-label text-ink-muted">No actual-time data in this range.</p>
         </>
       );
@@ -152,9 +158,9 @@ export const delays: StatModule = {
     const axisMin = Math.min(0, ...minVals);
     return (
       <>
-        <MiniStats items={cards} />
+        <MiniStats items={cards} cols={3} />
         <ChartLegend series={lineSeries} />
-        <div style={{ height: 200 }}>
+        <div style={{ height: 240 }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={rows} margin={{ left: -16, right: -8, top: 6, bottom: 2 }}>
               <CartesianGrid stroke={CHART.grid} vertical={false} />
@@ -206,11 +212,11 @@ export const delays: StatModule = {
             />
           </div>
         )}
-        <div className="sticky bottom-0 -mx-5 -mb-4 mt-auto shrink-0 border-t border-border bg-surface-1 px-5 py-3">
+        <PanelFooter>
           <Button variant="secondary" size="sm" className="w-full" onClick={() => setShowList(true)}>
             Most &amp; least delayed flights
           </Button>
-        </div>
+        </PanelFooter>
         {showList && (
           <Modal title="Most & least delayed flights" onClose={() => setShowList(false)} className="w-[min(720px,95vw)]">
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 p-5 sm:grid-cols-2">

@@ -4,12 +4,13 @@ export interface MiniStatItem {
   color?: string; // optional accent dot
 }
 
-// Compact in-panel metric cards (a small row of figures above a chart).
-export function MiniStats({ items }: { items: MiniStatItem[] }) {
+// Compact in-panel metric cards (a small row of figures above a chart). `cols` forces a
+// fixed column count (e.g. 3) so a longer list wraps into multiple rows.
+export function MiniStats({ items, cols }: { items: MiniStatItem[]; cols?: number }) {
   return (
     // grid align-items:stretch → all cards in the row share the tallest height even
     // when some labels wrap to a second line
-    <div className="grid items-stretch gap-2" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0,1fr))` }}>
+    <div className="grid items-stretch gap-2" style={{ gridTemplateColumns: `repeat(${cols ?? items.length}, minmax(0,1fr))` }}>
       {items.map((it, i) => (
         <div key={i} className="rounded-lg border border-border bg-surface-1 px-2.5 py-2 shadow-1">
           <div className="tnum font-display text-[1.15rem] font-bold leading-none text-ink">{it.value}</div>
