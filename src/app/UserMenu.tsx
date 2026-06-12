@@ -1,4 +1,5 @@
 import { Popover } from "@/components/ui/Popover";
+import { Chevron } from "@/components/ui/Icon";
 import { useStore } from "@/state/store";
 import { useUsers } from "@/data/useUsers";
 import { cn } from "@/lib/cn";
@@ -35,7 +36,7 @@ export function UserMenu() {
             {initialsOf(name)}
           </span>
           <span className="font-medium">{name}</span>
-          <span className="text-ink-faint">▾</span>
+          <Chevron dir={open ? "up" : "down"} size={10} color="var(--ink-faint)" />
         </button>
       )}
     >
