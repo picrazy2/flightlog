@@ -30,8 +30,8 @@ import { useIsMobile } from "@/lib/useIsMobile";
 type Metric = "flights" | "spend";
 type Basis = "total" | "flight" | "km" | "hour";
 
-const CASH_COLOR = color.accent;
-const POINTS_COLOR = "#A78BFA";
+const CASH_COLOR = color.accent; // blue
+const POINTS_COLOR = color.secondary; // gold reads as points/miles and is distinct from cash-blue
 
 // historical USD (converted at the flight date) when available; else static present-day rate
 const cashUSD = (f: Flight) => f.cost_cash_segment_usd ?? (f.cost_cash_segment ?? 0) * toUSD((f.cost_currency ?? "USD").toUpperCase());
@@ -252,9 +252,9 @@ export const cost: StatModule = {
 
 type BookingMethod = "cashOnly" | "pointsCash" | "pointsOnly" | "none";
 const METHOD_COLORS: Record<BookingMethod, string> = {
-  cashOnly: color.accent,
-  pointsCash: "#A78BFA",
-  pointsOnly: color.secondary,
+  cashOnly: color.accent, // blue (cash)
+  pointsCash: "#F472B6", // pink — the mix; distinct from cash-blue and points-gold
+  pointsOnly: color.secondary, // gold (points)
   none: "#5C6575",
 };
 function bookingMethod(f: Flight): BookingMethod {
