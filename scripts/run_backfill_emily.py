@@ -62,7 +62,13 @@ for f in flights:
     cand |= search(q)
     time.sleep(0.02)
 cand = sorted(cand)
-print(f"  {len(cand)} unique candidate emails\n")
+# skip messages already handled (non-failed) on a previous run, so re-runs only retry
+# failures + new mail instead of re-paying Gemini for everything.
+STATE = f"/tmp/bf_processed_{USER}.json"
+done_ids = set(json.load(open(STATE))) if os.path.exists(STATE) else set()
+todo = [c for c in cand if c not in done_ids]
+print(f"  {len(cand)} unique candidate emails ({len(done_ids)} already handled, {len(todo)} to do)\n")
+cand = todo
 
 def call(ids):
     body = json.dumps({"user_id": USER, "message_ids": ids}).encode()
@@ -80,7 +86,11 @@ for i in range(0, len(cand), BATCH):
     if not r.get("ok"):
         print(f"  batch {i//BATCH+1}: ERROR {r.get('error')}")
         continue
-    for res in r.get("results", []): tot[res["outcome"]] += 1
+    for res in r.get("results", []):
+        tot[res["outcome"]] += 1
+        if res["outcome"] != "failed":  # remember handled mail; retry only failures
+            done_ids.add(res["message_id"])
+    json.dump(sorted(done_ids), open(STATE, "w"))
     linked += r.get("bookings_linked", 0)
     discrep += r.get("discrepancies", [])
     for u in r.get("unmatched_legs", []): unmatched.add(u)

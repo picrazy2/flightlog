@@ -5,7 +5,7 @@ import { MiniStats } from "@/components/ui/MiniStat";
 import { formatPct, localHour, actualDep, actualArr, schedDep, schedArr } from "@/lib/format";
 import { color } from "@/lib/palette";
 
-const isMorning = (h: number) => h >= 5 && h < 12;
+const isAM = (h: number) => h < 12; // 12am–12pm
 
 // Four parts of the day, keyed by local departure hour. Bands tint the chart bg.
 const WINDOWS = [
@@ -49,12 +49,12 @@ export const timeOfDay: StatModule = {
   order: 9,
   card: (ctx) => {
     const pctAM = (fs: Flight[]) => {
-      let morning = 0;
-      for (const f of fs) if (isMorning(localHour(schedDep(f), f.dep_timezone))) morning++;
-      return fs.length ? (morning / fs.length) * 100 : 0;
+      let am = 0;
+      for (const f of fs) if (isAM(localHour(schedDep(f), f.dep_timezone))) am++;
+      return fs.length ? (am / fs.length) * 100 : 0;
     };
     return {
-      eyebrow: "Morning flights",
+      eyebrow: "AM flights",
       title: "Time of day",
       stats: [
         { value: pctAM(ctx.flights), format: (n) => formatPct(n), compareValue: ctx.compareFlights ? pctAM(ctx.compareFlights) : null },
