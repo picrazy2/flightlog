@@ -151,8 +151,8 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
         });
         return yc.rows.length > 1 ? (
           <>
-            <div className="flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-eyebrow tracking-[0.01em] text-ink-faint">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-eyebrow tracking-[0.01em] text-ink-faint">
                 {uniqueMode ? `Unique ${noun}` : "Visits"} per year, by top {noun}
               </span>
               <Segmented
@@ -162,7 +162,7 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
                 onChange={setYearMode}
                 options={[
                   { value: "visits", label: "Visits" },
-                  { value: "unique", label: `Unique ${noun}` },
+                  { value: "unique", label: noun.charAt(0).toUpperCase() + noun.slice(1) },
                 ]}
               />
             </div>
