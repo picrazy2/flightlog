@@ -3,19 +3,28 @@ import { useEffect, useState, type CSSProperties } from "react";
 // Intro splash shown while flights load: a backgroundless Journia "J" assembles in
 // the centre while a flurry of translucent J's tumbles down the screen behind it.
 
-const COLORS = ["#5B9DFF", "#2DD4BF", "#7DB4FF"];
+const COLORS = ["#5B9DFF", "#2DD4BF", "#7DB4FF", "#9BC2FF"];
 
-// A deterministic spread of falling J's (no Math.random so it's stable across renders).
-const FALLERS = Array.from({ length: 18 }, (_, i) => {
-  const r = (n: number) => ((i * 9301 + n * 49297) % 233280) / 233280;
+// Decorrelated hash so each attribute varies independently (avoids the visible
+// "waves" you get when one seed drives everything). Deterministic → stable renders.
+const hash = (i: number, salt: number) => {
+  const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+  return x - Math.floor(x); // 0..1
+};
+
+// A dense, varied spread of falling J's. Each starts at a random phase of its OWN
+// fall (delay in [-dur, 0]) so at any instant they're scattered top-to-bottom — a
+// continuous drizzle rather than synchronized bands.
+const FALLERS = Array.from({ length: 36 }, (_, i) => {
+  const dur = 5 + hash(i, 3) * 9; // 5–14s: a wide spread of speeds
   return {
-    left: Math.round(r(1) * 100),
-    size: 16 + Math.round(r(2) * 30),
-    delay: -(Math.round(r(3) * 70) / 10), // start mid-fall so the screen is full at t=0
-    dur: 4 + Math.round(r(4) * 55) / 10,
-    rot: (i % 2 ? 1 : -1) * (220 + Math.round(r(5) * 260)),
-    op: 0.08 + Math.round(r(6) * 16) / 100,
-    color: COLORS[i % COLORS.length],
+    left: hash(i, 1) * 100,
+    size: 12 + hash(i, 2) * 46, // 12–58px
+    dur,
+    delay: -hash(i, 4) * dur,
+    rot: (hash(i, 5) < 0.5 ? -1 : 1) * (160 + hash(i, 6) * 360),
+    op: 0.06 + hash(i, 7) * 0.2,
+    color: COLORS[Math.floor(hash(i, 8) * COLORS.length)],
   };
 });
 
