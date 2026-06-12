@@ -83,13 +83,11 @@ export function trackSegments(
   from?: [number, number] | null,
   to?: [number, number] | null,
 ): TrackSegment[] {
-  const pts: [number, number][] = [];
-  if (from) pts.push([from[0], from[1]]);
-  for (const c of coords) pts.push([c[0], c[1]]);
-  if (to) pts.push([to[0], to[1]]);
-  if (pts.length < 2) return [];
+  if (coords.length < 1) return [];
 
-  const segs: TrackSegment[] = [{ coords: [pts[0]], estimated: false }];
+  // the actual flown track: contiguous real segments, with any in-track gaps filled by an
+  // estimated great-circle
+  const segs: TrackSegment[] = [{ coords: [[coords[0][0], coords[0][1]]], estimated: false }];
   const add = (pt: [number, number], est: boolean) => {
     const cur = segs[segs.length - 1];
     if (cur.estimated !== est) {
@@ -98,15 +96,25 @@ export function trackSegments(
       cur.coords.push(pt);
     }
   };
-  for (let i = 1; i < pts.length; i++) {
-    if (haversineKm(pts[i - 1], pts[i]) > TRACK_GAP_KM) {
-      const arc = greatCircleArc(pts[i - 1], pts[i]).geometry.coordinates as [number, number][];
+  for (let i = 1; i < coords.length; i++) {
+    if (haversineKm(coords[i - 1], coords[i]) > TRACK_GAP_KM) {
+      const arc = greatCircleArc(coords[i - 1], coords[i]).geometry.coordinates as [number, number][];
       for (let j = 1; j < arc.length - 1; j++) add([arc[j][0], arc[j][1]], true);
-      add(pts[i], true);
+      add([coords[i][0], coords[i][1]], true);
     } else {
-      add(pts[i], false);
+      add([coords[i][0], coords[i][1]], false);
     }
   }
+
+  // the stitches that link the track's ends to the origin/destination airports are not
+  // flown data → always estimated (great-circle-filled when the gap is large)
+  const stitch = (a: [number, number], b: [number, number]): TrackSegment =>
+    haversineKm(a, b) > TRACK_GAP_KM
+      ? { coords: greatCircleArc(a, b).geometry.coordinates as [number, number][], estimated: true }
+      : { coords: [a, b], estimated: true };
+  if (from) segs.unshift(stitch([from[0], from[1]], [coords[0][0], coords[0][1]]));
+  if (to) segs.push(stitch([coords[coords.length - 1][0], coords[coords.length - 1][1]], [to[0], to[1]]));
+
   for (const s of segs) unwrapLngs(s.coords);
   return segs.filter((s) => s.coords.length >= 2);
 }
