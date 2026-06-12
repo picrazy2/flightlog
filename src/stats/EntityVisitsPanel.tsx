@@ -60,6 +60,7 @@ const BREAKDOWN_DESC: Record<Breakdown, string> = {
 export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, noun }: Props) {
   const [breakdown, setBreakdown] = useState<Breakdown>(breakdowns[0]);
   const [countMode, setCountMode] = useState(false); // visits vs # of unique airports/cities
+  const [yearMode, setYearMode] = useState<"visits" | "unique">("visits"); // per-year chart's own toggle
   const { chartType, control: chartControl } = useChartType();
   const { toggleCrossFilter, crossFilters } = useStore();
   // the unique-count metric only applies to the airport/city stacked breakdowns
@@ -135,7 +136,7 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
       />
       {(() => {
         const isCity = level === "city";
-        const uniqueMode = countMode; // visits vs unique entities
+        const uniqueMode = yearMode === "unique"; // this chart's own toggle, not the first chart's
         const yc = yearStack({
           flights: facetFlights,
           entities: (f) =>
@@ -148,13 +149,24 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
           mode: uniqueMode ? "unique" : "sum",
           topN: 6,
         });
-        const yUnit = uniqueMode ? noun : "visits";
         return yc.rows.length > 1 ? (
           <>
-            <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
-              {uniqueMode ? `Unique ${noun}` : "Visits"} per year, by top {noun}
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-eyebrow tracking-[0.01em] text-ink-faint">
+                {uniqueMode ? `Unique ${noun}` : "Visits"} per year, by top {noun}
+              </span>
+              <Segmented
+                aria-label="Year metric"
+                size="sm"
+                value={yearMode}
+                onChange={setYearMode}
+                options={[
+                  { value: "visits", label: "Visits" },
+                  { value: "unique", label: `Unique ${noun}` },
+                ]}
+              />
             </div>
-            <BarsV rows={yc.rows} series={yc.series} unit={yUnit} />
+            <BarsV rows={yc.rows} series={yc.series} unit={uniqueMode ? noun : "visits"} />
           </>
         ) : null;
       })()}

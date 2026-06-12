@@ -1,14 +1,31 @@
 import { useState } from "react";
 import { Popover } from "./Popover";
+import { Chevron } from "./Icon";
 import { useStore } from "@/state/store";
+import { useFlights } from "@/data/useFlights";
 import { CURRENCIES } from "@/lib/fx";
 import { cn } from "@/lib/cn";
+
+// Currencies ordered by how many of your bookings were paid in each (most-used first).
+function useCurrencyOrder() {
+  const flights = useFlights().data;
+  const count = new Map<string, number>();
+  const seen = new Set<string>();
+  for (const f of flights ?? []) {
+    if (!f.booking_id || seen.has(f.booking_id)) continue;
+    seen.add(f.booking_id);
+    const c = (f.cost_currency ?? "").toUpperCase();
+    if (c) count.set(c, (count.get(c) ?? 0) + 1);
+  }
+  return [...CURRENCIES].sort((a, b) => (count.get(b.code) ?? 0) - (count.get(a.code) ?? 0));
+}
 
 // Searchable currency list (shared by the desktop dropdown + mobile inline picker).
 function List({ current, onPick }: { current: string; onPick: (code: string) => void }) {
   const [q, setQ] = useState("");
+  const ordered = useCurrencyOrder();
   const t = q.trim().toLowerCase();
-  const items = CURRENCIES.filter((c) => !t || c.code.toLowerCase().includes(t) || c.name.toLowerCase().includes(t));
+  const items = ordered.filter((c) => !t || c.code.toLowerCase().includes(t) || c.name.toLowerCase().includes(t));
   return (
     <div className="w-[230px]">
       <input
@@ -59,7 +76,7 @@ export function CurrencyButton() {
           )}
         >
           {cur}
-          <span className="text-ink-faint">▾</span>
+          <Chevron dir={open ? "up" : "down"} size={10} color="var(--ink-faint)" />
         </button>
       )}
     >
@@ -80,7 +97,7 @@ export function CurrencyInline() {
         className="focus-ring flex w-full items-center justify-between rounded-md px-1 py-1.5 text-label text-ink hover:bg-surface-2"
       >
         <span>Currency</span>
-        <span className="text-accent">{cur} ▾</span>
+        <span className="flex items-center gap-1 text-accent">{cur} <Chevron dir={open ? "up" : "down"} size={10} color="currentColor" /></span>
       </button>
       {open && <div className="mt-1">{<List current={cur} onPick={(c) => { setSettings({ currency: c }); setOpen(false); }} />}</div>}
     </div>
