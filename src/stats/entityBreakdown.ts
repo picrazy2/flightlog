@@ -3,17 +3,33 @@ import type { AirportAgg } from "@/lib/aggregate";
 import type { BarRowData } from "@/components/charts/BarsH";
 import type { Series } from "@/components/charts/chartTheme";
 import { categoricalFor, color } from "@/lib/palette";
+import { sovereignOf } from "@/lib/continents";
 
 export type EntityLevel = "city" | "country";
 const OTHER = "#5C6575";
 const TOP = 12;
 const CONNECTION_MS = 16 * 60 * 60 * 1000;
 
-// Outer entity (city or country) for one airport aggregate.
+const REGION_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
+const regionName = (iso: string): string | null => {
+  try {
+    return REGION_NAMES.of(iso) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+// Outer entity (city or country) for one airport aggregate. Country: a territory resolves
+// to its parent sovereign so it groups with it (matches the headline count).
 function entityOf(level: EntityLevel, a: AirportAgg) {
-  return level === "country"
-    ? { id: a.country ?? "??", name: a.countryName ?? a.country ?? "??" }
-    : { id: a.city ?? a.iata, name: a.city ?? a.iata };
+  if (level === "country") {
+    const raw = a.country ?? "??";
+    const sov = sovereignOf(raw) ?? raw;
+    // for a merged territory show the sovereign's name, else keep the DB country name
+    const name = sov !== raw ? regionName(sov) ?? a.countryName ?? sov : a.countryName ?? sov;
+    return { id: sov, name };
+  }
+  return { id: a.city ?? a.iata, name: a.city ?? a.iata };
 }
 
 interface Built {
