@@ -7,6 +7,7 @@ import { ControlBar } from "./ControlBar";
 import { StatCardsRow } from "./StatCardsRow";
 import { DetailPanelHost } from "./DetailPanelHost";
 import { DatabaseModal } from "./db/DatabaseModal";
+import { AboutModal } from "./AboutModal";
 import { MobileShell } from "./mobile/MobileShell";
 import { Legend } from "@/components/ui/Legend";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +18,7 @@ export function App() {
   const activeId = useStore((s) => s.activeModuleId);
   const showTracks = useStore((s) => s.settings.showTracks);
   const dbOpen = useStore((s) => s.dbOpen);
+  const aboutOpen = useStore((s) => s.aboutOpen);
   const immersive = useStore((s) => s.immersive);
   const toggleImmersive = useStore((s) => s.toggleImmersive);
   const isMobile = useIsMobile();
@@ -94,6 +96,7 @@ export function App() {
       )}
 
       {dbOpen && <DatabaseModal />}
+      {aboutOpen && <AboutModal />}
     </div>
   );
 }

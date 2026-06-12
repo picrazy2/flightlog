@@ -3,7 +3,6 @@ import { Switch } from "@/components/ui/Switch";
 import { Icon } from "@/components/ui/Icon";
 import { CurrencyInline } from "@/components/ui/CurrencyPicker";
 import { useStore } from "@/state/store";
-import { useUsers } from "@/data/useUsers";
 import { cn } from "@/lib/cn";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -15,11 +14,10 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-// Mobile overflow: map/display toggles (one per row), an Add action that opens the
-// database modal, and the user switcher.
-export function OverflowMenu() {
-  const { settings, setSettings, projection, toggleProjection, setDbOpen, setAboutOpen, userId, setUserId } = useStore();
-  const { data: users = [] } = useUsers();
+// Desktop gear menu: map/display preferences + About. The Add button and user switcher
+// stay outside this menu (kept visible in the control bar).
+export function SettingsMenu() {
+  const { settings, setSettings, projection, toggleProjection, setAboutOpen } = useStore();
   const km = settings.units === "km";
 
   return (
@@ -28,17 +26,16 @@ export function OverflowMenu() {
       trigger={({ toggle, open }) => (
         <button
           onClick={toggle}
-          aria-label="Menu"
-          className={cn("focus-ring flex h-9 w-9 flex-col items-center justify-center gap-[3px] rounded-full text-ink", open ? "bg-surface-2" : "hover:bg-surface-2")}
+          aria-label="Settings"
+          title="Settings"
+          className={cn("focus-ring grid h-9 w-9 place-items-center rounded-full", open ? "bg-surface-2" : "hover:bg-surface-2")}
         >
-          <span className="h-[1.5px] w-[18px] rounded-full bg-current" />
-          <span className="h-[1.5px] w-[18px] rounded-full bg-current" />
-          <span className="h-[1.5px] w-[18px] rounded-full bg-current" />
+          <Icon name="setting" size={18} color={open ? "var(--accent)" : "currentColor"} />
         </button>
       )}
     >
       {(close) => (
-        <div className="w-[250px]">
+        <div className="w-[240px]">
           <div className="mb-1 px-1 text-eyebrow tracking-[0.01em] text-ink-faint">Map &amp; display</div>
           <Row label="Tracks">
             <Switch checked={settings.showTracks} onChange={(v) => setSettings({ showTracks: v })} />
@@ -59,16 +56,6 @@ export function OverflowMenu() {
           <div className="my-2 h-px bg-border" />
           <button
             onClick={() => {
-              setDbOpen(true);
-              close();
-            }}
-            className="focus-ring flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left text-label text-ink hover:bg-surface-2"
-          >
-            <Icon name="add" size={16} color="var(--accent)" />
-            Add flights &amp; data
-          </button>
-          <button
-            onClick={() => {
               setAboutOpen(true);
               close();
             }}
@@ -77,22 +64,6 @@ export function OverflowMenu() {
             <Icon name="airplane" size={16} color="var(--accent)" />
             About Journia
           </button>
-
-          <div className="my-2 h-px bg-border" />
-          <div className="mb-1 px-1 text-eyebrow tracking-[0.01em] text-ink-faint">Switch log</div>
-          {users.map((u) => (
-            <button
-              key={u.id}
-              onClick={() => {
-                setUserId(u.id);
-                close();
-              }}
-              className={cn("focus-ring flex w-full items-center justify-between rounded-md px-1 py-1.5 text-label hover:bg-surface-2", u.id === userId ? "text-accent" : "text-ink")}
-            >
-              {u.name}
-              {u.id === userId && <span className="text-accent">✓</span>}
-            </button>
-          ))}
         </div>
       )}
     </Popover>

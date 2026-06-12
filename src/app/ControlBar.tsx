@@ -1,16 +1,20 @@
 import { DateRangePicker } from "./DateRangePicker";
 import { FilterChips } from "./FilterChips";
 import { SearchBox } from "./SearchBox";
-import { HeaderActions } from "./HeaderActions";
+import { SettingsMenu } from "./SettingsMenu";
 import { UserMenu } from "./UserMenu";
 import { OverflowMenu } from "./mobile/OverflowMenu";
 import { Wordmark } from "@/components/ui/Logo";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { useStore } from "@/state/store";
 import { useIsMobile } from "@/lib/useIsMobile";
 import type { StatContext } from "@/stats/types";
 
 export function ControlBar({ ctx }: { ctx: StatContext }) {
   // tablet (768–1024): collapse the inline map/account controls into the hamburger
   const compact = useIsMobile(1024);
+  const setDbOpen = useStore((s) => s.setDbOpen);
   return (
     <div className="glass pointer-events-auto relative z-40 flex items-center gap-3 rounded-xl px-4 py-2.5">
       <div className="pr-1">
@@ -31,8 +35,20 @@ export function ControlBar({ ctx }: { ctx: StatContext }) {
         </div>
       ) : (
         <>
-          <div className="shrink-0">
-            <HeaderActions />
+          {/* only the Add button + the gear (settings) stay visible; everything else
+              (map/display prefs, About) lives inside the gear menu */}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="md"
+              iconOnly
+              aria-label="Database"
+              title="Database (flights, bookings, import)"
+              onClick={() => setDbOpen(true)}
+            >
+              <Icon name="add" color="var(--accent)" />
+            </Button>
+            <SettingsMenu />
           </div>
           <div className="h-5 w-px shrink-0 bg-border" />
           <div className="shrink-0">

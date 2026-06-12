@@ -53,6 +53,7 @@ interface AppState {
   projection: "mercator" | "globe";
   temporal: "all" | "past" | "future";
   dbOpen: boolean;
+  aboutOpen: boolean; // the "About Journia" modal
   immersive: boolean; // hide all chrome except the exit button
   showAirports: boolean; // airport markers visible on the map
   userId: string; // whose log is shown (from the URL path)
@@ -73,6 +74,7 @@ interface AppState {
   toggleProjection: () => void;
   setTemporal: (t: "all" | "past" | "future") => void;
   setDbOpen: (v: boolean) => void;
+  setAboutOpen: (v: boolean) => void;
   toggleImmersive: () => void;
   toggleAirports: () => void;
   setUserId: (id: string) => void;
@@ -94,6 +96,7 @@ export const useStore = create<AppState>()(
   projection: MOBILE_INIT ? "globe" : "mercator",
   temporal: "all",
   dbOpen: false,
+  aboutOpen: false,
   immersive: false,
   showAirports: true,
   userId: userFromPath(),
@@ -132,6 +135,7 @@ export const useStore = create<AppState>()(
   toggleProjection: () => set((s) => ({ projection: s.projection === "globe" ? "mercator" : "globe" })),
   setTemporal: (temporal) => set({ temporal }),
   setDbOpen: (dbOpen) => set({ dbOpen }),
+  setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   toggleImmersive: () => set((s) => ({ immersive: !s.immersive })),
   toggleAirports: () => set((s) => ({ showAirports: !s.showAirports })),
   // switching user updates the URL (/alex) and keeps the current view (filters, date
