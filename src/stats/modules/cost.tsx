@@ -12,8 +12,8 @@ import {
 import type { StatModule } from "../types";
 import type { CabinClass, Flight } from "@/lib/types";
 import { totalCash, totalPoints } from "@/lib/aggregate";
-import { formatUSD, formatPoints, compact, flightDistanceMi, flightMinutes } from "@/lib/format";
-import { toUSD } from "@/lib/fx";
+import { formatMoney, formatPoints, compact, flightDistanceMi, flightMinutes } from "@/lib/format";
+import { toUSD, fromUSD, currencySymbol } from "@/lib/fx";
 import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
 import { OptionsButton } from "@/components/ui/OptionsButton";
@@ -50,7 +50,7 @@ export const cost: StatModule = {
     return {
       eyebrow: `Cost (from ${priced} flights)`,
       stats: [
-        { value: totalCash(ctx.flights, toUSD), format: (n) => formatUSD(n), compareValue: cmp ? totalCash(cmp, toUSD) : null },
+        { value: totalCash(ctx.flights, toUSD), format: (n, s) => formatMoney(n, s.currency), compareValue: cmp ? totalCash(cmp, toUSD) : null },
         { value: totalPoints(ctx.flights), format: (n) => formatPoints(n), compareValue: cmp ? totalPoints(cmp) : null },
       ],
     };
@@ -100,6 +100,9 @@ export const cost: StatModule = {
     const denom = (b: { flights: number; dist: number; hours: number }) =>
       basis === "total" ? 1 : basis === "flight" ? b.flights || 1 : basis === "km" ? b.dist || 1 : b.hours || 1;
     const r2 = (n: number) => Math.round(n * 100) / 100;
+    // cash buckets are summed in USD (cashUSD); render them in the chosen display currency
+    const cur = settings.currency;
+    const conv = (v: number) => (metric === "cash" ? fromUSD(v, cur) : v);
     // dom/intl breakdown only makes sense for absolute totals — a per-flight/km/hour RATE
     // can't be split and summed, so those bases show a single combined bar.
     const split = basis === "total";
@@ -108,9 +111,9 @@ export const cost: StatModule = {
       .map(([id, b]) => ({
         id,
         label: b.label,
-        domestic: r2(b.dom / denom(b)),
-        international: r2(b.intl / denom(b)),
-        combined: r2((b.dom + b.intl) / denom(b)),
+        domestic: r2(conv(b.dom / denom(b))),
+        international: r2(conv(b.intl / denom(b))),
+        combined: r2(conv((b.dom + b.intl) / denom(b))),
         flights: b.flights,
       }))
       .sort((a, b) => (buckets.get(a.id)!.sort - buckets.get(b.id)!.sort));
@@ -121,7 +124,7 @@ export const cost: StatModule = {
       });
     }
 
-    const unit = metric === "cash" ? "$" : "pts";
+    const unit = metric === "cash" ? currencySymbol(cur).trim() || cur : "pts";
     const activeId: string | string[] | null =
       group === "year"
         ? yearOfRange(range)

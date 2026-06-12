@@ -100,4 +100,5 @@ export interface Settings {
   units: "mi" | "km";
   showTracks: boolean; // show actual tracks when available (else great-circle arcs)
   markEstimated: boolean; // dash + thin the estimated (great-circle/filler) line portions
+  currency: string; // display currency for cost figures (ISO code, e.g. "USD")
 }

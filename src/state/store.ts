@@ -86,7 +86,7 @@ export const useStore = create<AppState>()(
   range: ALL_TIME,
   compare: true, // comparison on by default; grey deltas when the range has no valid prior period
   activeModuleId: null,
-  settings: { units: "mi", showTracks: true, markEstimated: true },
+  settings: { units: "mi", showTracks: true, markEstimated: true, currency: "USD" },
   legendFilter: {},
   crossFilters: [],
   // mobile opens on the globe with the legend expanded (persisted projection wins for

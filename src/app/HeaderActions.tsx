@@ -2,6 +2,7 @@ import { useStore } from "@/state/store";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { Icon } from "@/components/ui/Icon";
+import { CurrencyButton } from "@/components/ui/CurrencyPicker";
 
 // Map/display actions, shown on the right of the control bar.
 export function HeaderActions() {
@@ -23,6 +24,9 @@ export function HeaderActions() {
           </>
         )}
       </div>
+
+      {/* display currency picker */}
+      <CurrencyButton />
 
       {/* units: the label itself is the icon */}
       <Button

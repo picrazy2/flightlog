@@ -1,6 +1,7 @@
 import { Popover } from "@/components/ui/Popover";
 import { Switch } from "@/components/ui/Switch";
 import { Icon } from "@/components/ui/Icon";
+import { CurrencyInline } from "@/components/ui/CurrencyPicker";
 import { useStore } from "@/state/store";
 import { useUsers } from "@/data/useUsers";
 import { cn } from "@/lib/cn";
@@ -53,6 +54,7 @@ export function OverflowMenu() {
           <Row label="Globe">
             <Switch checked={projection === "globe"} onChange={toggleProjection} />
           </Row>
+          <CurrencyInline />
 
           <div className="my-2 h-px bg-border" />
           <button

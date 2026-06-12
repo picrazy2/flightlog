@@ -9,3 +9,36 @@ const RATES: Record<string, number> = {
 };
 
 export const toUSD = (currency: string): number => RATES[currency] ?? 1;
+
+// USD amount → target currency amount.
+export const fromUSD = (usd: number, currency: string): number => usd / (RATES[currency] ?? 1);
+
+// Currencies we can convert + display (have a rate). Symbol used when distinctive.
+export const CURRENCIES: { code: string; name: string; symbol: string }[] = [
+  { code: "USD", name: "US Dollar", symbol: "$" },
+  { code: "EUR", name: "Euro", symbol: "€" },
+  { code: "GBP", name: "British Pound", symbol: "£" },
+  { code: "JPY", name: "Japanese Yen", symbol: "¥" },
+  { code: "CNY", name: "Chinese Yuan", symbol: "CN¥" },
+  { code: "HKD", name: "Hong Kong Dollar", symbol: "HK$" },
+  { code: "CAD", name: "Canadian Dollar", symbol: "CA$" },
+  { code: "AUD", name: "Australian Dollar", symbol: "A$" },
+  { code: "NZD", name: "New Zealand Dollar", symbol: "NZ$" },
+  { code: "SGD", name: "Singapore Dollar", symbol: "S$" },
+  { code: "CHF", name: "Swiss Franc", symbol: "CHF " },
+  { code: "KRW", name: "South Korean Won", symbol: "₩" },
+  { code: "TWD", name: "Taiwan Dollar", symbol: "NT$" },
+  { code: "INR", name: "Indian Rupee", symbol: "₹" },
+  { code: "THB", name: "Thai Baht", symbol: "฿" },
+  { code: "MYR", name: "Malaysian Ringgit", symbol: "RM" },
+  { code: "MXN", name: "Mexican Peso", symbol: "MX$" },
+  { code: "ZAR", name: "South African Rand", symbol: "R" },
+  { code: "AED", name: "UAE Dirham", symbol: "AED " },
+  { code: "TRY", name: "Turkish Lira", symbol: "₺" },
+  { code: "VND", name: "Vietnamese Dong", symbol: "₫" },
+  { code: "CZK", name: "Czech Koruna", symbol: "Kč" },
+  { code: "MAD", name: "Moroccan Dirham", symbol: "MAD " },
+];
+
+const SYMBOL: Record<string, string> = Object.fromEntries(CURRENCIES.map((c) => [c.code, c.symbol]));
+export const currencySymbol = (code: string): string => SYMBOL[code] ?? `${code} `;

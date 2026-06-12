@@ -1,5 +1,6 @@
 import type { Flight, Settings } from "./types";
 import { useStore } from "@/state/store";
+import { fromUSD, currencySymbol } from "./fx";
 
 // Canonical actual times prefer WHEELS (takeoff/landing), falling back to gate.
 export const actualDep = (f: Flight): string | null => f.actual_takeoff ?? f.actual_dep;
@@ -80,6 +81,11 @@ export function formatInt(n: number): string {
 
 export function formatUSD(n: number): { value: string; unit: string } {
   return { value: `$${compact(n)}`, unit: "" };
+}
+
+// A USD amount rendered in the user's chosen display currency.
+export function formatMoney(usd: number, currency: string): { value: string; unit: string } {
+  return { value: `${currencySymbol(currency)}${compact(fromUSD(usd, currency))}`, unit: "" };
 }
 
 export function formatPoints(n: number): { value: string; unit: string } {
