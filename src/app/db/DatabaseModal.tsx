@@ -51,6 +51,7 @@ export function DatabaseModal() {
   const [tab, setTab] = useState<Tab>("flights");
   const [q, setQ] = useState("");
   const [savingCabinId, setSavingCabinId] = useState<string | null>(null); // row mid-save → show spinner
+  const [highlightBooking, setHighlightBooking] = useState<string | null>(null); // jump-to from flights tab
   const [editing, setEditing] = useState<(Partial<FlightFormValues> & { id?: string }) | null>(null);
   const [csv, setCsv] = useState("");
   const [csvResult, setCsvResult] = useState<string | null>(null);
@@ -208,6 +209,7 @@ export function DatabaseModal() {
                   <th className={th}>Cabin</th>
                   <th className={th}>Status</th>
                   <th className={th}>Dist</th>
+                  <th className={th}>Booking</th>
                   <th className={th}></th>
                 </tr>
               </thead>
@@ -253,6 +255,22 @@ export function DatabaseModal() {
                     </td>
                     <td className={`${td} text-ink-muted`}>{f.status}</td>
                     <td className={`${td} tnum text-ink-muted`}>{f.distance_mi?.toLocaleString() ?? "—"}</td>
+                    <td className={td}>
+                      {f.booking_id ? (
+                        <button
+                          onClick={() => {
+                            setTab("bookings");
+                            setHighlightBooking(f.booking_id!);
+                          }}
+                          className="focus-ring rounded px-1 text-accent hover:underline"
+                          title="Show this flight's booking"
+                        >
+                          View ↗
+                        </button>
+                      ) : (
+                        <span className="text-ink-faint">—</span>
+                      )}
+                    </td>
                     <td className={`${td} whitespace-nowrap text-right`}>
                       <Button variant="ghost" size="sm" disabled={!canWrite} onClick={() => setEditing(toForm(f))}>
                         Edit
@@ -282,6 +300,7 @@ export function DatabaseModal() {
           bookings={bookings.data ?? []}
           flights={flights.data ?? []}
           canWrite={canWrite}
+          highlightId={highlightBooking}
           onChanged={() => {
             bookings.refetch();
             flights.refetch();

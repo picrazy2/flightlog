@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Popover } from "@/components/ui/Popover";
@@ -124,14 +124,28 @@ export function BookingsTab({
   flights,
   canWrite,
   onChanged,
+  highlightId,
 }: {
   bookings: BookingRow[];
   flights: Flight[];
   canWrite: boolean;
   onChanged: () => void;
+  highlightId?: string | null;
 }) {
   const manage = useManageBooking();
   const [adding, setAdding] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+
+  // jumped here from the flights tab → scroll the booking into view + flash it
+  useEffect(() => {
+    if (!highlightId) return;
+    setFlash(highlightId);
+    const el = rowRefs.current[highlightId];
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const t = setTimeout(() => setFlash(null), 2200);
+    return () => clearTimeout(t);
+  }, [highlightId]);
 
   const flightsByBooking = useMemo(() => {
     const m = new Map<string, Flight[]>();
@@ -199,7 +213,11 @@ export function BookingsTab({
                   : `${fs[0].flight_date} – ${fs[fs.length - 1].flight_date}`
                 : "—";
               return (
-                <tr key={b.id} className="border-t border-border hover:bg-surface-2/60">
+                <tr
+                  key={b.id}
+                  ref={(el) => { rowRefs.current[b.id] = el; }}
+                  className={`border-t border-border transition-colors hover:bg-surface-2/60 ${flash === b.id ? "bg-accent/15 ring-1 ring-accent" : ""}`}
+                >
                   <td className={`${td} whitespace-nowrap text-ink-muted`}>{dates}</td>
                   <td className={`${td} font-mono text-ink-muted`}>
                     {fs.length ? fs.map((f) => `${f.airline_iata}${f.flight_number}`).join(", ") : "—"}
