@@ -10,6 +10,9 @@ project_id = "flightlog"
 [functions.refresh-recent]
 verify_jwt = false
 
+[functions.refresh-reference-data]
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.
