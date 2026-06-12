@@ -34,7 +34,7 @@ function trackCoords(geojson: unknown): [number, number][] {
   if (g?.type === "MultiLineString") return ((g.coordinates as [number, number][][]) ?? []).flat();
   return [];
 }
-async function setFlownDistance(supabase: SupabaseClient, flight: RefreshRecentCandidate, geojson: unknown) {
+export async function setFlownDistance(supabase: SupabaseClient, flight: RefreshRecentCandidate, geojson: unknown) {
   const f = flight as unknown as { dep_lat?: number | null; dep_lng?: number | null; arr_lat?: number | null; arr_lng?: number | null };
   const pts: [number, number][] = [];
   if (f.dep_lat != null && f.dep_lng != null) pts.push([f.dep_lng, f.dep_lat]);
@@ -358,7 +358,7 @@ async function refreshRecentFlight(
   }
 }
 
-function buildRefreshRecentUpdateRow(
+export function buildRefreshRecentUpdateRow(
   existing: RefreshRecentCandidate,
   enriched: FlightInput,
 ) {
