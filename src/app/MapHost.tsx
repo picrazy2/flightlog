@@ -13,6 +13,7 @@ import { RouteAggPopup } from "./RouteAggPopup";
 import { routeKeyUndirected } from "@/lib/geo";
 import type { StatContext, MapEncoding } from "@/stats/types";
 import { defaultEncodingModule } from "@/stats/registry";
+import { geoFilterFillColors } from "@/stats/modules/continents";
 
 const COUNTRIES_URL = `${import.meta.env.BASE_URL}world-countries.geojson`;
 const ICON_BASE = `${import.meta.env.BASE_URL}icons`;
@@ -52,6 +53,7 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
   const clickPopup = useRef<maplibregl.Popup | null>(null);
   const popupRoot = useRef<Root | null>(null);
   const projection = useStore((s) => s.projection);
+  const crossFilters = useStore((s) => s.crossFilters);
   const showAirports = useStore((s) => s.showAirports);
   const showTracks = useStore((s) => s.settings.showTracks);
   const markEstimated = useStore((s) => s.settings.markEstimated);
@@ -390,7 +392,7 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
   useEffect(() => {
     pushData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx, encoding, showTracks, tracks, dimTrackless]);
+  }, [ctx, encoding, showTracks, tracks, dimTrackless, crossFilters]);
 
   // airport footprints (loaded once, async)
   useEffect(() => {
@@ -467,8 +469,11 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
   // Lazily add the country polygons + fill layer the first time a module asks for the
   // choropleth, then drive its colors with a data-driven match expression.
   function updateChoropleth(map: maplibregl.Map) {
-    const choro = encoding?.layers?.includes("choropleth") ? encoding.choropleth : undefined;
-    if (!choro) {
+    // An active geo cross-filter (country / region / continent) tints its countries on
+    // the map, taking priority over (and working without) a module's own choropleth.
+    const geo = geoFilterFillColors(crossFilters);
+    const moduleChoro = encoding?.layers?.includes("choropleth") ? encoding.choropleth : undefined;
+    if (geo.size === 0 && !moduleChoro) {
       if (choroAddedRef.current) map.setLayoutProperty("choropleth", "visibility", "none");
       return;
     }
@@ -486,10 +491,11 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
       choroAddedRef.current = true;
     }
     map.setLayoutProperty("choropleth", "visibility", "visible");
-    const entries = choro(ctx);
+    const entries = geo.size > 0 ? [...geo].map(([iso, color]) => ({ iso, color })) : moduleChoro!(ctx);
+    const fallback = geo.size > 0 ? "rgba(0,0,0,0)" : "rgba(255,255,255,0.04)"; // only highlight the filtered geography
     const match: (string | string[])[] = ["match", ["get", "ISO_A2"]];
     for (const e of entries) match.push(e.iso, e.color);
-    match.push("rgba(255,255,255,0.04)"); // default for unvisited countries
+    match.push(fallback);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     map.setPaintProperty("choropleth", "fill-color", match as any);
   }

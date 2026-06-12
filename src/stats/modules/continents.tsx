@@ -6,7 +6,7 @@ import { BarsH, type BarRowData } from "@/components/charts/BarsH";
 import { Segmented } from "@/components/ui/Segmented";
 import { Chevron } from "@/components/ui/Icon";
 import { categoricalFor, color } from "@/lib/palette";
-import { useStore } from "@/state/store";
+import { useStore, type CrossFilter } from "@/state/store";
 import { continentFilter, regionFilter } from "../filters";
 
 // Six distinct hues; none is the amber reserved for inter-continental (color.secondary).
@@ -19,6 +19,26 @@ const CONT_COLOR: Record<ContinentCode, string> = {
   SA: "#22D3EE", // cyan
 };
 const INTERCONT = color.secondary; // inter-continental flights (amber)
+
+// Countries to tint on the map for the active geo cross-filters (country / region /
+// continent), each in its continent's colour. Empty when no geo filter is active.
+export function geoFilterFillColors(filters: CrossFilter[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const f of filters) {
+    const sep = f.id.indexOf(":");
+    const kind = f.id.slice(0, sep);
+    const val = f.id.slice(sep + 1);
+    if (kind === "country") {
+      const cont = COUNTRY_GEO[val]?.continent;
+      if (cont) m.set(val, CONT_COLOR[cont]);
+    } else if (kind === "continent") {
+      for (const [iso, g] of Object.entries(COUNTRY_GEO)) if (g.continent === val) m.set(iso, CONT_COLOR[val as ContinentCode]);
+    } else if (kind === "region") {
+      for (const [iso, g] of Object.entries(COUNTRY_GEO)) if (g.subregion === val) m.set(iso, CONT_COLOR[g.continent]);
+    }
+  }
+  return m;
+}
 
 // World totals from the country reference.
 const TOTAL_BY_CONT = new Map<ContinentCode, number>();
