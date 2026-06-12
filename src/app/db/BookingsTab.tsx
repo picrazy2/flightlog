@@ -22,7 +22,7 @@ function Cell({
   placeholder,
   onSave,
   display,
-  truncate,
+  maxW,
   options,
 }: {
   value: string;
@@ -31,7 +31,7 @@ function Cell({
   placeholder?: string;
   onSave: (v: string) => Promise<void>;
   display?: string; // shown instead of the raw value (e.g. a pretty program name)
-  truncate?: boolean; // ellipsize long values; full value on hover
+  maxW?: number; // px cap → ellipsize past it, full value on hover
   options?: string[]; // autocomplete suggestions (known ids) while editing
 }) {
   const [editing, setEditing] = useState(false);
@@ -40,9 +40,10 @@ function Cell({
   const [err, setErr] = useState(false);
   const dlId = useId();
   const shown = display || value;
-  const trunc = truncate ? "block max-w-[150px] truncate" : "";
+  const trunc = maxW ? "block truncate" : "";
+  const truncStyle = maxW ? { maxWidth: maxW } : undefined;
   if (!canWrite)
-    return <span className={`${value ? "" : "text-ink-faint"} ${trunc}`} title={truncate && value ? value : undefined}>{shown || "—"}</span>;
+    return <span className={`${value ? "" : "text-ink-faint"} ${trunc}`} style={truncStyle} title={maxW && value ? value : undefined}>{shown || "—"}</span>;
   if (saving)
     return <span className="inline-flex items-center gap-1 text-caption text-ink-faint"><Spinner /> saving…</span>;
   if (!editing)
@@ -52,7 +53,8 @@ function Cell({
           setDraft(value);
           setEditing(true);
         }}
-        title={err ? "Save failed — click to retry" : truncate && value ? value : undefined}
+        title={err ? "Save failed — click to retry" : maxW && value ? value : undefined}
+        style={truncStyle}
         className={`focus-ring -mx-1 min-w-[2rem] rounded px-1 text-left hover:bg-surface-3 ${trunc} ${err ? "text-negative ring-1 ring-negative" : ""}`}
       >
         {shown || <span className="text-ink-faint">{placeholder ?? "—"}</span>}
@@ -246,10 +248,10 @@ export function BookingsTab({
                     {fs.length ? fs.map((f) => `${f.dep_iata}→${f.arr_iata}`).join(", ") : "—"}
                   </td>
                   <td className={`${td} font-mono`}>
-                    <Cell value={pnrText(b)} canWrite={canWrite} placeholder="add" truncate onSave={(v) => savePnr(b, v)} />
+                    <Cell value={pnrText(b)} canWrite={canWrite} placeholder="add" maxW={84} onSave={(v) => savePnr(b, v)} />
                   </td>
                   <td className={td}>
-                    <Cell value={b.booking_platform ?? b.booking_ref_platform ?? ""} display={platformLabel(b.booking_platform ?? b.booking_ref_platform)} options={PLATFORM_IDS} canWrite={canWrite} truncate onSave={(v) => save(b, { booking_platform: v || null })} />
+                    <Cell value={b.booking_platform ?? b.booking_ref_platform ?? ""} display={platformLabel(b.booking_platform ?? b.booking_ref_platform)} options={PLATFORM_IDS} canWrite={canWrite} maxW={116} onSave={(v) => save(b, { booking_platform: v || null })} />
                   </td>
                   <td className={`${td} tnum`}>
                     <Cell value={b.cost_cash != null ? String(b.cost_cash) : ""} canWrite={canWrite} numeric onSave={(v) => save(b, { cost_cash: num(v) })} />
@@ -261,7 +263,7 @@ export function BookingsTab({
                     <Cell value={b.cost_points != null ? String(b.cost_points) : ""} canWrite={canWrite} numeric onSave={(v) => save(b, { cost_points: num(v) })} />
                   </td>
                   <td className={td}>
-                    <Cell value={b.points_program ?? ""} display={programLabel(b.points_program)} options={PROGRAM_IDS} canWrite={canWrite} truncate onSave={(v) => save(b, { points_program: v || null })} />
+                    <Cell value={b.points_program ?? ""} display={programLabel(b.points_program)} options={PROGRAM_IDS} canWrite={canWrite} maxW={104} onSave={(v) => save(b, { points_program: v || null })} />
                   </td>
                   <td className={td}>
                     <EmailsCell emails={b.emails} />

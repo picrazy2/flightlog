@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* native <select> uses our down-chevron instead of the OS default arrow */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5 L5 6.5 L8 3.5" stroke="%2398A2B3" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  padding-right: 1.6rem !important;
+}
+select::-ms-expand { display: none; }
+
 /* intro splash — referenced via inline `animation` (not tailwind utilities) */
 @keyframes draw { from { stroke-dashoffset: 64; } to { stroke-dashoffset: 0; } }
 @keyframes pop { 0% { opacity: 0; transform: scale(0.3); } 70% { opacity: 1; } 100% { opacity: 1; transform: scale(1); } }
