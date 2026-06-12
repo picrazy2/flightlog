@@ -216,7 +216,7 @@ export const cost: StatModule = {
           <div ref={scrollRef} className={scrollable ? "overflow-x-auto" : ""} style={{ height: 210 }}>
             <div style={{ width: scrollable ? rows.length * PER_YEAR : "100%", height: "100%" }}>
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={rows} barGap={2} barCategoryGap="14%" margin={{ left: -10, right: metric === "spend" ? -10 : 8, top: 6, bottom: 2 }}>
+                <ComposedChart data={rows} barGap={2} barCategoryGap="22%" margin={{ left: -10, right: metric === "spend" ? -10 : 8, top: 6, bottom: 2 }}>
                   <CartesianGrid stroke={CHART.grid} vertical={false} />
                   <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} interval={scrollable ? 0 : "preserveStartEnd"} minTickGap={16} />
                   <YAxis yAxisId="cash" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => compact(Number(v))} />
@@ -224,9 +224,9 @@ export const cost: StatModule = {
                     <YAxis yAxisId="points" orientation="right" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => compact(Number(v))} />
                   )}
                   <Tooltip content={<ChartTooltip units={tipUnits} />} cursor={{ fill: CHART.cursor }} />
-                  <Bar yAxisId="cash" dataKey="cash" name={cashName} fill={CASH_COLOR} radius={[3, 3, 0, 0]} maxBarSize={10} isAnimationActive={false}
+                  <Bar yAxisId="cash" dataKey="cash" name={cashName} fill={CASH_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false}
                     cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
-                  <Bar yAxisId={metric === "spend" ? "points" : "cash"} dataKey="points" name={pointsName} fill={POINTS_COLOR} radius={[3, 3, 0, 0]} maxBarSize={10} isAnimationActive={false}
+                  <Bar yAxisId={metric === "spend" ? "points" : "cash"} dataKey="points" name={pointsName} fill={POINTS_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false}
                     cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
                 </ComposedChart>
               </ResponsiveContainer>
