@@ -288,7 +288,8 @@ export const continents: StatModule = {
           const uniqueMode = metric === "countries";
           const yc = yearStack({
             flights: ctx.facetFlights("continent"),
-            entities: (f) => [contOf(f.dep_country), contOf(f.arr_country)],
+            entities: (f) =>
+              [contOf(f.dep_country), contOf(f.arr_country)].filter(Boolean).map((c) => ({ id: c as string, group: c as string })),
             value: () => 1,
             label: (id) => CONT_NAME[id] ?? id,
             color: (id) => CONT_COLOR[id as ContinentCode] ?? color.secondary,

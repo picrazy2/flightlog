@@ -15,7 +15,7 @@ import type { StatModule } from "../types";
 import type { Flight } from "@/lib/types";
 import { totalCash, totalPoints } from "@/lib/aggregate";
 import { formatMoney, formatPoints, compact, flightDistanceMi, flightMinutes } from "@/lib/format";
-import { toUSD, fromUSD, currencySymbol } from "@/lib/fx";
+import { toUSD, fromUSD, currencySymbol, CURRENCIES } from "@/lib/fx";
 import { Segmented } from "@/components/ui/Segmented";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { BarsH } from "@/components/charts/BarsH";
@@ -67,6 +67,8 @@ export const cost: StatModule = {
     const byYear = new Map<string, Agg>();
     const t = blank();
     const byCurrency = new Map<string, { flights: number; spend: number }>();
+    const totalFlightsByYear = new Map<string, number>(); // all flights/year → "priced of total" hover
+    for (const f of ctx.flights) totalFlightsByYear.set(f.flight_date.slice(0, 4), (totalFlightsByYear.get(f.flight_date.slice(0, 4)) ?? 0) + 1);
     for (const f of ctx.flights) {
       const hasCash = f.cost_cash_segment != null;
       const pts = hasPoints(f);
@@ -101,11 +103,13 @@ export const cost: StatModule = {
     // grouped cash + points per year
     const rows = [...byYear.keys()].sort().map((y) => {
       const a = byYear.get(y)!;
+      const priced = a.cashFlights + a.pointsFlights;
       return {
         id: y,
         label: y,
         cash: metric === "flights" ? a.cashFlights : r2(spendBasis(a.cashSpend, a.cashFlights, a.cashDist, a.cashHours)),
         points: metric === "flights" ? a.pointsFlights : Math.round(spendBasis(a.pointsSpend, a.pointsFlights, a.pointsDist, a.pointsHours)),
+        sub: `Based on ${priced} of ${totalFlightsByYear.get(y) ?? priced} flights`,
       };
     });
     const yearActive = yearOfRange(range);
@@ -133,8 +137,9 @@ export const cost: StatModule = {
     ].filter((s) => s.value > 0);
 
     // top currencies, following the flights/spend toggle
+    const CUR_NAME: Record<string, string> = Object.fromEntries(CURRENCIES.map((c) => [c.code, c.name]));
     const curRows = [...byCurrency.entries()]
-      .map(([c, e]) => ({ id: c, label: c, value: metric === "flights" ? e.flights : r2(e.spend) }))
+      .map(([c, e]) => ({ id: c, label: CUR_NAME[c] ? `${c} · ${CUR_NAME[c]}` : c, value: metric === "flights" ? e.flights : r2(e.spend) }))
       .sort((a, b) => b.value - a.value);
 
     const title =
@@ -151,7 +156,7 @@ export const cost: StatModule = {
             value={metric}
             onChange={setMetric}
             options={[
-              { value: "spend", label: "Total spend" },
+              { value: "spend", label: "Spend" },
               { value: "flights", label: "Flights" },
             ]}
           />

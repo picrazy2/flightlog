@@ -181,13 +181,18 @@ export const airports: StatModule = {
     }
 
     // second chart: per-year, by top airport (visits = sum; destinations = unique airports/yr)
+    // destinations (unique airports) stacks by the airport's country; visits stacks by airport
+    const uniqueYear = metric === "destinations";
     const yc = yearStack({
       flights: airportFlights,
-      entities: (f) => [f.dep_iata, f.arr_iata],
+      entities: (f) => [
+        { id: f.dep_iata, group: uniqueYear ? f.dep_country_name ?? f.dep_country ?? "—" : f.dep_iata },
+        { id: f.arr_iata, group: uniqueYear ? f.arr_country_name ?? f.arr_country ?? "—" : f.arr_iata },
+      ],
       value: () => 1,
-      label: (id) => id,
-      color: (id, i) => categoricalFor(id, i),
-      mode: metric === "destinations" ? "unique" : "sum",
+      label: (g) => g,
+      color: (g, i) => categoricalFor(g, i),
+      mode: uniqueYear ? "unique" : "sum",
       topN: 8,
     });
 

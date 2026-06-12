@@ -98,7 +98,7 @@ export const airlines: StatModule = {
         {(() => {
           const yc = yearStack({
             flights: ctx.facetFlights("airline"),
-            entities: (f) => [f.airline_iata],
+            entities: (f) => (f.airline_iata ? [{ id: f.airline_iata, group: f.airline_iata }] : []),
             value: (f) => metricValue(f, metric),
             label: (id) => acc.get(id)?.label ?? id,
             color: (id, i) => alColors.get(id)?.color ?? CATEGORICAL[i % CATEGORICAL.length],

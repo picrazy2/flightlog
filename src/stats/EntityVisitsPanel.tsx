@@ -11,7 +11,8 @@ import type { StatContext } from "./types";
 import { airportsFrom } from "@/lib/aggregate";
 import { buildStack, buildCount, buildTypeStack, buildVisitTypeStack, buildVisits, type EntityLevel } from "./entityBreakdown";
 import { yearStack } from "./yearStack";
-import { sovereignOf } from "@/lib/continents";
+import { sovereignOf, COUNTRY_GEO, CONTINENTS } from "@/lib/continents";
+import { CONT_COLOR } from "./modules/continents";
 import { categoricalFor } from "@/lib/palette";
 
 const REGION_NAMER = new Intl.DisplayNames(["en"], { type: "region" });
@@ -22,6 +23,8 @@ const countryNm = (iso: string) => {
     return iso;
   }
 };
+const CONT_NAME: Record<string, string> = Object.fromEntries(CONTINENTS.map((c) => [c.code, c.name]));
+const contOf = (iso: string) => COUNTRY_GEO[iso]?.continent ?? null;
 
 export type Breakdown = "airport" | "city" | "type" | "visitType";
 
@@ -137,15 +140,27 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
       {(() => {
         const isCity = level === "city";
         const uniqueMode = yearMode === "unique"; // this chart's own toggle, not the first chart's
+        // unique mode stacks by the parent geography (cities → country, countries → continent);
+        // visits mode stacks by the top entity itself.
         const yc = yearStack({
           flights: facetFlights,
-          entities: (f) =>
-            isCity
-              ? [f.dep_city, f.arr_city]
-              : [sovereignOf(f.dep_country), sovereignOf(f.arr_country)],
+          entities: (f) => {
+            if (isCity) {
+              const mk = (city: string | null, cName: string | null, iso: string | null) =>
+                city ? { id: city, group: uniqueMode ? cName ?? iso ?? "—" : city } : null;
+              return [mk(f.dep_city, f.dep_country_name, f.dep_country), mk(f.arr_city, f.arr_country_name, f.arr_country)].filter(
+                (x): x is { id: string; group: string } => !!x,
+              );
+            }
+            const mk = (iso: string | null) => {
+              const s = sovereignOf(iso);
+              return s ? { id: s, group: uniqueMode ? contOf(s) ?? "—" : s } : null;
+            };
+            return [mk(f.dep_country), mk(f.arr_country)].filter((x): x is { id: string; group: string } => !!x);
+          },
           value: () => 1,
-          label: (id) => (isCity ? id : `${countryNm(id)}`),
-          color: (id, i) => categoricalFor(id, i),
+          label: (g) => (isCity ? g : uniqueMode ? CONT_NAME[g] ?? g : countryNm(g)),
+          color: (g, i) => (!isCity && uniqueMode ? CONT_COLOR[g as keyof typeof CONT_COLOR] ?? categoricalFor(g, i) : categoricalFor(g, i)),
           mode: uniqueMode ? "unique" : "sum",
           topN: 6,
         });

@@ -5,63 +5,74 @@ import type { Series } from "@/components/charts/chartTheme";
 const OTHER_KEY = "__other";
 const OTHER_COLOR = "#475569";
 
-// Per-year vertical stacked bar: one bar per year, split by the top-N entities (+ "Other").
-//  - mode "sum":    value summed per (year, entity) — visits, or flights/distance/time.
-//  - mode "unique": 1 per distinct entity present that year → the bar totals the unique count.
-// `entities(f)` returns the id(s) a flight touches (e.g. its dep + arr airport).
+// Per-year vertical stacked bar: one bar per year, split by the top-N stack groups (+ "Other").
+//  - mode "sum":    value summed per (year, group) — visits, or flights/distance/time.
+//  - mode "unique": distinct `id`s per (year, group) → the bar totals the unique count, and
+//                   each group's segment is how many distinct ids fall under it (e.g. unique
+//                   airports grouped by their country).
+// `entities(f)` returns { id, group } pairs the flight touches: `id` is the unit counted in
+// unique mode; `group` is the stack key (in sum mode only `group` matters).
 export function yearStack(opts: {
   flights: Flight[];
-  entities: (f: Flight) => (string | null | undefined)[];
+  entities: (f: Flight) => { id: string; group: string }[];
   value: (f: Flight) => number;
-  label: (id: string) => string;
-  color: (id: string, i: number) => string;
+  label: (group: string) => string;
+  color: (group: string, i: number) => string;
   mode: "sum" | "unique";
   topN: number;
 }): { rows: BarRowData[]; series: Series[] } {
   const { flights, entities, value, label, color, mode, topN } = opts;
-  const byYearSum = new Map<string, Map<string, number>>();
-  const byYearSet = new Map<string, Set<string>>();
-  const total = new Map<string, number>(); // for ranking the top entities
+  const yearGroupSum = new Map<string, Map<string, number>>(); // year → group → summed value
+  const yearGroupSet = new Map<string, Map<string, Set<string>>>(); // year → group → distinct ids
+  const total = new Map<string, number>(); // per group, for ranking
 
   for (const f of flights) {
     const y = f.flight_date.slice(0, 4);
     const v = value(f);
-    const sums = byYearSum.get(y) ?? new Map<string, number>();
-    byYearSum.set(y, sums);
-    const set = byYearSet.get(y) ?? new Set<string>();
-    byYearSet.set(y, set);
-    for (const raw of entities(f)) {
-      if (!raw) continue;
-      sums.set(raw, (sums.get(raw) ?? 0) + v);
-      set.add(raw);
-      total.set(raw, (total.get(raw) ?? 0) + v);
+    for (const { id, group } of entities(f)) {
+      if (!group) continue;
+      if (mode === "unique") {
+        const gm = yearGroupSet.get(y) ?? new Map<string, Set<string>>();
+        yearGroupSet.set(y, gm);
+        const set = gm.get(group) ?? new Set<string>();
+        gm.set(group, set);
+        set.add(id);
+      } else {
+        const gm = yearGroupSum.get(y) ?? new Map<string, number>();
+        yearGroupSum.set(y, gm);
+        gm.set(group, (gm.get(group) ?? 0) + v);
+        total.set(group, (total.get(group) ?? 0) + v);
+      }
     }
   }
-
-  const top = [...total.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN).map(([e]) => e);
+  // rank groups: by summed value (sum) or by total distinct count across years (unique)
+  if (mode === "unique") {
+    for (const gm of yearGroupSet.values()) for (const [g, set] of gm) total.set(g, (total.get(g) ?? 0) + set.size);
+  }
+  const top = [...total.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN).map(([g]) => g);
   const topSet = new Set(top);
-  const years = [...byYearSum.keys()].sort();
+  const years = mode === "unique" ? [...yearGroupSet.keys()].sort() : [...yearGroupSum.keys()].sort();
 
   const rows: BarRowData[] = years.map((y) => {
     const row: BarRowData = { id: y, label: y };
+    for (const g of top) row[g] = 0;
+    row[OTHER_KEY] = 0;
     if (mode === "unique") {
-      const set = byYearSet.get(y)!;
-      for (const e of top) row[e] = set.has(e) ? 1 : 0;
-      let other = 0;
-      for (const e of set) if (!topSet.has(e)) other++;
-      row[OTHER_KEY] = other;
+      for (const [g, set] of yearGroupSet.get(y)!) {
+        const key = topSet.has(g) ? g : OTHER_KEY;
+        row[key] = (Number(row[key]) || 0) + set.size;
+      }
     } else {
-      const sums = byYearSum.get(y)!;
-      for (const e of top) row[e] = Math.round(sums.get(e) ?? 0);
-      let other = 0;
-      for (const [e, v] of sums) if (!topSet.has(e)) other += v;
-      row[OTHER_KEY] = Math.round(other);
+      for (const [g, v] of yearGroupSum.get(y)!) {
+        const key = topSet.has(g) ? g : OTHER_KEY;
+        row[key] = (Number(row[key]) || 0) + Math.round(v);
+      }
     }
     return row;
   });
 
   const series: Series[] = [
-    ...top.map((e, i) => ({ key: e, name: label(e), color: color(e, i) })),
+    ...top.map((g, i) => ({ key: g, name: label(g), color: color(g, i) })),
     { key: OTHER_KEY, name: "Other", color: OTHER_COLOR },
   ];
   return { rows, series };
