@@ -1,54 +1,101 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 
-// Intro splash shown while flights load: a backgroundless Journia "J" assembles in
-// the centre while a flurry of translucent J's tumbles down the screen behind it.
+// Intro splash shown while flights load: a backgroundless Journia "J" sits centred
+// while a stream of physical J's rains down and piles up at the bottom of the screen
+// (matter-js), accumulating for as long as the load takes.
 
-const COLORS = ["#5B9DFF", "#2DD4BF", "#7DB4FF", "#9BC2FF"];
-
-// Decorrelated hash so each attribute varies independently (avoids the visible
-// "waves" you get when one seed drives everything). Deterministic → stable renders.
-const hash = (i: number, salt: number) => {
-  const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
-  return x - Math.floor(x); // 0..1
-};
-
-// A dense, varied spread of falling J's. Each starts at a random phase of its OWN
-// fall (delay in [-dur, 0]) so at any instant they're scattered top-to-bottom — a
-// continuous drizzle rather than synchronized bands.
-const FALLERS = Array.from({ length: 36 }, (_, i) => {
-  const dur = 5 + hash(i, 3) * 9; // 5–14s: a wide spread of speeds
-  return {
-    left: hash(i, 1) * 100,
-    size: 12 + hash(i, 2) * 46, // 12–58px
-    dur,
-    delay: -hash(i, 4) * dur,
-    rot: (hash(i, 5) < 0.5 ? -1 : 1) * (160 + hash(i, 6) * 360),
-    op: 0.06 + hash(i, 7) * 0.2,
-    color: COLORS[Math.floor(hash(i, 8) * COLORS.length)],
-  };
-});
-
-// The bare "J" hook (no background, no globe) — used both as falling confetti and,
-// at large size with the plane + origin node, as the centre mark.
 const J_PATH = "M43 16 L43 36 C43 44 36.5 48 27.5 45.6";
 
-function Faller({ f }: { f: (typeof FALLERS)[number] }) {
-  const style = {
-    position: "absolute",
-    left: `${f.left}%`,
-    top: 0,
-    "--j-rot": `${f.rot}deg`,
-    "--j-op": f.op,
-    animation: `j-fall ${f.dur}s linear ${f.delay}s infinite`,
-  } as CSSProperties;
-  return (
-    <svg viewBox="0 0 64 64" width={f.size} height={f.size} fill="none" aria-hidden style={style}>
-      <path d={J_PATH} stroke={f.color} strokeWidth="6" strokeLinecap="round" fill="none" />
-    </svg>
-  );
+// One shared J texture (the gradient hook + amber origin node), tightly cropped so the
+// physics body matches the visible glyph. Returns a PNG data URL.
+const TEX_W = 116;
+const TEX_H = 172;
+function makeJTexture(): string {
+  const c = document.createElement("canvas");
+  c.width = TEX_W;
+  c.height = TEX_H;
+  const ctx = c.getContext("2d")!;
+  const S = 4; // 64-space → texture px
+  ctx.scale(S, S);
+  ctx.translate(-20.5, -9.5); // crop to the J's bounding box (+padding)
+  const g = ctx.createLinearGradient(43, 12, 27, 48);
+  g.addColorStop(0, "#5B9DFF");
+  g.addColorStop(1, "#2DD4BF");
+  ctx.strokeStyle = g;
+  ctx.lineWidth = 5.5;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(43, 16);
+  ctx.lineTo(43, 36);
+  ctx.bezierCurveTo(43, 44, 36.5, 48, 27.5, 45.6);
+  ctx.stroke();
+  ctx.fillStyle = "#FFC061";
+  ctx.beginPath();
+  ctx.arc(27.5, 45.6, 3.6, 0, Math.PI * 2);
+  ctx.fill();
+  return c.toDataURL();
 }
 
-function CentreMark({ size = 120 }: { size?: number }) {
+// Spin up a matter-js world inside `el` that drops J's until torn down. Returns cleanup.
+function runPile(Matter: any, el: HTMLElement): () => void {
+  const { Engine, Render, Runner, Bodies, Composite, Body } = Matter;
+  const W = el.clientWidth || window.innerWidth;
+  const H = el.clientHeight || window.innerHeight;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+
+  const engine = Engine.create();
+  engine.gravity.y = 1.1;
+  const render = Render.create({
+    element: el,
+    engine,
+    options: { width: W, height: H, background: "transparent", wireframes: false, pixelRatio: dpr },
+  });
+
+  const texture = makeJTexture();
+  // floor + side walls just outside the viewport so the pile stays on screen
+  Composite.add(engine.world, [
+    Bodies.rectangle(W / 2, H + 40, W + 400, 80, { isStatic: true }),
+    Bodies.rectangle(-40, H / 2, 80, H * 3, { isStatic: true }),
+    Bodies.rectangle(W + 40, H / 2, 80, H * 3, { isStatic: true }),
+  ]);
+
+  const drop = () => {
+    if (Composite.allBodies(engine.world).length > 160) return; // safety cap
+    const h = 26 + Math.random() * 36; // on-screen J height
+    const scale = h / TEX_H;
+    const bw = TEX_W * scale;
+    const bh = TEX_H * scale;
+    const x = W * 0.12 + Math.random() * W * 0.76;
+    const body = Bodies.rectangle(x, -bh - 10, bw, bh, {
+      friction: 0.45,
+      frictionStatic: 0.7,
+      restitution: 0.08,
+      chamfer: { radius: Math.min(bw, bh) * 0.2 },
+      angle: (Math.random() - 0.5) * 0.7,
+      render: { sprite: { texture, xScale: scale, yScale: scale } },
+    });
+    Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.22);
+    Composite.add(engine.world, body);
+  };
+
+  const runner = Runner.create();
+  Runner.run(runner, engine);
+  Render.run(render);
+  for (let i = 0; i < 3; i++) setTimeout(drop, i * 110); // initial burst
+  const iv = setInterval(drop, 165);
+
+  return () => {
+    clearInterval(iv);
+    Render.stop(render);
+    Runner.stop(runner);
+    render.canvas?.remove();
+    render.textures = {};
+    Composite.clear(engine.world, false);
+    Engine.clear(engine);
+  };
+}
+
+function CentreMark({ size = 124 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden>
       <defs>
@@ -82,27 +129,39 @@ export function SplashScreen() {
   // Hold a blank dark screen for a beat; only fade the animation in if we're still
   // loading after that. A fast load unmounts before this fires → no busy flash.
   const [show, setShow] = useState(false);
+  const stage = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const t = setTimeout(() => setShow(true), 450);
     return () => clearTimeout(t);
   }, []);
 
+  // physics pile — matter-js is lazy-loaded so it never bloats the initial bundle
+  useEffect(() => {
+    if (!show) return;
+    let cancelled = false;
+    let stop = () => {};
+    import("matter-js")
+      .then((m: any) => {
+        if (cancelled || !stage.current) return;
+        stop = runPile(m.default ?? m, stage.current);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [show]);
+
   return (
     <div className="relative grid h-full w-full place-items-center overflow-hidden" style={{ background: "var(--bg)" }}>
+      {show && <div ref={stage} className="pointer-events-none absolute inset-0" style={{ animation: "fade-in 600ms ease both" }} />}
       {show && (
-        <>
-          <div className="pointer-events-none absolute inset-0" style={{ animation: "fade-in 500ms ease both" }}>
-            {FALLERS.map((f, i) => (
-              <Faller key={i} f={f} />
-            ))}
+        <div className="relative z-10 flex flex-col items-center gap-5" style={{ animation: "fade-in 500ms ease both" }}>
+          <div className="animate-splash-mark">
+            <CentreMark size={124} />
           </div>
-          <div className="relative z-10 flex flex-col items-center gap-5" style={{ animation: "fade-in 500ms ease both" }}>
-            <div className="animate-splash-mark">
-              <CentreMark size={124} />
-            </div>
-            <div className="animate-splash-word font-display text-[2.2rem] font-bold tracking-[-0.02em] text-ink">Journia</div>
-          </div>
-        </>
+          <div className="animate-splash-word font-display text-[2.2rem] font-bold tracking-[-0.02em] text-ink">Journia</div>
+        </div>
       )}
     </div>
   );

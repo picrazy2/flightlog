@@ -12,6 +12,7 @@ import { SplashScreen } from "./SplashScreen";
 import { MobileShell } from "./mobile/MobileShell";
 import { Legend } from "@/components/ui/Legend";
 import { Button } from "@/components/ui/Button";
+import { useFlightTracks } from "@/data/useFlightTracks";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useEffect, useRef, useState } from "react";
 
@@ -59,7 +60,11 @@ export function App() {
     const t = setTimeout(() => setHeld(false), 3500);
     return () => clearTimeout(t);
   }, [held]);
-  const splashVisible = useSplashGate(held || isLoading);
+  // Start the tracks fetch now (parallel with flights) instead of when the map mounts,
+  // and when tracks are on keep the splash up until they're in — so the map appears
+  // complete rather than popping the tracks in a moment later.
+  const tracks = useFlightTracks();
+  const splashVisible = useSplashGate(held || isLoading || (showTracks && tracks.isLoading));
 
   if (error) {
     return (
