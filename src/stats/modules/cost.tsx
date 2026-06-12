@@ -25,6 +25,7 @@ import { CHART, axisTick } from "@/components/charts/chartTheme";
 import { useStore, ALL_TIME } from "@/state/store";
 import { yearRange, yearOfRange } from "../filters";
 import { color } from "@/lib/palette";
+import { programLabel } from "@/lib/loyalty";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 type Metric = "flights" | "spend";
@@ -55,6 +56,7 @@ export const cost: StatModule = {
     const [metric, setMetric] = useState<Metric>("spend");
     const [chartType, setChartType] = useState<"bar" | "pie">("bar");
     const [basis, setBasis] = useState<Basis>("total");
+    const [breakdown2, setBreakdown2] = useState<"currency" | "program">("currency");
     const { settings, range, setRange } = useStore();
     const km = settings.units === "km";
     const cur = settings.currency;
@@ -68,6 +70,7 @@ export const cost: StatModule = {
     const byYear = new Map<string, Agg>();
     const t = blank();
     const byCurrency = new Map<string, { flights: number; spend: number }>();
+    const byProgram = new Map<string, { flights: number; points: number }>(); // points programs
     const totalFlightsByYear = new Map<string, number>(); // all flights/year → "priced of total" hover
     for (const f of ctx.flights) totalFlightsByYear.set(f.flight_date.slice(0, 4), (totalFlightsByYear.get(f.flight_date.slice(0, 4)) ?? 0) + 1);
     for (const f of ctx.flights) {
@@ -82,6 +85,11 @@ export const cost: StatModule = {
         a.pointsSpend += f.cost_points_segment ?? 0; t.pointsSpend += f.cost_points_segment ?? 0;
         a.pointsDist += distOf(f); t.pointsDist += distOf(f);
         a.pointsHours += hoursOf(f); t.pointsHours += hoursOf(f);
+        if (f.points_program) {
+          const e = byProgram.get(f.points_program) ?? { flights: 0, points: 0 };
+          e.flights++; e.points += f.cost_points_segment ?? 0;
+          byProgram.set(f.points_program, e);
+        }
       } else if (hasCash && cashUSD(f) > 0) {
         a.cashFlights++; t.cashFlights++;
         a.cashDist += distOf(f); t.cashDist += distOf(f);
@@ -145,10 +153,13 @@ export const cost: StatModule = {
       { id: "points", name: pointsName, value: t.pointsFlights, color: POINTS_COLOR },
     ].filter((s) => s.value > 0);
 
-    // top currencies, following the flights/spend toggle
+    // second chart: top currencies (cash) or points programs, following the flights/spend toggle
     const CUR_NAME: Record<string, string> = Object.fromEntries(CURRENCIES.map((c) => [c.code, c.name]));
     const curRows = [...byCurrency.entries()]
-      .map(([c, e]) => ({ id: c, label: CUR_NAME[c] ? `${c} · ${CUR_NAME[c]}` : c, value: metric === "flights" ? e.flights : r2(e.spend) }))
+      .map(([c, e]) => ({ id: c, label: CUR_NAME[c] ?? c, value: metric === "flights" ? e.flights : r2(e.spend) }))
+      .sort((a, b) => b.value - a.value);
+    const progRows = [...byProgram.entries()]
+      .map(([p, e]) => ({ id: p, label: programLabel(p), value: metric === "flights" ? e.flights : Math.round(e.points) }))
       .sort((a, b) => b.value - a.value);
 
     const title =
@@ -234,19 +245,36 @@ export const cost: StatModule = {
           </div>
         )}
 
-        {curRows.length > 0 && (
-          <div>
-            <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">
-              Top currencies · {metric === "flights" ? "flights" : `spend (${sym})`}
+        {(() => {
+          const rows = breakdown2 === "currency" ? curRows : progRows;
+          const spendUnit = metric === "flights" ? "flights" : breakdown2 === "currency" ? `spend (${sym})` : "points";
+          return rows.length > 0 ? (
+            <div>
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-eyebrow tracking-[0.01em] text-ink-faint">
+                  Top {breakdown2 === "currency" ? "currencies" : "programs"} · {spendUnit}
+                </span>
+                <Segmented
+                  aria-label="Breakdown"
+                  size="sm"
+                  value={breakdown2}
+                  onChange={setBreakdown2}
+                  options={[
+                    { value: "currency", label: "Currencies" },
+                    { value: "program", label: "Programs" },
+                  ]}
+                />
+              </div>
+              <BarsH
+                rows={rows.map((r) => ({ id: r.id, label: r.label, value: r.value }))}
+                series={[{ key: "value", name: metric === "flights" ? "flights" : breakdown2 === "currency" ? sym : "pts", color: color.accent }]}
+                unit={metric === "flights" ? "flights" : breakdown2 === "currency" ? cur : "pts"}
+                title={breakdown2 === "currency" ? "Top currencies" : "Top programs"}
+                cap={6}
+              />
             </div>
-            <BarsH
-              rows={curRows.map((r) => ({ id: r.id, label: r.label, value: r.value }))}
-              series={[{ key: "value", name: metric === "flights" ? "flights" : sym, color: color.accent }]}
-              unit={metric === "flights" ? "flights" : cur}
-              cap={6}
-            />
-          </div>
-        )}
+          ) : null;
+        })()}
       </>
     );
   },

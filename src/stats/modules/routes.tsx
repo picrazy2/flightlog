@@ -326,6 +326,7 @@ export const routes: StatModule = {
           series={main.series}
           activeId={activeRoutes}
           unit={metric === "flights" ? "flights" : metric === "distance" ? ctx.settings.units : "min"}
+          title={directed === "directed" ? "Top directed routes" : "Top routes"}
           cap={8}
           onPick={(id) => {
             const r = main.rows.find((x) => x.id === id);

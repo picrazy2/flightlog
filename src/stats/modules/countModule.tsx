@@ -63,6 +63,7 @@ export function countModule(opts: {
             series={[{ key: "count", name: metricName[metric], color: color.accent }]}
             activeId={activeId}
             unit={metricName[metric]}
+            title={`Top ${opts.eyebrow.toLowerCase()}`}
             cap={8}
             tickIcon={opts.tickIcon ? (row) => opts.tickIcon!(row.id) : undefined}
             onPick={(id) => {

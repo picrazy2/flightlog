@@ -254,6 +254,7 @@ export const aircraft: StatModule = {
         <BarsH
           rows={typeRows}
           percent={percent}
+          title="Aircraft types"
           series={[
             { key: "domestic", name: "Domestic", color: color.accent },
             { key: "international", name: "International", color: color.secondary },

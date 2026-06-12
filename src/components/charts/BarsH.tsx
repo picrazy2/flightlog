@@ -177,7 +177,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
         </button>
       )}
       {showAll && (
-        <Modal title={title ?? "All"} onClose={() => setShowAll(false)} className="w-[min(560px,95vw)]">
+        <Modal title={title ?? "All results"} onClose={() => setShowAll(false)} className="w-[min(560px,95vw)]">
           <div className="overflow-y-auto p-4" style={{ maxHeight: "75vh" }}>
             <BarsH
               rows={rows}
