@@ -52,6 +52,7 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
   const hoverPopup = useRef<maplibregl.Popup | null>(null);
   const clickPopup = useRef<maplibregl.Popup | null>(null);
   const popupRoot = useRef<Root | null>(null);
+  const showFlightRef = useRef<((flightId: string) => void) | null>(null);
   const projection = useStore((s) => s.projection);
   const crossFilters = useStore((s) => s.crossFilters);
   const showAirports = useStore((s) => s.showAirports);
@@ -316,6 +317,30 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
       restoreHighlightRef.current = restoreHighlight;
       clickPopup.current!.on("close", restoreHighlight);
 
+      // search-by-flight-number → open this flight's popup (instead of cross-filtering).
+      // Fits the route, highlights it, and shows the FlightPopup at the route midpoint.
+      showFlightRef.current = (flightId: string) => {
+        const flight = ctxRef.current.flights.find((x) => x.id === flightId);
+        if (!flight || flight.dep_lng == null || flight.arr_lng == null) return;
+        const mid: [number, number] = [
+          (flight.dep_lng + flight.arr_lng) / 2,
+          ((flight.dep_lat ?? 0) + (flight.arr_lat ?? 0)) / 2,
+        ];
+        map.fitBounds(
+          [
+            [Math.min(flight.dep_lng, flight.arr_lng), Math.min(flight.dep_lat ?? 0, flight.arr_lat ?? 0)],
+            [Math.max(flight.dep_lng, flight.arr_lng), Math.max(flight.dep_lat ?? 0, flight.arr_lat ?? 0)],
+          ],
+          { padding: 120, duration: 800, maxZoom: 6 },
+        );
+        if (isMobileRef.current) {
+          useStore.getState().setMapSelection({ kind: "flight", flightId: flight.id });
+          return;
+        }
+        setHighlight({ kind: "route", field: "fid", id: flight.id, dep: flight.dep_iata, arr: flight.arr_iata });
+        showReactPopup(mid, "route", <FlightPopup flight={flight} settings={ctxRef.current.settings} />);
+      };
+
       map.on("click", "airports", (e) => {
         const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
         if (!p) return;
@@ -446,11 +471,17 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
       const d = (e as CustomEvent).detail as { bounds: [[number, number], [number, number]] };
       mapRef.current?.fitBounds(d.bounds, { padding: 120, duration: 800, maxZoom: 6 });
     };
+    const showFlight = (e: Event) => {
+      const d = (e as CustomEvent).detail as { flightId: string };
+      showFlightRef.current?.(d.flightId);
+    };
     window.addEventListener("journia:flyto", fly);
     window.addEventListener("journia:fit", fit);
+    window.addEventListener("journia:showflight", showFlight as EventListener);
     return () => {
       window.removeEventListener("journia:flyto", fly);
       window.removeEventListener("journia:fit", fit);
+      window.removeEventListener("journia:showflight", showFlight as EventListener);
     };
   }, []);
 

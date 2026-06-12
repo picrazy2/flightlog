@@ -114,14 +114,34 @@ export function SearchBox({ ctx, iconOnly }: { ctx: StatContext; iconOnly?: bool
       out.push({ key: `aircraft:${code}`, cat: "Aircraft", label: a.name, sub: code, hay: `${code} ${a.name}`.toLowerCase(), weight: a.n, run: () => toggleCrossFilter(aircraftFilter(code, a.name)) });
     }
 
+    // individual flights by number → open that flight's popup (no filter)
+    for (const f of ctx.flights) {
+      const ident = `${f.airline_iata ?? ""}${f.flight_number ?? ""}`;
+      if (!ident) continue;
+      out.push({
+        key: `flight:${f.id}`,
+        cat: "Flight",
+        label: `${ident} · ${f.dep_iata} → ${f.arr_iata}`,
+        sub: f.flight_date,
+        hay: `${ident} ${f.airline_iata ?? ""} ${f.flight_number ?? ""} ${f.dep_iata} ${f.arr_iata}`.toLowerCase(),
+        weight: Number(f.flight_date.replace(/-/g, "")), // recent flights first
+        run: () => window.dispatchEvent(new CustomEvent("journia:showflight", { detail: { flightId: f.id } })),
+      });
+    }
+
     return out;
   }, [ctx, toggleCrossFilter]);
 
   const results = useMemo(() => {
     const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!tokens.length) return [];
-    // every token must appear in the haystack (so "sfo jfk" finds the SFO↔JFK route)
-    return index.filter((s) => tokens.every((t) => s.hay.includes(t))).sort((a, b) => b.weight - a.weight).slice(0, 24);
+    // every token must appear in the haystack (so "sfo jfk" finds the SFO↔JFK route).
+    // Individual flights are the most specific match → list them after the aggregate
+    // categories (and, among themselves, most-recent first via the date weight).
+    return index
+      .filter((s) => tokens.every((t) => s.hay.includes(t)))
+      .sort((a, b) => (a.cat === "Flight" ? 1 : 0) - (b.cat === "Flight" ? 1 : 0) || b.weight - a.weight)
+      .slice(0, 24);
   }, [q, index]);
 
   const resultList = (close: () => void) => (
