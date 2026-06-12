@@ -59,7 +59,7 @@ export const cabinClass: StatModule = {
     ];
 
     const agg = new Map<string, { domestic: number; international: number }>();
-    for (const f of ctx.flights) {
+    for (const f of ctx.facetFlights("class")) {
       if (!f.cabin_class) continue;
       const cur = agg.get(f.cabin_class) ?? { domestic: 0, international: 0 };
       if (f.trip_type === "international") cur.international += metricValue(f, metric);
@@ -72,7 +72,7 @@ export const cabinClass: StatModule = {
       domestic: Math.round(agg.get(c)!.domestic),
       international: Math.round(agg.get(c)!.international),
     }));
-    const activeId = crossFilters.find((c) => c.id.startsWith("class:"))?.id.split(":")[1] ?? null;
+    const activeId = crossFilters.filter((c) => c.id.startsWith("class:")).map((c) => c.id.slice("class:".length));
     return (
       <>
         <MiniStats items={cards} />

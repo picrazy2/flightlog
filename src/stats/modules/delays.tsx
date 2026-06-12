@@ -56,7 +56,8 @@ export const delays: StatModule = {
     // second chart metric: avg minutes late vs % of flights delayed, per airline
     const [airlineMetric, setAirlineMetric] = useState<"mins" | "pct">("mins");
     const [showList, setShowList] = useState(false);
-    const { toggleCrossFilter } = useStore();
+    const { toggleCrossFilter, crossFilters } = useStore();
+    const airlineActive = crossFilters.filter((c) => c.id.startsWith("airline:")).map((c) => c.id.slice("airline:".length));
 
     // average departure vs arrival delay (min) by year over all timed flights
     const depD = (f: Flight) => departureDelayMin(f);
@@ -89,7 +90,7 @@ export const delays: StatModule = {
       }));
     // per-airline arrival performance — airlines with >= 10 timed flights
     const byAirline = new Map<string, { label: string; sum: number; n: number; late: number }>();
-    for (const f of ctx.flights) {
+    for (const f of ctx.facetFlights("airline")) {
       const d = delayMin(f);
       if (d == null) continue;
       const cur = byAirline.get(f.airline_iata) ?? { label: f.airline_name ?? f.airline_iata, sum: 0, n: 0, late: 0 };
@@ -127,7 +128,7 @@ export const delays: StatModule = {
     const cards = [
       { label: "Early", value: pct(early), color: GREEN },
       { label: "Delayed (≤1h)", value: pct(delayed), color: color.secondary },
-      { label: "Very delayed (>1h)", value: pct(veryLate), color: RED },
+      { label: "Very delayed", value: pct(veryLate), color: RED },
       { label: "Most delayed", value: maxDelay > 0 ? `+${formatDuration(maxDelay).value}` : "—", color: RED },
       { label: "Earliest", value: minDelay < 0 ? `−${formatDuration(-minDelay).value}` : "—", color: GREEN },
       { label: netMin >= 0 ? "Net time lost" : "Net time saved", value: `${netMin >= 0 ? "+" : "−"}${netDur}`, color: netMin >= 0 ? RED : GREEN },
@@ -160,7 +161,7 @@ export const delays: StatModule = {
       <>
         <MiniStats items={cards} cols={3} />
         <ChartLegend series={lineSeries} />
-        <div style={{ height: 240 }}>
+        <div className="shrink-0" style={{ height: 200 }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={rows} margin={{ left: -16, right: -8, top: 6, bottom: 2 }}>
               <CartesianGrid stroke={CHART.grid} vertical={false} />
@@ -203,6 +204,7 @@ export const delays: StatModule = {
             <BarsH
               rows={worst}
               series={[{ key: "value", name: airlineMetric === "mins" ? "min" : "%", color: color.routeIntl }]}
+              activeId={airlineActive}
               unit={airlineMetric === "mins" ? "min" : "%"}
               cap={10}
               onPick={(id) => {

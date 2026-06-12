@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { StatModule } from "../types";
 import type { Flight } from "@/lib/types";
-import { uniqueCount } from "@/lib/aggregate";
+import { uniqueCount, airportsFrom } from "@/lib/aggregate";
 import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
 import { OptionsButton } from "@/components/ui/OptionsButton";
@@ -70,8 +70,10 @@ export const airports: StatModule = {
     const [percent, setPercent] = useState(false);
     const [yearByYear, setYearByYear] = useState(false); // year view: flip to one bar per year
     const { toggleCrossFilter, crossFilters, range, setRange } = useStore();
-    const airports = [...ctx.airports.values()];
-    const airportActive = crossFilters.find((c) => c.id.startsWith("airport:"))?.id.split(":")[1] ?? null;
+    // airport charts exclude the airport facet so selecting airports doesn't hide the rest
+    const airportFlights = ctx.facetFlights("airport");
+    const airports = [...airportsFrom(airportFlights).values()];
+    const airportActive = crossFilters.filter((c) => c.id.startsWith("airport:")).map((c) => c.id.slice("airport:".length));
 
     const groupControl = (
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -134,7 +136,7 @@ export const airports: StatModule = {
 
     // Dom·Intl → one airport per bar, stacked domestic / international (connection-aware).
     if (view === "domintl") {
-      const byAirport = visitClassByAirport(ctx.flights);
+      const byAirport = visitClassByAirport(airportFlights);
       const rows: BarRowData[] = [...byAirport.entries()]
         .map(([iata, x]) => ({ id: iata, label: iata, domestic: x.dom, international: x.intl }))
         .sort((a, b) => b.domestic + b.international - (a.domestic + a.international));
@@ -204,7 +206,7 @@ export const airports: StatModule = {
     }
 
     // Year (default) → one airport per bar, stacked by year(-group) visits.
-    const vby = visitsByAirportYear(ctx.flights);
+    const vby = visitsByAirportYear(airportFlights);
     const series = groups.map((g, i) => ({ key: g.key, name: g.label, color: categoricalFor(g.key, i) }));
     const rows: BarRowData[] = [...vby.entries()]
       .map(([iata, ym]) => {

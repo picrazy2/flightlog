@@ -11,7 +11,7 @@ interface Props {
   series: Series[]; // bar series (one for single-value, many for stacked)
   chartType: ChartType;
   onPick?: (id: string) => void;
-  activeId?: string | null;
+  activeId?: string | null | string[];
   unit?: string;
   percent?: boolean; // 100%-stacked bar
   tickIcon?: (row: BarRowData) => string | undefined;

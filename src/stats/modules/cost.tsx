@@ -73,8 +73,10 @@ export const cost: StatModule = {
       metric === "cash" ? f.cost_cash_segment != null && !(cashUSD(f) < 50 && hasPoints(f)) : hasPoints(f);
     const value = (f: Flight) => (metric === "cash" ? cashUSD(f) : f.cost_points_segment ?? 0);
 
+    // when grouping by class, exclude the class facet so all classes stay visible (multi-select)
+    const sourceFlights = group === "class" ? ctx.facetFlights("class") : ctx.flights;
     const buckets = new Map<string, { label: string; dom: number; intl: number; flights: number; dist: number; hours: number; sort: number }>();
-    for (const f of ctx.flights) {
+    for (const f of sourceFlights) {
       if (!priced(f)) continue;
       let key: string, label: string, sort: number;
       if (group === "year") {
@@ -109,10 +111,10 @@ export const cost: StatModule = {
     }
 
     const unit = metric === "cash" ? "$" : "pts";
-    const activeId =
+    const activeId: string | string[] | null =
       group === "year"
         ? yearOfRange(range)
-        : crossFilters.find((c) => c.id.startsWith("class:"))?.id.split(":")[1] ?? null;
+        : crossFilters.filter((c) => c.id.startsWith("class:")).map((c) => c.id.slice("class:".length));
     const onPick = (id: string) => {
       if (group === "year") setRange(yearOfRange(range) === id ? ALL_TIME : yearRange(id));
       else toggleCrossFilter(classFilter(id, CLASS_LABELS[id as CabinClass] ?? id));
@@ -216,7 +218,9 @@ export const cost: StatModule = {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-        {activeId && <p className="text-caption text-ink-faint">Filtering: {activeId}</p>}
+        {(Array.isArray(activeId) ? activeId.length > 0 : activeId) && (
+          <p className="text-caption text-ink-faint">Filtering: {Array.isArray(activeId) ? activeId.join(", ") : activeId}</p>
+        )}
 
         {methodRows.length > 0 && (
           <div>

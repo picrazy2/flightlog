@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { StatModule } from "../types";
 import type { Flight } from "@/lib/types";
 import { sumDistanceMi, routesFrom } from "@/lib/aggregate";
-import { formatDistance, formatDuration, localHour, schedDep, flightDistanceMi, flightMinutes } from "@/lib/format";
+import { formatDistance, formatDuration, flightDistanceMi, flightMinutes } from "@/lib/format";
 import { Segmented } from "@/components/ui/Segmented";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { BarsV } from "@/components/charts/BarsV";
@@ -50,17 +50,36 @@ function funFacts(flights: Flight[], settings: { units: "mi" | "km" }): Fact[] {
     facts.push({ label: "Busiest month", value: `${MONTHS[Number(mo) - 1]} ${y}`, sub: `${busiestMonth.n} flights` });
   }
 
-  const redeyes = flights.filter((f) => {
-    const h = localHour(schedDep(f), f.dep_timezone);
-    return h >= 22 || h < 5;
-  }).length;
-  if (redeyes) facts.push({ label: "Red-eyes (dep 10pm–5am)", value: `${redeyes}` });
-
   const km = settings.units === "km";
   const conv = (mi: number) => Math.round(mi * (km ? 1.60934 : 1)).toLocaleString();
   const u = km ? "km" : "mi";
   const avgMi = totalMi / flights.length;
   facts.push({ label: "Average flight length", value: `${conv(avgMi)} ${u}` });
+
+  // fastest flight (ground speed) — only flights with a real track + air time
+  let fastest: { mph: number; label: string; date: string } | null = null;
+  for (const f of flights) {
+    if (f.flown_distance_mi == null) continue;
+    const min = flightMinutes(f);
+    if (min <= 0) continue;
+    const mph = (flightDistanceMi(f) * 60) / min;
+    if (!fastest || mph > fastest.mph) fastest = { mph, label: `${f.dep_iata}–${f.arr_iata}`, date: f.flight_date };
+  }
+  if (fastest) {
+    const spd = Math.round(fastest.mph * (km ? 1.60934 : 1));
+    facts.push({ label: "Fastest flight", value: `${spd.toLocaleString()} ${km ? "km/h" : "mph"}`, sub: fastest.label });
+  }
+
+  // biggest detour — flight whose flown path most exceeds the great-circle distance
+  let detour: { ratio: number; label: string } | null = null;
+  for (const f of flights) {
+    const gc = f.distance_mi ?? 0;
+    if (f.flown_distance_mi == null || gc < 100) continue; // skip short hops where the ratio is noisy
+    const ratio = f.flown_distance_mi / gc;
+    if (ratio < 1.02) continue;
+    if (!detour || ratio > detour.ratio) detour = { ratio, label: `${f.dep_iata}–${f.arr_iata}` };
+  }
+  if (detour) facts.push({ label: "Biggest detour", value: `${detour.ratio.toFixed(2)}× direct`, sub: detour.label });
   // route whose per-leg distance is closest to the average
   let closest: { label: string; per: number; d: number } | null = null;
   for (const r of routesFrom(flights, false).values()) {

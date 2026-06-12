@@ -37,11 +37,12 @@ export const domesticIntl: StatModule = {
   Panel: ({ ctx }) => {
     const { toggleCrossFilter, crossFilters } = useStore();
     const { metric, control } = useMetricToggle();
-    const activeId = crossFilters.find((c) => c.id.startsWith("trip:"))?.id.split(":")[1] ?? null;
+    const activeId = crossFilters.filter((c) => c.id.startsWith("trip:")).map((c) => c.id.slice("trip:".length));
 
-    // dom/intl split weighted by the active metric
+    // dom/intl split weighted by the active metric (over flights not narrowed by trip,
+    // so both bars stay visible and either can be toggled)
     let dom = 0, intl = 0;
-    for (const f of ctx.flights) {
+    for (const f of ctx.facetFlights("trip")) {
       const v = metricValue(f, metric);
       if (f.trip_type === "domestic") dom += v;
       else if (f.trip_type === "international") intl += v;

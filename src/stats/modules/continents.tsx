@@ -10,7 +10,7 @@ import { useStore, type CrossFilter } from "@/state/store";
 import { continentFilter, regionFilter } from "../filters";
 
 // Six distinct hues; none is the amber reserved for inter-continental (color.secondary).
-const CONT_COLOR: Record<ContinentCode, string> = {
+export const CONT_COLOR: Record<ContinentCode, string> = {
   AF: "#FB923C", // orange
   AS: "#FB7185", // rose
   EU: "#5B9DFF", // blue
@@ -110,10 +110,11 @@ export const continents: StatModule = {
     const [display, setDisplay] = useState<"percent" | "number">("percent");
     const [expanded, setExpanded] = useState<ContinentCode | null>(null);
     const [openRegions, setOpenRegions] = useState<Set<string>>(() => new Set());
-    const activeCont = crossFilters.find((c) => c.id.startsWith("continent:"))?.id.split(":")[1] ?? null;
+    const activeCont = crossFilters.filter((c) => c.id.startsWith("continent:")).map((c) => c.id.slice("continent:".length));
     const activeRegions = new Set(crossFilters.filter((c) => c.id.startsWith("region:")).map((c) => c.id.slice("region:".length)));
 
-    const visited = visitedCountries(ctx);
+    // continent chart shouldn't collapse when you select continents → exclude that facet
+    const visited = visitedCountries({ ...ctx, flights: ctx.facetFlights("continent") });
     const visitedByCont = new Map<ContinentCode, Set<string>>();
     for (const iso of visited.keys()) {
       const c = COUNTRY_GEO[iso].continent;

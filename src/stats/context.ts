@@ -46,6 +46,15 @@ export function useStatContext(): { ctx: StatContext | null; isLoading: boolean;
     const passesCross = (f: (typeof data)[number]) => groups.every((g) => g.some((c) => c.test(f)));
     const flights = data.filter((f) => inRange(f, range) && passesTemporal(f) && passesCross(f));
 
+    // A facet's own chart should not be narrowed by its own selections (else clicking
+    // one bar hides the rest and you can't add a second). Filter by all OTHER facets.
+    const facetFlights = (facet: string) => {
+      const others = [...facetGroups.entries()].filter(([k]) => k !== facet).map(([, g]) => g);
+      return data.filter(
+        (f) => inRange(f, range) && passesTemporal(f) && others.every((g) => g.some((c) => c.test(f))),
+      );
+    };
+
     // A bounded range compares to the immediately-preceding equal-length window
     // (a ▲/▼ delta). All-time has no meaningful previous period → no comparison.
     let compareFlights: Flight[] | null = null;
@@ -60,6 +69,7 @@ export function useStatContext(): { ctx: StatContext | null; isLoading: boolean;
 
     return {
       flights,
+      facetFlights,
       compareFlights,
       airports: airportsFrom(flights),
       settings,

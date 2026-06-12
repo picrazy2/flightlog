@@ -12,7 +12,7 @@ interface Props {
   series: Series[];
   percent?: boolean;
   onPick?: (id: string) => void;
-  activeId?: string | null;
+  activeId?: string | null | string[];
   height?: number;
   colorByRow?: (row: BarRowData) => string | undefined; // override per-bar fill (e.g. future)
   unit?: string;

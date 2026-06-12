@@ -19,7 +19,7 @@ interface Props {
   series: Series[];
   percent?: boolean; // 100% stacked
   onPick?: (id: string) => void;
-  activeId?: string | null;
+  activeId?: string | null | string[]; // single id, or a set of selected ids (multi-select)
   height?: number;
   tickIcon?: (row: BarRowData) => string | undefined; // optional logo per row (airlines)
   tickBadge?: (row: BarRowData) => { color: string } | undefined; // colored dot beside label

@@ -22,7 +22,7 @@ export function countModule(opts: {
 }): StatModule {
   const rank = (ctx: StatContext, metric: Parameters<typeof metricValue>[1]) => {
     const acc = new Map<string, { label: string; v: number }>();
-    for (const f of ctx.flights) {
+    for (const f of ctx.facetFlights(opts.facet)) {
       const k = opts.key(f);
       if (!k) continue;
       const cur = acc.get(k) ?? { label: opts.label(f), v: 0 };
@@ -47,7 +47,9 @@ export function countModule(opts: {
       const { toggleCrossFilter, crossFilters } = useStore();
       const { metric, control } = useMetricToggle();
       const ranked = rank(ctx, metric);
-      const activeId = crossFilters.find((c) => c.id.startsWith(`${opts.facet}:`))?.id.split(":")[1] ?? null;
+      const activeId = crossFilters
+        .filter((c) => c.id.startsWith(`${opts.facet}:`))
+        .map((c) => c.id.slice(opts.facet.length + 1));
       return (
         <>
           {control}

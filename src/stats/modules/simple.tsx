@@ -52,7 +52,7 @@ export const airlines: StatModule = {
     const { chartType, control: chartControl } = useChartType();
 
     const acc = new Map<string, { label: string; domestic: number; international: number }>();
-    for (const f of ctx.flights) {
+    for (const f of ctx.facetFlights("airline")) {
       const k = f.airline_iata;
       if (!k) continue;
       const cur = acc.get(k) ?? { label: f.airline_name ?? f.airline_iata, domestic: 0, international: 0 };
@@ -64,7 +64,7 @@ export const airlines: StatModule = {
     const ranked = [...acc.entries()]
       .map(([id, x]) => ({ id, label: x.label, domestic: Math.round(x.domestic), international: Math.round(x.international), total: x.domestic + x.international }))
       .sort((a, b) => b.total - a.total);
-    const activeId = crossFilters.find((c) => c.id.startsWith("airline:"))?.id.split(":")[1] ?? null;
+    const activeId = crossFilters.filter((c) => c.id.startsWith("airline:")).map((c) => c.id.slice("airline:".length));
 
     return (
       <>
@@ -154,13 +154,13 @@ export const aircraft: StatModule = {
     const { metric, control } = useMetricToggle();
     const [percent, setPercent] = useState(false);
     const [body, setBody] = useState<"all" | "narrow" | "wide">("all");
-    const activeId = crossFilters.find((c) => c.id.startsWith("aircraft:"))?.id.split(":")[1] ?? null;
+    const activeId = crossFilters.filter((c) => c.id.startsWith("aircraft:")).map((c) => c.id.slice("aircraft:".length));
 
     const types = new Map<string, { label: string; domestic: number; international: number; wide: number }>();
     const regFlights = new Map<string, Flight[]>();
     let wideFlights = 0;
     let narrowFlights = 0;
-    for (const f of ctx.flights) {
+    for (const f of ctx.facetFlights("aircraft")) {
       if (f.aircraft_type_code) {
         const wide = isWidebody(f);
         if (wide) wideFlights++;
