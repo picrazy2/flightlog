@@ -24,7 +24,7 @@ and motion that feels physical.
 ## 1. Brand
 
 - **Product name:** Journia.
-- **Wordmark in the control bar:** `Alex's Flight Log` (title case, display face, weight
+- **Wordmark in the control bar:** the `J` brand mark + `Journia` (display face, weight
   600). The wordmark is text, not all-caps.
 - **Voice:** precise, understated, a little aviation-nerdy. Numbers are the hero.
 
@@ -40,8 +40,8 @@ Two families. No third.
 | UI / body / labels | **Geist Sans** (fallback `Inter`, system) | Clean, legible at small sizes. Weights 400/500/600. |
 | Code / PNRs / registrations | **Geist Mono** (fallback `ui-monospace`) | Monospace for confirmation codes, tail numbers. |
 
-Load via Google Fonts (`Space Grotesk`, `Geist`/`Geist Mono`). Self-host for GitHub Pages
-if FOUT is an issue.
+Load via Google Fonts (`Space Grotesk`, `Geist`/`Geist Mono`). Self-host in production if
+FOUT is an issue.
 
 ### Type scale (rem, 16px root)
 
@@ -238,7 +238,7 @@ All are in `src/components/ui/`, typed, controlled, theme-token only. No inline 
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ ⦿ Alex's Flight Log   [ Jan 2015 – Jun 2026 ▾ ]   …            │ ← floating control bar (top, glass)
+│ J Journia   [ All time ▾ ]   ⌕ Search          …             │ ← floating control bar (top, glass)
 │ ┌Overall──┐ ┌Airports┐ ┌Airlines┐ ┌Cities┐ ┌Countries┐ …      │ ← stat cards row (scrolls horiz on small)
 │                                                                 │
 │                         M A P                          ┌──────┐ │
@@ -265,23 +265,26 @@ All are in `src/components/ui/`, typed, controlled, theme-token only. No inline 
 
 1. **Overall** (grouped): # flights · distance · time
 2. **Airports** (count)
-3. **Airlines** (count)
-4. **Cities** (count)
-5. **Countries** (count)
-6. **Routes** (count; dup / unique)
-7. **Domestic / International** (split)
-8. **Delays** (% delayed · avg delay)
-9. **Time of day** (morning / evening split)
-10. **Aircraft types** (count)
-11. **Cost** (grouped): total USD · total points
+3. **Cities** (count)
+4. **Countries** (count)
+5. **Continents** (count)
+6. **Airlines** (count)
+7. **Routes** (count; dup / unique)
+8. **Delays** (% delayed)
+9. **Premium** (% of flight time in premium cabins)
+10. **Cost** (grouped): total cash · total points
+11. **Aircraft types** (count)
+12. **Time of day** (morning / evening split)
+13. **Domestic / International** (split) — last
 
-Each card → a detail panel (§6). Units (km/mi, 12/24h) follow Settings.
+Order is driven by each module's `order` field in the registry. Each card → a detail
+panel (§6). Units (km/mi) and display currency follow Settings.
 
 ---
 
 ## 9. Map styling tokens
 
-- Base: MapLibre + OpenFreeMap `liberty`, then a **dark override** (water `#0A0C12`, land
+- Base: MapLibre + **CARTO dark-matter** basemap (already dark; water `#0A0C12`, land
   `#0E1118`, borders `rgba(255,255,255,.06)`, labels `--ink-faint`, minimal POIs). The map
   must recede so data pops.
 - Routes: 1.5px lines, `--route-domestic` / `--route-intl` default; hovered route → 2.5px +

@@ -52,10 +52,10 @@ Journia is a modern, mobile-friendly personal flight log that:
 | UI components | shadcn/ui + Tailwind CSS | Components are copied into the repo, not a runtime dependency |
 | Charts | Recharts | |
 | Maps | MapLibre GL JS | |
-| Map tiles | OpenFreeMap | Free, no key: `https://tiles.openfreemap.org/styles/liberty` |
+| Map tiles | CARTO dark-matter | Free, no key: `https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json` |
 | Theme | Dark-first, CSS variables | Light mode extensible via `<html>` class toggle, not required at launch |
 | Backend | Supabase | Postgres + Edge Functions + pg_cron |
-| Frontend hosting | GitHub Pages | Static build, deployed via GitHub Actions on push to `main` |
+| Frontend hosting | Cloudflare Pages | `journia.co`; static build deployed on push to `main` |
 | Email parsing AI | Gemini 2.5 Flash | Free tier sufficient; used only for Gmail email parsing |
 
 ---
@@ -703,7 +703,7 @@ Gemini is used only for email parsing. No other part of the app calls an AI API.
 
 ## Map Requirements
 
-MapLibre GL JS with OpenFreeMap tiles. Required at launch:
+MapLibre GL JS with a CARTO dark-matter basemap. Required at launch:
 
 - Basemap
 - Airport markers
