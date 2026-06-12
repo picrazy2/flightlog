@@ -279,6 +279,9 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
         }
         return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
       };
+      // minimize closes the popup card but keeps the map selection/highlight; a real close
+      // (the ✕) clears it. The flag tells the 'close' handler which one happened.
+      let minimizeKeep = false;
       const showReactPopup = (lngLat: maplibregl.LngLatLike, kind: "airport" | "route", node: React.ReactNode) => {
         popupRoot.current?.unmount();
         const div = document.createElement("div");
@@ -286,6 +289,22 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
         popupRoot.current.render(node);
         tint(clickPopup.current!, kind);
         clickPopup.current!.setLngLat(lngLat).setDOMContent(div).addTo(map);
+        // add a "minimize" button to the left of the close button
+        const el = clickPopup.current!.getElement();
+        const closeBtn = el?.querySelector(".maplibregl-popup-close-button");
+        if (closeBtn && !el!.querySelector(".popup-minimize")) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "popup-minimize";
+          btn.setAttribute("aria-label", "Minimize (keep selection)");
+          btn.title = "Minimize — keep selection";
+          btn.textContent = "−";
+          btn.addEventListener("click", () => {
+            minimizeKeep = true;
+            clickPopup.current!.remove();
+          });
+          closeBtn.parentElement!.insertBefore(btn, closeBtn);
+        }
       };
 
       // when a popup is open, dim everything except the selected airport/route — but
@@ -334,7 +353,13 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
         if (map.getLayer("airports")) map.setPaintProperty("airports", "icon-opacity", 0.95);
       };
       restoreHighlightRef.current = restoreHighlight;
-      clickPopup.current!.on("close", restoreHighlight);
+      clickPopup.current!.on("close", () => {
+        if (minimizeKeep) {
+          minimizeKeep = false; // keep the dimming/selection on a minimize
+          return;
+        }
+        restoreHighlight();
+      });
 
       // search-by-flight-number → open this flight's popup (instead of cross-filtering).
       // Fits the route, highlights it, and shows the FlightPopup at the route midpoint.
