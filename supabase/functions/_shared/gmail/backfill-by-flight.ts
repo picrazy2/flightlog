@@ -23,6 +23,7 @@ type KnownFlight = {
   dep_iata: string;
   arr_iata: string;
   booking_id: string | null;
+  cabin_class: string | null;
 };
 
 export type BackfillByFlightConfig = {
@@ -39,6 +40,7 @@ export type BackfillByFlightResult = {
   flights: number;
   processed: number;
   bookings_linked: number;
+  cabins_set: number;
   flights_with_booking: number;
   discrepancies: string[];
   unmatched_legs: string[];
@@ -54,7 +56,7 @@ export async function backfillByFlight(
 ): Promise<BackfillByFlightResult> {
   const { data: flightsData, error } = await supabase
     .from("flights")
-    .select("id, flight_date, airline_iata, flight_number, dep_iata, arr_iata, booking_id")
+    .select("id, flight_date, airline_iata, flight_number, dep_iata, arr_iata, booking_id, cabin_class")
     .eq("user_id", config.userId);
   if (error) throw new Error(`Failed to load flights: ${error.message}`);
   const flights = (flightsData ?? []) as KnownFlight[];
@@ -72,9 +74,10 @@ export async function backfillByFlight(
   const unmatched: string[] = [];
   const results: BackfillByFlightResult["results"] = [];
   let linkedCount = 0;
+  let cabinsSet = 0;
 
   if (config.messageIds.length === 0) {
-    return { flights: flights.length, processed: 0, bookings_linked: 0, flights_with_booking: flights.filter((f) => f.booking_id).length, discrepancies, unmatched_legs: unmatched, results };
+    return { flights: flights.length, processed: 0, bookings_linked: 0, cabins_set: 0, flights_with_booking: flights.filter((f) => f.booking_id).length, discrepancies, unmatched_legs: unmatched, results };
   }
 
   const token = await refreshGmailAccessToken(config.gmailClientId, config.gmailClientSecret, config.gmailRefreshToken);
@@ -108,6 +111,19 @@ export async function backfillByFlight(
             discrepancies.push(
               `${f.flight_date} ${f.dep_iata}-${f.arr_iata}: log has ${f.airline_iata}${f.flight_number}, email says ${up(leg.airline_iata)}${leg.flight_number} — "${msg.subject}"`,
             );
+          }
+          // Backfill cabin class from the email when the flight has none (CSV imports
+          // have no cabin). Keep an existing cabin (import is truth); note a conflict.
+          if (leg.cabin_class) {
+            if (!f.cabin_class) {
+              const { error: ce } = await supabase.from("flights").update({ cabin_class: leg.cabin_class }).eq("id", f.id);
+              if (!ce) {
+                f.cabin_class = leg.cabin_class;
+                cabinsSet += 1;
+              }
+            } else if (f.cabin_class !== leg.cabin_class) {
+              discrepancies.push(`${f.flight_date} ${f.dep_iata}-${f.arr_iata}: cabin log=${f.cabin_class} email=${leg.cabin_class}`);
+            }
           }
           if (!matched.find((m) => m.id === f.id)) matched.push(f);
         }
@@ -146,6 +162,7 @@ export async function backfillByFlight(
     flights: flights.length,
     processed: messages.length,
     bookings_linked: linkedCount,
+    cabins_set: cabinsSet,
     flights_with_booking: flights.filter((f) => f.booking_id).length,
     discrepancies,
     unmatched_legs: [...new Set(unmatched)],

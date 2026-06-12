@@ -159,52 +159,47 @@ export const airports: StatModule = {
 
     // Year views bucket consecutive years when there are many of them.
     const allYears = [...new Set(ctx.flights.map((f) => f.flight_date.slice(0, 4)))].sort();
-    const { groups, keyOf } = buildYearGroups(allYears);
-    // a year(-group) bar drives the date range: span its first→last member year
-    const spanOf = (g: { label: string; members: string[] }) => spanRange(g.members[0], g.members[g.members.length - 1], g.label);
-    const toggleYear = (g: { label: string; members: string[] }) =>
-      setRange(rangeMatchesSpan(range, g.members[0], g.members[g.members.length - 1]) ? ALL_TIME : spanOf(g));
+    const { groups } = buildYearGroups(allYears);
 
-    // Year flipped → one bar per year(-group), stacked by continent (unique airports).
+    // Year flipped → one bar per INDIVIDUAL year (no bucketing), stacked by continent
+    // (unique airports). The default chart below keeps the grouped-year view.
     if (yearByYear) {
       const contOf = new Map<string, string>();
       for (const f of ctx.flights) {
         contOf.set(f.dep_iata, f.dep_continent ?? "??");
         contOf.set(f.arr_iata, f.arr_continent ?? "??");
       }
-      const perGroup = new Map<string, Map<string, Set<string>>>(); // group → continent → airports
+      const perYear = new Map<string, Map<string, Set<string>>>(); // year → continent → airports
       for (const f of ctx.flights) {
-        const gk = keyOf.get(f.flight_date.slice(0, 4))!;
-        const gm = perGroup.get(gk) ?? new Map<string, Set<string>>();
+        const y = f.flight_date.slice(0, 4);
+        const ym = perYear.get(y) ?? new Map<string, Set<string>>();
         for (const iata of [f.dep_iata, f.arr_iata]) {
           const c = contOf.get(iata) ?? "??";
-          const set = gm.get(c) ?? new Set<string>();
+          const set = ym.get(c) ?? new Set<string>();
           set.add(iata);
-          gm.set(c, set);
+          ym.set(c, set);
         }
-        perGroup.set(gk, gm);
+        perYear.set(y, ym);
       }
-      const present = CONTINENTS.filter((c) => [...perGroup.values()].some((gm) => (gm.get(c.code)?.size ?? 0) > 0));
+      const present = CONTINENTS.filter((c) => [...perYear.values()].some((ym) => (ym.get(c.code)?.size ?? 0) > 0));
       const series = present.map((c, i) => ({ key: c.code, name: c.name, color: categoricalFor(c.code, i) }));
-      const rows: BarRowData[] = groups.map((g) => {
-        const gm = perGroup.get(g.key);
-        const row: BarRowData = { id: g.key, label: g.label };
-        for (const c of present) row[c.code] = gm?.get(c.code)?.size ?? 0;
+      const rows: BarRowData[] = allYears.map((y) => {
+        const ym = perYear.get(y);
+        const row: BarRowData = { id: y, label: y };
+        for (const c of present) row[c.code] = ym?.get(c.code)?.size ?? 0;
         return row;
       });
-      const yearActive = groups.find((g) => rangeMatchesSpan(range, g.members[0], g.members[g.members.length - 1]))?.key ?? null;
+      const yearActive = allYears.find((y) => rangeMatchesSpan(range, y, y)) ?? null;
+      const toggleSingleYear = (y: string) => setRange(rangeMatchesSpan(range, y, y) ? ALL_TIME : spanRange(y, y, y));
       return (
-        <>
-          {groupControl}
-          <BarsH
-            rows={rows}
-            percent={percent}
-            series={series}
-            activeId={yearActive}
-            unit="airports"
-            onPick={(id) => toggleYear(groups.find((g) => g.key === id)!)}
-          />
-        </>
+        <BarsH
+          rows={rows}
+          percent={percent}
+          series={series}
+          activeId={yearActive}
+          unit="airports"
+          onPick={(id) => toggleSingleYear(id)}
+        />
       );
     }
 

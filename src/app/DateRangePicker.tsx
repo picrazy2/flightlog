@@ -86,18 +86,31 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
   return (
     <Popover
       trigger={({ toggle, open }) => (
-        <button
-          onClick={toggle}
+        <span
           className={cn(
-            "focus-ring inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-label text-ink md:h-[34px]",
-            active ? "border-accent bg-[#172338] hover:bg-[#1f3250]" : "border-border bg-surface-1 hover:bg-surface-2",
+            "inline-flex h-10 items-center rounded-full border text-label text-ink md:h-[34px]",
+            active ? "gap-1.5 border-accent bg-[#172338] pl-3.5 pr-1.5 hover:bg-[#1f3250]" : "gap-2 border-border bg-surface-1 px-3.5 hover:bg-surface-2",
             open && !active && "border-border-strong",
           )}
         >
-          <Icon name="calendar" size={14} color={active ? "var(--accent)" : "currentColor"} />
-          {pillLabel}
-          <Chevron dir="down" size={10} color={active ? "var(--accent)" : "var(--ink-faint)"} />
-        </button>
+          <button onClick={toggle} className="focus-ring inline-flex items-center gap-2">
+            <Icon name="calendar" size={14} color={active ? "var(--accent)" : "currentColor"} />
+            {pillLabel}
+            {!active && <Chevron dir="down" size={10} color="var(--ink-faint)" />}
+          </button>
+          {active && (
+            <button
+              onClick={() => {
+                setRange(ALL_TIME);
+                setTemporal("all");
+              }}
+              aria-label="Reset to All time"
+              className="focus-ring grid h-5 w-5 place-items-center rounded-full text-accent/70 hover:bg-[rgba(91,157,255,0.2)] hover:text-accent"
+            >
+              ✕
+            </button>
+          )}
+        </span>
       )}
     >
       {(close) => (

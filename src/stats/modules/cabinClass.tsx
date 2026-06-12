@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { StatModule } from "../types";
 import type { CabinClass } from "@/lib/types";
-import { formatPct } from "@/lib/format";
+import { formatPct, flightMinutes } from "@/lib/format";
 import { BarsH } from "@/components/charts/BarsH";
+import { MiniStats } from "@/components/ui/MiniStat";
 import { Switch } from "@/components/ui/Switch";
 import { OptionsButton } from "@/components/ui/OptionsButton";
 import { useStore } from "@/state/store";
@@ -42,6 +43,21 @@ export const cabinClass: StatModule = {
     const { metric, control } = useMetricToggle();
     const [percent, setPercent] = useState(false);
     const { toggleCrossFilter, crossFilters } = useStore();
+
+    // Headline cabin metrics (over flights whose cabin is known).
+    const withCabin = ctx.flights.filter((f) => f.cabin_class);
+    const isBizFirst = (c: string | null | undefined) => c === "lie_flat_business" || c === "recliner_first" || c === "international_first";
+    const econN = withCabin.filter((f) => f.cabin_class === "economy").length;
+    const bizN = withCabin.filter((f) => isBizFirst(f.cabin_class)).length;
+    const totMin = withCabin.reduce((s, f) => s + flightMinutes(f), 0);
+    const bizMin = withCabin.filter((f) => isBizFirst(f.cabin_class)).reduce((s, f) => s + flightMinutes(f), 0);
+    const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : 0);
+    const cards = [
+      { label: "Economy", value: `${pct(econN, withCabin.length)}%`, color: CLASS_COLORS.economy },
+      { label: "Business + First", value: `${pct(bizN, withCabin.length)}%`, color: CLASS_COLORS.lie_flat_business },
+      { label: "Time in Biz + First", value: `${pct(bizMin, totMin)}%`, color: CLASS_COLORS.international_first },
+    ];
+
     const agg = new Map<string, { domestic: number; international: number }>();
     for (const f of ctx.flights) {
       if (!f.cabin_class) continue;
@@ -59,6 +75,7 @@ export const cabinClass: StatModule = {
     const activeId = crossFilters.find((c) => c.id.startsWith("class:"))?.id.split(":")[1] ?? null;
     return (
       <>
+        <MiniStats items={cards} />
         <div className="flex items-center justify-between gap-2">
           {control}
           <OptionsButton>
