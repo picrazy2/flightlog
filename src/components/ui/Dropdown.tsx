@@ -12,11 +12,13 @@ interface Props<T extends string> {
   options: DropdownOption<T>[];
   onChange: (v: T) => void;
   size?: "sm" | "md";
+  // accent (blue) styling when this represents a non-default / active selection
+  active?: boolean;
   "aria-label"?: string;
 }
 
 // Compact themed dropdown (Popover-based) — used for the metric selector.
-export function Dropdown<T extends string>({ value, options, onChange, size = "sm", ...aria }: Props<T>) {
+export function Dropdown<T extends string>({ value, options, onChange, size = "sm", active, ...aria }: Props<T>) {
   const current = options.find((o) => o.value === value);
   const h = size === "sm" ? "h-7 text-caption" : "h-[34px] text-label";
   return (
@@ -27,13 +29,16 @@ export function Dropdown<T extends string>({ value, options, onChange, size = "s
           aria-label={aria["aria-label"]}
           onClick={toggle}
           className={cn(
-            "focus-ring inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 font-medium text-ink hover:bg-surface-3",
+            "focus-ring inline-flex items-center gap-1.5 rounded-full border px-3 font-medium",
             h,
-            open && "border-border-strong",
+            active
+              ? "border-accent bg-[rgba(91,157,255,0.14)] text-accent hover:bg-[rgba(91,157,255,0.22)]"
+              : "border-border bg-surface-2 text-ink hover:bg-surface-3",
+            open && !active && "border-border-strong",
           )}
         >
           {current?.label ?? value}
-          <Chevron dir={open ? "up" : "down"} size={11} color="var(--ink-faint)" />
+          <Chevron dir={open ? "up" : "down"} size={11} color={active ? "var(--accent)" : "var(--ink-faint)"} />
         </button>
       )}
     >

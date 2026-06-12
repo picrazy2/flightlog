@@ -176,9 +176,9 @@ export const delays: StatModule = {
 
     const filterRow = (
       <div className="flex flex-wrap items-center gap-2">
-        {airlineOpts.length > 2 && <Dropdown aria-label="Airline" size="sm" value={fAirline} onChange={setFAirline} options={airlineOpts} />}
-        {airportOpts.length > 2 && <Dropdown aria-label="Airport" size="sm" value={fAirport} onChange={setFAirport} options={airportOpts} />}
-        {yearOpts.length > 2 && <Dropdown aria-label="Year" size="sm" value={fYear} onChange={setFYear} options={yearOpts} />}
+        {airlineOpts.length > 2 && <Dropdown aria-label="Airline" size="sm" active={fAirline !== "all"} value={fAirline} onChange={setFAirline} options={airlineOpts} />}
+        {airportOpts.length > 2 && <Dropdown aria-label="Airport" size="sm" active={fAirport !== "all"} value={fAirport} onChange={setFAirport} options={airportOpts} />}
+        {yearOpts.length > 2 && <Dropdown aria-label="Year" size="sm" active={fYear !== "all"} value={fYear} onChange={setFYear} options={yearOpts} />}
       </div>
     );
 
