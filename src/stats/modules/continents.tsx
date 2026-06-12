@@ -51,8 +51,8 @@ for (const { continent, subregion } of Object.values(COUNTRY_GEO)) {
 for (const c of CONTINENTS) {
   SUBREGIONS_OF.set(c.code, [...new Set(Object.values(COUNTRY_GEO).filter((g) => g.continent === c.code).map((g) => g.subregion))].sort());
 }
-const TOTAL_COUNTRIES = Object.keys(COUNTRY_GEO).length;
-const TOTAL_REGIONS = TOTAL_BY_SUBREGION.size;
+export const TOTAL_COUNTRIES = Object.keys(COUNTRY_GEO).length;
+export const TOTAL_REGIONS = TOTAL_BY_SUBREGION.size;
 
 function visitedCountries(ctx: StatContext) {
   const m = new Map<string, { visits: number; name: string }>();
@@ -70,14 +70,16 @@ export const continents: StatModule = {
   id: "continents",
   order: 5.25, // right after Countries (5), before Airlines (5.5)
   card: (ctx) => {
-    const n = new Set([...visitedCountries(ctx).keys()].map((iso) => COUNTRY_GEO[iso].continent)).size;
+    const v = visitedCountries(ctx);
+    const cv = new Set([...v.keys()].map((iso) => COUNTRY_GEO[iso].continent)).size;
+    const rv = new Set([...v.keys()].map((iso) => COUNTRY_GEO[iso].subregion)).size;
     const prev = ctx.compareFlights
       ? new Set(ctx.compareFlights.flatMap((f) => [contOf(f.dep_country), contOf(f.arr_country)]).filter(Boolean)).size
       : null;
     return {
       eyebrow: "Continents",
-      headline: `${n} / 6`,
-      stats: [{ value: n, compareValue: ctx.compareFlights ? prev : null }],
+      headline: `${cv}/6 Continents, ${rv}/${TOTAL_REGIONS} Regions`,
+      stats: [{ value: cv, format: (x) => ({ value: `${x}/6`, unit: "" }), compareValue: ctx.compareFlights ? prev : null }],
     };
   },
   Panel: ({ ctx }) => {
@@ -145,17 +147,8 @@ export const continents: StatModule = {
       color: CONT_COLOR[c.code],
     }));
 
-    const continentsVisited = visitedByCont.size;
-    const countriesVisited = visited.size;
-    const regionsVisited = new Set([...visited.keys()].map((iso) => COUNTRY_GEO[iso].subregion)).size;
-
     return (
       <>
-        <div className="text-label text-ink-muted">
-          <span className="text-ink">{continentsVisited}/6</span> continents ·{" "}
-          <span className="text-ink">{countriesVisited}/{TOTAL_COUNTRIES}</span> countries ·{" "}
-          <span className="text-ink">{regionsVisited}/{TOTAL_REGIONS}</span> regions
-        </div>
         {/* 6 metric cards (3 per row); click to expand a continent's per-region breakdown */}
         <div className="grid grid-cols-3 gap-1.5">
           {CONTINENTS.map((c) => {

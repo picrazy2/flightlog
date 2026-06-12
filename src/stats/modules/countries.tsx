@@ -3,6 +3,7 @@ import { uniqueCount } from "@/lib/aggregate";
 import { EntityVisitsPanel } from "../EntityVisitsPanel";
 import { CATEGORICAL, color } from "@/lib/palette";
 import { countryFilter } from "../filters";
+import { TOTAL_COUNTRIES } from "./continents";
 
 const INTL = color.secondary;
 // country palette excludes the international colour (secondary) so no country matches it
@@ -29,7 +30,7 @@ export const countries: StatModule = {
     const prev = ctx.compareFlights
       ? uniqueCount(ctx.compareFlights.flatMap((f) => [f.dep_country, f.arr_country]), (x) => x)
       : 0;
-    return { eyebrow: "Countries", headline: `${n.toLocaleString()} Countries`, stats: [{ value: n, compareValue: ctx.compareFlights ? prev : null }] };
+    return { eyebrow: "Countries", headline: `${n}/${TOTAL_COUNTRIES} Countries`, stats: [{ value: n, compareValue: ctx.compareFlights ? prev : null }] };
   },
   Panel: ({ ctx }) => (
     <EntityVisitsPanel
