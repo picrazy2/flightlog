@@ -30,11 +30,14 @@ import { useStore } from "@/state/store";
 import { airlineFilter } from "../filters";
 import { airlineKey, airlineLabel } from "@/lib/airlines";
 
+const LATE_MIN = 15; // > 15 min late = "delayed" (industry on-time standard)
 const VERY_MIN = 60; // > 1h late = "very delayed"
 const GREEN = "#34D399";
+const ONTIME = "#10B981";
 const RED = "#FB7185";
-// "delayed" = arrived even a minute late (on-time merged in); a flight is only
-// counted early when it beats schedule outright
+// A flight is "delayed" only when it arrives more than LATE_MIN late; within 15 min
+// (including early) counts as on-time, matching industry punctuality reporting. The
+// ~6-min wheels-vs-gate taxi gap on wheels-only flights sits well inside this band.
 const delayMin = (f: Flight): number | null => arrivalDelayMin(f);
 
 export const delays: StatModule = {
@@ -43,7 +46,7 @@ export const delays: StatModule = {
   card: (ctx) => {
     const pctLate = (fs: Flight[]) => {
       const wa = fs.filter((f) => actualArr(f));
-      const late = wa.filter((f) => (delayMin(f) ?? 0) > 0).length;
+      const late = wa.filter((f) => (delayMin(f) ?? 0) > LATE_MIN).length;
       return wa.length ? (late / wa.length) * 100 : 0;
     };
     return {
@@ -104,7 +107,7 @@ export const delays: StatModule = {
       if (a != null) {
         cur.arr += a;
         cur.arrN += 1;
-        if (a > 0) cur.late += 1;
+        if (a > LATE_MIN) cur.late += 1;
       }
       byYear.set(y, cur);
     }
@@ -127,7 +130,7 @@ export const delays: StatModule = {
       const cur = byAirline.get(k) ?? { label: airlineLabel(f.airline_iata, f.airline_name), sum: 0, n: 0, late: 0 };
       cur.n += 1;
       cur.sum += d;
-      if (d > 0) cur.late += 1;
+      if (d > LATE_MIN) cur.late += 1;
       byAirline.set(k, cur);
     }
     const worst = [...byAirline.entries()]
@@ -142,11 +145,12 @@ export const delays: StatModule = {
 
     // distribution of arrival punctuality across timed flights
     const timed = flights.filter((f) => actualArr(f));
-    let early = 0, delayed = 0, veryLate = 0, netMin = 0;
+    let early = 0, onTime = 0, delayed = 0, veryLate = 0, netMin = 0;
     for (const f of timed) {
       const d = delayMin(f) ?? 0;
       netMin += d; // net of early arrivals (signed)
       if (d < 0) early++;
+      else if (d <= LATE_MIN) onTime++;
       else if (d <= VERY_MIN) delayed++;
       else veryLate++;
     }
@@ -155,21 +159,20 @@ export const delays: StatModule = {
     const netDur = formatDuration(Math.abs(netMin)).value;
     const delayVals = timed.map((f) => delayMin(f) ?? 0);
     const maxDelay = delayVals.length ? Math.max(...delayVals) : 0;
-    const minDelay = delayVals.length ? Math.min(...delayVals) : 0;
     const cards = [
       { label: "Early", value: pct(early), color: GREEN },
-      { label: "Delayed (≤1h)", value: pct(delayed), color: color.secondary },
+      { label: "On time", value: pct(onTime), color: ONTIME },
+      { label: "Delayed (15m–1h)", value: pct(delayed), color: color.secondary },
       { label: "Very delayed", value: pct(veryLate), color: RED },
       { label: "Most delayed", value: maxDelay > 0 ? `+${formatDuration(maxDelay).value}` : "—", color: RED },
-      { label: "Earliest", value: minDelay < 0 ? `−${formatDuration(-minDelay).value}` : "—", color: GREEN },
       { label: netMin >= 0 ? "Net time lost" : "Net time saved", value: `${netMin >= 0 ? "+" : "−"}${netDur}`, color: netMin >= 0 ? RED : GREEN },
     ];
 
     // most/least-delayed modal: delayed flights on one side, early/on-time on the other,
     // narrowed by the modal's local airline/airport/year filters
     const ranked = timed.filter(passLocal).map((f) => ({ f, d: delayMin(f) ?? 0 }));
-    const mostDelayed = ranked.filter((x) => x.d > 0).sort((a, b) => b.d - a.d);
-    const mostEarly = ranked.filter((x) => x.d <= 0).sort((a, b) => a.d - b.d);
+    const mostDelayed = ranked.filter((x) => x.d > LATE_MIN).sort((a, b) => b.d - a.d);
+    const mostEarly = ranked.filter((x) => x.d <= LATE_MIN).sort((a, b) => a.d - b.d);
 
     const filterRow = (
       <div className="flex flex-wrap items-center gap-2">
@@ -283,7 +286,8 @@ export const delays: StatModule = {
       title: "Punctuality",
       items: [
         { id: "early", label: "Early", color: DELAY_COLORS.early, swatch: "line" },
-        { id: "delayed", label: "Delayed (≤1h)", color: DELAY_COLORS.delayed, swatch: "line" },
+        { id: "ontime", label: "On time (≤15m)", color: DELAY_COLORS.ontime, swatch: "line" },
+        { id: "delayed", label: "Delayed (15m–1h)", color: DELAY_COLORS.delayed, swatch: "line" },
         { id: "very", label: "Very delayed (>1h)", color: DELAY_COLORS.very, swatch: "line" },
         { id: "none", label: "No data", color: DELAY_COLORS.none, swatch: "line" },
       ],
@@ -339,9 +343,10 @@ function DelayColumn({ title, rows, settings }: { title: string; rows: { f: Flig
   );
 }
 
-type DelayBucket = "early" | "delayed" | "very" | "none";
+type DelayBucket = "early" | "ontime" | "delayed" | "very" | "none";
 const DELAY_COLORS: Record<DelayBucket, string> = {
   early: GREEN,
+  ontime: ONTIME,
   delayed: color.secondary,
   very: RED,
   none: "#5C6575",
@@ -350,6 +355,7 @@ function delayBucket(f: Flight): DelayBucket {
   const d = delayMin(f);
   if (d == null) return "none";
   if (d < 0) return "early";
+  if (d <= LATE_MIN) return "ontime";
   if (d <= VERY_MIN) return "delayed";
   return "very";
 }
