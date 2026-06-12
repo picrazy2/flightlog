@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 // Intro splash shown while flights load: a backgroundless Journia "J" assembles in
 // the centre while a flurry of translucent J's tumbles down the screen behind it.
@@ -70,19 +70,31 @@ function CentreMark({ size = 120 }: { size?: number }) {
 }
 
 export function SplashScreen() {
+  // Hold a blank dark screen for a beat; only fade the animation in if we're still
+  // loading after that. A fast load unmounts before this fires → no busy flash.
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShow(true), 450);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <div className="relative grid h-full w-full place-items-center overflow-hidden" style={{ background: "var(--bg)" }}>
-      <div className="pointer-events-none absolute inset-0">
-        {FALLERS.map((f, i) => (
-          <Faller key={i} f={f} />
-        ))}
-      </div>
-      <div className="relative z-10 flex flex-col items-center gap-5">
-        <div className="animate-splash-mark">
-          <CentreMark size={124} />
-        </div>
-        <div className="animate-splash-word font-display text-[2.2rem] font-bold tracking-[-0.02em] text-ink">Journia</div>
-      </div>
+      {show && (
+        <>
+          <div className="pointer-events-none absolute inset-0" style={{ animation: "fade-in 500ms ease both" }}>
+            {FALLERS.map((f, i) => (
+              <Faller key={i} f={f} />
+            ))}
+          </div>
+          <div className="relative z-10 flex flex-col items-center gap-5" style={{ animation: "fade-in 500ms ease both" }}>
+            <div className="animate-splash-mark">
+              <CentreMark size={124} />
+            </div>
+            <div className="animate-splash-word font-display text-[2.2rem] font-bold tracking-[-0.02em] text-ink">Journia</div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

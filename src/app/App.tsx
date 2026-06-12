@@ -13,6 +13,11 @@ import { MobileShell } from "./mobile/MobileShell";
 import { Legend } from "@/components/ui/Legend";
 import { Button } from "@/components/ui/Button";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { useEffect, useState } from "react";
+
+// Visit with ?splash to hold the intro for a few seconds (to preview the animation).
+const wantSplashPreview = () =>
+  typeof window !== "undefined" && /(?:[?&]|#).*splash/.test(window.location.search + window.location.hash);
 
 export function App() {
   const { ctx, isLoading, error } = useStatContext();
@@ -23,6 +28,12 @@ export function App() {
   const immersive = useStore((s) => s.immersive);
   const toggleImmersive = useStore((s) => s.toggleImmersive);
   const isMobile = useIsMobile();
+  const [held, setHeld] = useState(wantSplashPreview);
+  useEffect(() => {
+    if (!held) return;
+    const t = setTimeout(() => setHeld(false), 3500);
+    return () => clearTimeout(t);
+  }, [held]);
 
   if (error) {
     return (
@@ -31,8 +42,8 @@ export function App() {
       </div>
     );
   }
-  if (!ctx) {
-    return isLoading ? (
+  if (held || !ctx) {
+    return held || isLoading ? (
       <SplashScreen />
     ) : (
       <div className="grid h-full place-items-center text-ink-muted">No data</div>
