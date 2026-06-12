@@ -3,8 +3,11 @@ import { countModule } from "./countModule";
 import { color, CATEGORICAL } from "@/lib/palette";
 import { airlineFilter, cityFilter, aircraftFilter, bodyFilter } from "../filters";
 import { uniqueCount } from "@/lib/aggregate";
-import { BarsH } from "@/components/charts/BarsH";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { BarsH, type BarRowData } from "@/components/charts/BarsH";
 import { BarsV } from "@/components/charts/BarsV";
+import { ChartLegend } from "@/components/charts/ChartLegend";
+import { Segmented } from "@/components/ui/Segmented";
 import { EntityChart } from "../EntityChart";
 import { yearStack } from "../yearStack";
 import { EntityVisitsPanel } from "../EntityVisitsPanel";
@@ -165,12 +168,35 @@ export const aircraft: StatModule = {
     const { toggleCrossFilter, crossFilters } = useStore();
     const { metric, control } = useMetricToggle();
     const [percent, setPercent] = useState(false);
+    const [bodyChart, setBodyChart] = useState<"bar" | "pie">("bar");
     const activeId = crossFilters.filter((c) => c.id.startsWith("aircraft:")).map((c) => c.id.slice("aircraft:".length));
     const activeBodies = new Set(crossFilters.filter((c) => c.id.startsWith("body:")).map((c) => c.id.slice("body:".length)));
 
     // body-class counts belong to the "body" facet → exclude it so all classes stay visible
     const bodyCount: Record<BodyClass, number> = { double: 0, wide: 0, narrow: 0, unknown: 0 };
     for (const f of ctx.facetFlights("body")) bodyCount[bodyClassOf(f)]++;
+    // body class per year (for the second chart), weighted by the active metric
+    const BODY_ORDER: BodyClass[] = ["wide", "narrow", "double", "unknown"];
+    const bodyByYear = new Map<string, Record<BodyClass, number>>();
+    const bodyMetricTotal: Record<BodyClass, number> = { double: 0, wide: 0, narrow: 0, unknown: 0 };
+    for (const f of ctx.facetFlights("body")) {
+      const b = bodyClassOf(f);
+      const v = metricValue(f, metric);
+      const y = f.flight_date.slice(0, 4);
+      const r = bodyByYear.get(y) ?? { double: 0, wide: 0, narrow: 0, unknown: 0 };
+      bodyByYear.set(y, r);
+      r[b] += v;
+      bodyMetricTotal[b] += v;
+    }
+    const bodyPresent = BODY_ORDER.filter((b) => bodyMetricTotal[b] > 0);
+    const bodyYearRows = [...bodyByYear.keys()].sort().map((y) => {
+      const r = bodyByYear.get(y)!;
+      const row: BarRowData = { id: y, label: y };
+      for (const b of bodyPresent) row[b] = Math.round(r[b]);
+      return row;
+    });
+    const bodySeries = bodyPresent.map((b) => ({ key: b, name: BODY_LABELS[b], color: BODY_COLOR[b] }));
+    const bodyPie = bodyPresent.map((b) => ({ id: b, name: BODY_LABELS[b], value: Math.round(bodyMetricTotal[b]), color: BODY_COLOR[b] }));
 
     // aircraft-type chart + tail numbers (the "aircraft" facet)
     const types = new Map<string, { label: string; domestic: number; international: number }>();
@@ -196,17 +222,6 @@ export const aircraft: StatModule = {
     const typeRows = [...types.entries()]
       .map(([id, x]) => ({ id, label: x.label, domestic: Math.round(x.domestic), international: Math.round(x.international) }))
       .sort((a, b) => b.domestic + b.international - (a.domestic + a.international));
-    // most-flown tails: only those flown 3+ times; hover lists the flights
-    const regRows = [...regFlights.entries()]
-      .filter(([, fs]) => fs.length > 2)
-      .map(([id, fs]) => {
-        const list = fs
-          .slice()
-          .sort((a, b) => a.flight_date.localeCompare(b.flight_date))
-          .map((f) => `${f.airline_iata}${f.flight_number}  ${f.dep_iata}→${f.arr_iata}  ${f.flight_date}`);
-        return { id, label: id, flights: fs.length, sub: list.join("\n") };
-      })
-      .sort((a, b) => b.flights - a.flights);
 
     // first three cards toggle the body cross-filter; tail-numbers is informational
     const bodyCards = (["wide", "narrow", "double"] as BodyClass[]).map((k) => ({
@@ -240,16 +255,55 @@ export const aircraft: StatModule = {
           ]}
           activeId={activeId}
           unit={metricName[metric]}
-          cap={10}
+          cap={8}
           onPick={(id) => {
             const r = typeRows.find((x) => x.id === id);
             toggleCrossFilter(aircraftFilter(id, r?.label ?? id));
           }}
         />
-        {regRows.length > 0 && (
+
+        {bodyYearRows.length > 0 && (
           <div>
-            <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">Most-flown tail numbers</div>
-            <BarsH rows={regRows} series={[{ key: "flights", name: "flights", color: color.secondary }]} unit="flights" cap={5} />
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-eyebrow tracking-[0.01em] text-ink-faint">
+                Body type by {metricName[metric]}{bodyChart === "bar" ? ", by year" : " · all time"}
+              </span>
+              <Segmented
+                aria-label="Body chart"
+                size="sm"
+                value={bodyChart}
+                onChange={setBodyChart}
+                options={[
+                  { value: "bar", label: "Bar" },
+                  { value: "pie", label: "Pie" },
+                ]}
+              />
+            </div>
+            <ChartLegend series={bodySeries} />
+            {bodyChart === "bar" ? (
+              <BarsV rows={bodyYearRows} series={bodySeries} unit={metricName[metric]} />
+            ) : (
+              <div style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={bodyPie}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={45}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      isAnimationActive={false}
+                      onClick={(e: { payload?: { id?: string } }) => e.payload?.id && toggleCrossFilter(bodyFilter(e.payload.id as BodyClass))}
+                      label={(e: { name?: string; value?: number }) => `${e.name}: ${Number(e.value ?? 0).toLocaleString()}`}
+                      labelLine={false}
+                    >
+                      {bodyPie.map((s) => <Cell key={s.id} fill={s.color} cursor="pointer" />)}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
         )}
       </>
