@@ -110,7 +110,6 @@ export const continents: StatModule = {
     const [metric, setMetric] = useState<"countries" | "visits">("countries");
     const [display, setDisplay] = useState<"percent" | "number">("percent");
     const [expanded, setExpanded] = useState<ContinentCode | null>(null);
-    const [openRegions, setOpenRegions] = useState<Set<string>>(() => new Set());
     const activeCont = crossFilters.filter((c) => c.id.startsWith("continent:")).map((c) => c.id.slice("continent:".length));
     const activeRegions = new Set(crossFilters.filter((c) => c.id.startsWith("region:")).map((c) => c.id.slice("region:".length)));
 
@@ -211,15 +210,7 @@ export const continents: StatModule = {
             {expandedSubs.map(({ sub, vis, total, pct: p }) => (
               <div key={sub}>
                 <button
-                  onClick={() => {
-                    setOpenRegions((s) => {
-                      const n = new Set(s);
-                      if (n.has(sub)) n.delete(sub);
-                      else n.add(sub);
-                      return n;
-                    });
-                    toggleCrossFilter(regionFilter(sub));
-                  }}
+                  onClick={() => toggleCrossFilter(regionFilter(sub))}
                   className="focus-ring grid w-full grid-cols-[6rem_1fr_auto] items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-3"
                 >
                   <span className={`truncate text-left text-caption ${activeRegions.has(sub) ? "text-accent" : "text-ink-muted"}`}>{sub}</span>
@@ -230,7 +221,7 @@ export const continents: StatModule = {
                     {vis}/{total} · <span className="text-ink">{p}%</span>
                   </span>
                 </button>
-                <Collapse open={openRegions.has(sub)}>
+                <Collapse open={activeRegions.has(sub)}>
                   <div className="flex flex-wrap gap-1 px-1.5 pb-1.5 pt-1">
                     {countriesInRegion(sub).map((iso) => {
                       const seen = visited.has(iso);
