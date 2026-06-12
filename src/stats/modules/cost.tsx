@@ -114,6 +114,8 @@ export const cost: StatModule = {
     });
     const yearActive = yearOfRange(range);
     const onYear = (id: string) => setRange(yearActive === id ? ALL_TIME : yearRange(id));
+    // pie compares cash vs points by flight share — only meaningful for the flights metric
+    const showPie = metric === "flights" && chartType === "pie";
 
     const cashName = metric === "flights" ? "Cash flights" : "Cash spend";
     const pointsName = metric === "flights" ? "Points flights" : "Points";
@@ -175,24 +177,26 @@ export const cost: StatModule = {
                 ]}
               />
             )}
-            <Segmented
-              aria-label="Chart"
-              size="sm"
-              value={chartType}
-              onChange={setChartType}
-              options={[
-                { value: "bar", label: "Bar" },
-                { value: "pie", label: "Pie" },
-              ]}
-            />
+            {metric === "flights" && (
+              <Segmented
+                aria-label="Chart"
+                size="sm"
+                value={chartType}
+                onChange={setChartType}
+                options={[
+                  { value: "bar", label: "Bar" },
+                  { value: "pie", label: "Pie" },
+                ]}
+              />
+            )}
           </div>
         </div>
 
-        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">{chartType === "pie" ? title.replace(", by year", " — all time") : title}</div>
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">{showPie ? title.replace(", by year", " — all time") : title}</div>
         <ChartLegend series={legend} />
         <div style={{ height: 210 }}>
           <ResponsiveContainer width="100%" height="100%">
-            {chartType === "bar" ? (
+            {!showPie ? (
               <ComposedChart data={rows} margin={{ left: -10, right: metric === "spend" ? -10 : 8, top: 6, bottom: 2 }}>
                 <CartesianGrid stroke={CHART.grid} vertical={false} />
                 <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={16} />
