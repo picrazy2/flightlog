@@ -22,6 +22,8 @@ export const FACET_LABELS: Record<string, string> = {
   country: "Country",
   continent: "Continent",
   region: "Region",
+  distbin: "Distance",
+  timebin: "Air time",
   class: "Class",
   trip: "Trip",
   route: "Route",

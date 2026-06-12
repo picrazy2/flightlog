@@ -10,7 +10,7 @@ import { BarsH, type BarRowData } from "@/components/charts/BarsH";
 import { BarsV } from "@/components/charts/BarsV";
 import type { Series } from "@/components/charts/chartTheme";
 import { useStore } from "@/state/store";
-import { routeFilter } from "../filters";
+import { routeFilter, distanceBinFilter, timeBinFilter } from "../filters";
 import { color, categoricalFor } from "@/lib/palette";
 import { routeKeyUndirected } from "@/lib/geo";
 import { flightDistanceMi, flightMinutes, compact } from "@/lib/format";
@@ -64,13 +64,14 @@ const DIST_STEP_MI = 1000;
 const DIST_STEP_KM = 1500;
 const TIME_STEP_MIN = 120;
 
-// fixed-width histogram: count of values per [i*step, (i+1)*step) bin
+// fixed-width histogram: count of values per [i*step, (i+1)*step) bin. lo/hi (in the
+// binned unit) drive the click-to-filter; the top bin is open-ended (hi = Infinity).
 function histogram(values: number[], step: number, label: (lo: number, hi: number) => string) {
   const max = Math.max(0, ...values);
   const n = Math.max(1, Math.floor(max / step) + 1);
   const counts = new Array(n).fill(0);
   for (const v of values) counts[Math.min(n - 1, Math.max(0, Math.floor(v / step)))]++;
-  return counts.map((c, i) => ({ id: String(i), label: label(i * step, (i + 1) * step), value: c }));
+  return counts.map((c, i) => ({ id: String(i), label: label(i * step, (i + 1) * step), value: c, lo: i * step, hi: i === n - 1 ? Infinity : (i + 1) * step }));
 }
 
 export const routes: StatModule = {
@@ -93,8 +94,10 @@ export const routes: StatModule = {
     const [rankMetric, setRankMetric] = useState<"distance" | "time">("distance");
     const [rankTrip, setRankTrip] = useState<"all" | "domestic" | "international">("all");
     const [showRankings, setShowRankings] = useState(false);
+    const [rankScope, setRankScope] = useState<"routes" | "flights">("routes");
     const { toggleCrossFilter } = useStore();
     const km = ctx.settings.units === "km";
+    const showTracks = ctx.settings.showTracks;
 
     // main chart: top routes, each stacked by airline
     const main = routesByAirline(ctx.flights, directed === "directed", metric);
@@ -152,6 +155,23 @@ export const routes: StatModule = {
       .sort((a, b) => (rankDir === "longest" ? b.value - a.value : a.value - b.value))
       .map((r, i) => ({ ...r, label: `${i + 1}. ${r.label}` })); // rank prefix shows on the axis + hover
 
+    // per-flight rankings (no route dedup) — only meaningful with tracks (flown distance)
+    const flightRankRows = ctx.flights
+      .filter((f) => rankTrip === "all" || f.trip_type === rankTrip)
+      .map((f) => ({
+        id: f.id,
+        label: `${f.dep_iata} → ${f.arr_iata} · ${f.flight_date}`,
+        dep: f.dep_iata,
+        arr: f.arr_iata,
+        tripType: f.trip_type ?? "",
+        country: f.trip_type === "domestic" ? f.dep_country_name ?? f.dep_country ?? "" : "",
+        value: Math.round(rankMetric === "distance" ? flightDistanceMi(f) : flightMinutes(f)),
+      }))
+      .sort((a, b) => (rankDir === "longest" ? b.value - a.value : a.value - b.value))
+      .map((r, i) => ({ ...r, label: `${i + 1}. ${r.label}` }));
+
+    const rankingRows = rankScope === "flights" ? flightRankRows : rankRows;
+
     return (
       <>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -208,14 +228,32 @@ export const routes: StatModule = {
           series={[{ key: "value", name: "flights", color: color.secondary }]}
           unit="flights"
           height={170}
+          onPick={(id) => {
+            const row = histRows.find((r) => r.id === id);
+            if (!row || !row.value) return;
+            if (histMetric === "distance") {
+              const loMi = km ? row.lo / MI_TO_KM : row.lo;
+              const hiMi = row.hi === Infinity ? Infinity : km ? row.hi / MI_TO_KM : row.hi;
+              toggleCrossFilter(distanceBinFilter(loMi, hiMi, `${row.label} ${ctx.settings.units}`));
+            } else {
+              toggleCrossFilter(timeBinFilter(row.lo, row.hi, String(row.label)));
+            }
+          }}
         />
 
-        <Button variant="secondary" size="sm" className="w-full" onClick={() => setShowRankings(true)}>
-          Longest &amp; shortest routes
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" className="flex-1" onClick={() => { setRankScope("routes"); setShowRankings(true); }}>
+            Longest &amp; shortest routes
+          </Button>
+          {showTracks && (
+            <Button variant="secondary" size="sm" className="flex-1" onClick={() => { setRankScope("flights"); setShowRankings(true); }}>
+              Longest &amp; shortest flights
+            </Button>
+          )}
+        </div>
 
         {showRankings && (
-          <Modal title="Route rankings" onClose={() => setShowRankings(false)} className="w-[min(720px,95vw)]">
+          <Modal title={rankScope === "flights" ? "Flight rankings" : "Route rankings"} onClose={() => setShowRankings(false)} className="w-[min(720px,95vw)]">
             <div className="flex flex-col gap-3 p-5">
               <div className="flex flex-wrap items-center gap-2">
                 <Segmented
@@ -261,11 +299,11 @@ export const routes: StatModule = {
                 {rankTrip !== "international" && (
                   <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: OTHER }} />Domestic — other</span>
                 )}
-                <span className="ml-auto">{rankRows.length} routes</span>
+                <span className="ml-auto">{rankingRows.length} {rankScope === "flights" ? "flights" : "routes"}</span>
               </div>
               <div className="overflow-y-auto" style={{ maxHeight: "62vh" }}>
                 <BarsH
-                  rows={rankRows.map((r) => ({ id: r.id, label: r.label, value: r.value, tripType: r.tripType, country: r.country }))}
+                  rows={rankingRows.map((r) => ({ id: r.id, label: r.label, value: r.value, tripType: r.tripType, country: r.country }))}
                   series={[{ key: "value", name: rankMetric, color: color.accent }]}
                   unit={rankMetric === "distance" ? ctx.settings.units : "min"}
                   colorByRow={(row) => rankColor(String(row.tripType ?? ""), String(row.country ?? ""))}

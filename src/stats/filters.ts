@@ -1,6 +1,7 @@
 import type { CrossFilter, DateRange } from "@/state/store";
 import { routeKeyUndirected } from "@/lib/geo";
 import { COUNTRY_GEO, sovereignOf } from "@/lib/continents";
+import { flightDistanceMi, flightMinutes } from "@/lib/format";
 
 const contOf = (iso: string | null) => {
   const s = sovereignOf(iso);
@@ -86,6 +87,26 @@ export const tripTypeFilter = (trip: "domestic" | "international"): CrossFilter 
   id: `trip:${trip}`,
   label: trip === "domestic" ? "Domestic" : "International",
   test: (f) => f.trip_type === trip,
+});
+
+// Distance / air-time histogram bin (click-only, not searchable). Tests the same
+// per-flight value the histogram bins. hi = Infinity for the open-ended top bin.
+export const distanceBinFilter = (loMi: number, hiMi: number, label: string): CrossFilter => ({
+  id: `distbin:${Math.round(loMi)}-${hiMi === Infinity ? "max" : Math.round(hiMi)}`,
+  label,
+  test: (f) => {
+    const d = flightDistanceMi(f);
+    return d >= loMi && d < hiMi;
+  },
+});
+
+export const timeBinFilter = (loMin: number, hiMin: number, label: string): CrossFilter => ({
+  id: `timebin:${loMin}-${hiMin === Infinity ? "max" : hiMin}`,
+  label,
+  test: (f) => {
+    const t = flightMinutes(f);
+    return t >= loMin && t < hiMin;
+  },
 });
 
 export const routeFilter = (dep: string, arr: string): CrossFilter => ({
