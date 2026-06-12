@@ -1,11 +1,14 @@
 import { useState } from "react";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import type { StatModule } from "../types";
 import { color } from "@/lib/palette";
 import { BarsH } from "@/components/charts/BarsH";
+import { BarsV } from "@/components/charts/BarsV";
+import { ChartLegend } from "@/components/charts/ChartLegend";
 import { Segmented } from "@/components/ui/Segmented";
 import { formatPct } from "@/lib/format";
-import { useStore } from "@/state/store";
-import { tripTypeFilter } from "../filters";
+import { useStore, ALL_TIME } from "@/state/store";
+import { tripTypeFilter, yearRange, yearOfRange } from "../filters";
 import { useMetricToggle, metricValue, metricName } from "../useMetric";
 
 const split = (flights: { trip_type: string | null }[]) => {
@@ -35,20 +38,38 @@ export const domesticIntl: StatModule = {
     };
   },
   Panel: ({ ctx }) => {
-    const { toggleCrossFilter, crossFilters } = useStore();
+    const { toggleCrossFilter, range, setRange } = useStore();
     const { metric, control } = useMetricToggle();
-    const activeId = crossFilters.filter((c) => c.id.startsWith("trip:")).map((c) => c.id.slice("trip:".length));
+    const [chartType, setChartType] = useState<"bar" | "pie">("bar");
 
-    // dom/intl split weighted by the active metric (over flights not narrowed by trip,
-    // so both bars stay visible and either can be toggled)
+    // dom/intl split per year, weighted by the active metric (over flights not narrowed by trip)
+    const byYear = new Map<string, { domestic: number; international: number }>();
     let dom = 0, intl = 0;
     for (const f of ctx.facetFlights("trip")) {
       const v = metricValue(f, metric);
-      if (f.trip_type === "domestic") dom += v;
-      else if (f.trip_type === "international") intl += v;
+      const y = f.flight_date.slice(0, 4);
+      const a = byYear.get(y) ?? { domestic: 0, international: 0 };
+      byYear.set(y, a);
+      if (f.trip_type === "domestic") { a.domestic += v; dom += v; }
+      else if (f.trip_type === "international") { a.international += v; intl += v; }
     }
     dom = Math.round(dom);
     intl = Math.round(intl);
+    const yearRows = [...byYear.keys()].sort().map((y) => ({
+      id: y,
+      label: y,
+      domestic: Math.round(byYear.get(y)!.domestic),
+      international: Math.round(byYear.get(y)!.international),
+    }));
+    const diSeries = [
+      { key: "domestic", name: "Domestic", color: color.accent },
+      { key: "international", name: "International", color: color.secondary },
+    ];
+    const yearActive = yearOfRange(range);
+    const pieData = [
+      { id: "domestic", name: "Domestic", value: dom, color: color.accent },
+      { id: "international", name: "International", value: intl, color: color.secondary },
+    ].filter((s) => s.value > 0);
 
     // country-pairs (undirected); domestic = same-country pairs
     const [pairMode, setPairMode] = useState<"all" | "intl" | "domestic">("all");
@@ -72,24 +93,53 @@ export const domesticIntl: StatModule = {
 
     return (
       <>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-eyebrow tracking-[0.01em] text-ink-faint">Domestic vs international by {metricName[metric]}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
           {control}
+          <Segmented
+            aria-label="Chart"
+            size="sm"
+            value={chartType}
+            onChange={setChartType}
+            options={[
+              { value: "bar", label: "Bar" },
+              { value: "pie", label: "Pie" },
+            ]}
+          />
         </div>
-        <BarsH
-          height={110}
-          rows={[
-            { id: "domestic", label: "Domestic", domestic: dom, international: 0 },
-            { id: "international", label: "International", domestic: 0, international: intl },
-          ]}
-          series={[
-            { key: "domestic", name: "Domestic", color: color.accent },
-            { key: "international", name: "International", color: color.secondary },
-          ]}
-          activeId={activeId}
-          unit={metricName[metric]}
-          onPick={(id) => toggleCrossFilter(tripTypeFilter(id as "domestic" | "international"))}
-        />
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
+          Domestic vs international by {metricName[metric]}{chartType === "bar" ? ", by year" : " · all time"}
+        </div>
+        <ChartLegend series={diSeries} />
+        {chartType === "bar" ? (
+          <BarsV
+            rows={yearRows}
+            series={diSeries}
+            unit={metricName[metric]}
+            activeId={yearActive}
+            onPick={(id) => setRange(yearActive === id ? ALL_TIME : yearRange(id))}
+          />
+        ) : (
+          <div style={{ height: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={45}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  isAnimationActive={false}
+                  onClick={(e: { payload?: { id?: string } }) => e.payload?.id && toggleCrossFilter(tripTypeFilter(e.payload.id as "domestic" | "international"))}
+                  label={(e: { name?: string; value?: number }) => `${e.name}: ${Number(e.value ?? 0).toLocaleString()}`}
+                  labelLine={false}
+                >
+                  {pieData.map((s) => <Cell key={s.id} fill={s.color} cursor="pointer" />)}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
         <div>
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <span className="text-eyebrow tracking-[0.01em] text-ink-faint">Top country pairs</span>
