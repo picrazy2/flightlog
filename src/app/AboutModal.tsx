@@ -6,11 +6,11 @@ import { useStore } from "@/state/store";
 
 const FEATURES: { icon: IconName; color: string; title: string; desc: string }[] = [
   { icon: "globe", color: "#5B9DFF", title: "Interactive map", desc: "Great-circle routes and real flown tracks on a globe or flat map, coloured by any dimension." },
-  { icon: "distance", color: "#2DD4BF", title: "Deep statistics", desc: "Airports, cities, countries, airlines, aircraft, routes, cabins, delays, cost — each its own panel." },
-  { icon: "magnifying-glass", color: "#A78BFA", title: "Cross-filtering", desc: "Click almost anything to filter every chart and the map at once, and drill into any year." },
-  { icon: "calendar", color: "#FFC061", title: "Cost & points", desc: "Cash and award spend per booking, in any display currency at the historical rate on the day you flew." },
-  { icon: "compass", color: "#34D399", title: "Punctuality", desc: "Departure & arrival delays, on-time rates, and your most- and least-delayed flights." },
-  { icon: "airplane", color: "#FB7185", title: "Hands-off email import", desc: "AI reads your booking & check-in emails and adds flights automatically — no forwarding or data entry." },
+  { icon: "growth", color: "#2DD4BF", title: "Deep statistics", desc: "Airports, cities, countries, airlines, aircraft, routes, cabins, delays, cost — each its own panel." },
+  { icon: "filter", color: "#A78BFA", title: "Filter & search", desc: "Click almost anything to filter every chart and the map at once, search for any flight, airport or route, and drill into any year." },
+  { icon: "dollar-symbol", color: "#FFC061", title: "Cost & points", desc: "Cash and award spend per booking, in any display currency at the historical rate on the day you flew." },
+  { icon: "wall-clock", color: "#34D399", title: "Punctuality", desc: "Departure & arrival delays, on-time rates, and your most- and least-delayed flights." },
+  { icon: "mail", color: "#FB7185", title: "Hands-off email import", desc: "AI reads your booking & check-in emails and adds flights automatically — no forwarding or data entry." },
 ];
 
 function Method({ label, children }: { label: string; children: React.ReactNode }) {

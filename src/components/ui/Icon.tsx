@@ -8,12 +8,17 @@ export type IconName =
   | "calendar"
   | "compass"
   | "distance"
+  | "dollar-symbol"
+  | "filter"
   | "globe"
+  | "growth"
   | "magnifying-glass"
+  | "mail"
   | "plane"
   | "right-chevron"
   | "route"
-  | "setting";
+  | "setting"
+  | "wall-clock";
 
 interface Props {
   name: IconName;
