@@ -12,6 +12,7 @@ const FEATURES: { icon: IconName; color: string; title: string; desc: string }[]
   { icon: "dollar-symbol", color: "#FFC061", title: "Cost & points", desc: "Cash and award spend per booking, in any display currency at the historical rate on the day you flew." },
   { icon: "wall-clock", color: "#34D399", title: "Punctuality", desc: "Departure & arrival delays, on-time rates, and your most- and least-delayed flights." },
   { icon: "mail", color: "#FB7185", title: "Hands-off email import", desc: "AI reads your booking & check-in emails and adds flights automatically — no forwarding or data entry." },
+  { icon: "add", color: "#818CF8", title: "Add, import & edit", desc: "Prefer manual? Add or edit any flight or booking by hand, or bulk-import a CSV from another app." },
 ];
 
 function Method({ label, children }: { label: string; children: React.ReactNode }) {
