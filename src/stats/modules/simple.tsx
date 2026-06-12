@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { countModule } from "./countModule";
 import { color, CATEGORICAL } from "@/lib/palette";
-import { airlineFilter, cityFilter, aircraftFilter } from "../filters";
+import { airlineFilter, cityFilter, aircraftFilter, bodyFilter } from "../filters";
 import { uniqueCount } from "@/lib/aggregate";
 import { BarsH } from "@/components/charts/BarsH";
 import { EntityChart } from "../EntityChart";
 import { EntityVisitsPanel } from "../EntityVisitsPanel";
 import { useChartType } from "../useChartType";
 import { Switch } from "@/components/ui/Switch";
-import { Segmented } from "@/components/ui/Segmented";
 import { OptionsButton } from "@/components/ui/OptionsButton";
+import { bodyClassOf, BODY_LABELS, type BodyClass } from "@/lib/aircraft";
 import { MiniStats } from "@/components/ui/MiniStat";
 import { useStore } from "@/state/store";
 import { useMetricToggle, metricValue, metricName } from "../useMetric";
@@ -128,16 +128,6 @@ export const cities: StatModule = {
   ),
 };
 
-// Widebody vs narrowbody — uses the aircraft_types.body_class from the DB; falls
-// back to a name/code heuristic only when the reference row hasn't been enriched.
-const WIDE_NAME = /(747|767|777|787|A300|A310|A330|A340|A350|A380|DC-?10|MD-?11|IL-?96|L-?1011)/i;
-const WIDE_CODE = /^(B74|B76|B77|B78|A30|A310|A33|A34|A35|A38|DC10|MD11|IL96)/i;
-function isWidebody(f: Flight): boolean {
-  if (f.aircraft_type_body_class) return f.aircraft_type_body_class === "widebody";
-  const n = f.aircraft_type_name;
-  if (n) return WIDE_NAME.test(n);
-  return WIDE_CODE.test(f.aircraft_type_code ?? "");
-}
 const WIDE_COLOR = "#A78BFA";
 const NARROW_COLOR = "#5B9DFF";
 
@@ -153,24 +143,23 @@ export const aircraft: StatModule = {
     const { toggleCrossFilter, crossFilters } = useStore();
     const { metric, control } = useMetricToggle();
     const [percent, setPercent] = useState(false);
-    const [body, setBody] = useState<"all" | "narrow" | "wide">("all");
     const activeId = crossFilters.filter((c) => c.id.startsWith("aircraft:")).map((c) => c.id.slice("aircraft:".length));
+    const activeBodies = new Set(crossFilters.filter((c) => c.id.startsWith("body:")).map((c) => c.id.slice("body:".length)));
 
-    const types = new Map<string, { label: string; domestic: number; international: number; wide: number }>();
+    // body-class counts belong to the "body" facet → exclude it so all classes stay visible
+    const bodyCount: Record<BodyClass, number> = { double: 0, wide: 0, narrow: 0, unknown: 0 };
+    for (const f of ctx.facetFlights("body")) bodyCount[bodyClassOf(f)]++;
+
+    // aircraft-type chart + tail numbers (the "aircraft" facet)
+    const types = new Map<string, { label: string; domestic: number; international: number }>();
     const regFlights = new Map<string, Flight[]>();
-    let wideFlights = 0;
-    let narrowFlights = 0;
     for (const f of ctx.facetFlights("aircraft")) {
       if (f.aircraft_type_code) {
-        const wide = isWidebody(f);
-        if (wide) wideFlights++;
-        else narrowFlights++;
         const v = metricValue(f, metric);
         const cur = types.get(f.aircraft_type_code) ?? {
           label: f.aircraft_type_name ?? f.aircraft_type_code,
           domestic: 0,
           international: 0,
-          wide: wide ? 1 : 0,
         };
         if (f.trip_type === "international") cur.international += v;
         else cur.domestic += v;
@@ -183,8 +172,7 @@ export const aircraft: StatModule = {
       }
     }
     const typeRows = [...types.entries()]
-      .map(([id, x]) => ({ id, label: x.label, domestic: Math.round(x.domestic), international: Math.round(x.international), wide: x.wide }))
-      .filter((r) => body === "all" || (body === "wide" ? r.wide === 1 : r.wide === 0))
+      .map(([id, x]) => ({ id, label: x.label, domestic: Math.round(x.domestic), international: Math.round(x.international) }))
       .sort((a, b) => b.domestic + b.international - (a.domestic + a.international));
     // most-flown tails: only those flown 3+ times; hover lists the flights
     const regRows = [...regFlights.entries()]
@@ -198,34 +186,25 @@ export const aircraft: StatModule = {
       })
       .sort((a, b) => b.flights - a.flights);
 
-    const cards = [
-      { label: "Widebody flights", value: String(wideFlights), color: WIDE_COLOR },
-      { label: "Narrowbody flights", value: String(narrowFlights), color: NARROW_COLOR },
-      { label: "Tail numbers", value: String(regFlights.size) },
-    ];
+    // first three cards toggle the body cross-filter; tail-numbers is informational
+    const bodyCards = (["wide", "narrow", "double"] as BodyClass[]).map((k) => ({
+      label: BODY_LABELS[k],
+      value: String(bodyCount[k]),
+      color: k === "wide" ? WIDE_COLOR : k === "narrow" ? NARROW_COLOR : BODY_DOUBLE,
+      active: activeBodies.has(k),
+      onClick: () => toggleCrossFilter(bodyFilter(k)),
+    }));
+    const cards = [...bodyCards, { label: "Tail numbers", value: String(regFlights.size) }];
 
     return (
       <>
-        <MiniStats items={cards} />
+        <MiniStats items={cards} cols={4} />
         <div className="flex items-center justify-between gap-2">
-          <Segmented
-            aria-label="Body type"
-            size="sm"
-            value={body}
-            onChange={setBody}
-            options={[
-              { value: "all", label: "All" },
-              { value: "narrow", label: "Narrow" },
-              { value: "wide", label: "Wide" },
-            ]}
-          />
+          {control}
           <OptionsButton>
-            <div className="flex flex-col gap-2">
-              {control}
-              <div className="flex items-center justify-between">
-                <span className="text-label text-ink-muted">100% stacked</span>
-                <Switch checked={percent} onChange={setPercent} />
-              </div>
+            <div className="flex items-center justify-between">
+              <span className="text-label text-ink-muted">100% stacked</span>
+              <Switch checked={percent} onChange={setPercent} />
             </div>
           </OptionsButton>
         </div>
@@ -255,24 +234,26 @@ export const aircraft: StatModule = {
   },
   // Per-flight colouring by aircraft body type.
   map: {
-    colorFlight: (f) => {
-      if (!f.aircraft_type_code) return BODY_UNKNOWN;
-      if (f.aircraft_type_deck_count === 2) return BODY_DOUBLE;
-      return isWidebody(f) ? WIDE_COLOR : NARROW_COLOR;
-    },
-    flightLegendId: (f) =>
-      !f.aircraft_type_code ? "unknown" : f.aircraft_type_deck_count === 2 ? "double" : isWidebody(f) ? "wide" : "narrow",
+    colorFlight: (f) => BODY_COLOR[bodyClassOf(f)],
+    flightLegendId: (f) => bodyClassOf(f),
     legend: () => ({
       title: "Aircraft body",
-      items: [
-        { id: "double", label: "Double-decker", color: BODY_DOUBLE, swatch: "line" },
-        { id: "wide", label: "Widebody", color: WIDE_COLOR, swatch: "line" },
-        { id: "narrow", label: "Narrowbody", color: NARROW_COLOR, swatch: "line" },
-        { id: "unknown", label: "Unknown", color: BODY_UNKNOWN, swatch: "line" },
-      ],
+      items: (["double", "wide", "narrow", "unknown"] as BodyClass[]).map((k) => ({
+        id: k,
+        label: BODY_LABELS[k],
+        color: BODY_COLOR[k],
+        swatch: "line" as const,
+        filter: bodyFilter(k),
+      })),
     }),
   },
 };
 
 const BODY_DOUBLE = "#F472B6";
 const BODY_UNKNOWN = "#5C6575";
+const BODY_COLOR: Record<BodyClass, string> = {
+  double: BODY_DOUBLE,
+  wide: WIDE_COLOR,
+  narrow: NARROW_COLOR,
+  unknown: BODY_UNKNOWN,
+};

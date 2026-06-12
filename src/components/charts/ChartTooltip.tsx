@@ -16,6 +16,8 @@ export function ChartTooltip({ active, payload, label, unit }: TooltipProps<numb
   // drop zero-value series so a stacked bar's hover only lists the parts it actually has
   const shown = payload.filter((p) => (Number(p.value) || 0) !== 0);
   if (!shown.length) return null;
+  // for a genuine stack (2+ parts) also show the combined total
+  const total = shown.reduce((s, p) => s + (Number(p.value) || 0), 0);
   return (
     <div className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 shadow-3">
       <div className="mb-0.5 text-caption text-ink-muted">{heading}</div>
@@ -26,6 +28,13 @@ export function ChartTooltip({ active, payload, label, unit }: TooltipProps<numb
           <span className="tnum ml-auto text-ink">{fmt(p.value ?? 0, unit)}</span>
         </div>
       ))}
+      {shown.length > 1 && (
+        <div className="mt-0.5 flex items-center gap-2 border-t border-border pt-0.5 text-label">
+          <span className="h-2 w-2" />
+          <span className="text-ink-muted">Total</span>
+          <span className="tnum ml-auto font-semibold text-ink">{fmt(total, unit)}</span>
+        </div>
+      )}
       {sub && <div className="mt-0.5 whitespace-pre-line text-caption text-ink-faint">{sub}</div>}
     </div>
   );

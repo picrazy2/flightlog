@@ -2,6 +2,13 @@ import type { CrossFilter, DateRange } from "@/state/store";
 import { routeKeyUndirected } from "@/lib/geo";
 import { COUNTRY_GEO, sovereignOf } from "@/lib/continents";
 import { flightDistanceMi, flightMinutes } from "@/lib/format";
+import { bodyClassOf, BODY_LABELS, type BodyClass } from "@/lib/aircraft";
+
+export const bodyFilter = (kind: BodyClass): CrossFilter => ({
+  id: `body:${kind}`,
+  label: BODY_LABELS[kind],
+  test: (f) => bodyClassOf(f) === kind,
+});
 
 const contOf = (iso: string | null) => {
   const s = sovereignOf(iso);

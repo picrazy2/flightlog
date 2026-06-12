@@ -93,19 +93,19 @@ function funFacts(flights: Flight[], settings: { units: "mi" | "km" }): Fact[] {
   // provider (airline) scheduled times when present — manually-imported flights often have
   // 00:00 placeholder sched times that would otherwise produce bogus 0-min layovers.
   const chrono = [...flights].sort((a, b) => schedDep(a).localeCompare(schedDep(b)));
-  let shortLay: { min: number; iata: string } | null = null;
+  let shortLay: { min: number; iata: string; date: string } | null = null;
   for (let i = 0; i < chrono.length - 1; i++) {
     if (chrono[i].arr_iata !== chrono[i + 1].dep_iata) continue;
     // only trust a pair when BOTH legs have real airline-provided times
     if (!chrono[i].provider_sched_arr || !chrono[i + 1].provider_sched_dep) continue;
     const gap = (new Date(schedDep(chrono[i + 1])).getTime() - new Date(schedArr(chrono[i])).getTime()) / 60000;
     if (gap <= 0 || gap > 16 * 60) continue;
-    if (!shortLay || gap < shortLay.min) shortLay = { min: gap, iata: chrono[i].arr_iata };
+    if (!shortLay || gap < shortLay.min) shortLay = { min: gap, iata: chrono[i].arr_iata, date: chrono[i + 1].flight_date };
   }
   if (shortLay) {
     const d = formatDuration(shortLay.min);
     const v = d.unit === "m" ? `${d.value} min` : d.value;
-    facts.push({ label: "Shortest layover", value: v, sub: shortLay.iata });
+    facts.push({ label: "Shortest layover", value: v, sub: `${shortLay.iata} · ${shortLay.date}` });
   }
 
   return facts;
