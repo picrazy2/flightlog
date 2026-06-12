@@ -25,11 +25,15 @@ function Cell({
   canWrite: boolean;
   numeric?: boolean;
   placeholder?: string;
-  onSave: (v: string) => void;
+  onSave: (v: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(false);
   if (!canWrite) return <span className={value ? "" : "text-ink-faint"}>{value || "—"}</span>;
+  if (saving)
+    return <span className="inline-flex items-center gap-1 text-caption text-ink-faint"><Spinner /> saving…</span>;
   if (!editing)
     return (
       <button
@@ -37,7 +41,8 @@ function Cell({
           setDraft(value);
           setEditing(true);
         }}
-        className="focus-ring -mx-1 min-w-[2rem] rounded px-1 text-left hover:bg-surface-3"
+        title={err ? "Save failed — click to retry" : undefined}
+        className={`focus-ring -mx-1 min-w-[2rem] rounded px-1 text-left hover:bg-surface-3 ${err ? "text-negative ring-1 ring-negative" : ""}`}
       >
         {value || <span className="text-ink-faint">{placeholder ?? "—"}</span>}
       </button>
@@ -48,9 +53,18 @@ function Cell({
       value={draft}
       inputMode={numeric ? "decimal" : undefined}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
+      onBlur={async () => {
         setEditing(false);
-        if (draft !== value) onSave(draft);
+        if (draft === value) return;
+        setSaving(true);
+        setErr(false);
+        try {
+          await onSave(draft);
+        } catch {
+          setErr(true); // keep the typed draft visible on the next edit so it isn't lost
+        } finally {
+          setSaving(false);
+        }
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
@@ -62,6 +76,10 @@ function Cell({
       className="focus-ring w-24 rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-label text-ink"
     />
   );
+}
+
+function Spinner() {
+  return <span className="inline-block h-3 w-3 animate-spin rounded-full border border-ink-faint border-t-transparent" />;
 }
 
 function EmailsCell({ emails }: { emails: BookingRow["emails"] }) {
@@ -135,7 +153,9 @@ export function BookingsTab({
   }, [bookings, flightsByBooking]);
 
   const save = (b: BookingRow, fields: Record<string, unknown>) =>
-    manage.mutate({ id: b.id, fields }, { onSuccess: onChanged });
+    manage.mutateAsync({ id: b.id, fields }).then(() => {
+      onChanged();
+    });
 
   const num = (s: string) => (s.trim() === "" ? null : Number(s.replace(/[^0-9.\-]/g, "")) || null);
   // edit PNR text → keep each ref's airline_iata where one exists
@@ -143,7 +163,7 @@ export function BookingsTab({
     const pnrs = text.split(",").map((s) => s.trim()).filter(Boolean);
     const existing = b.booking_refs_airline ?? [];
     const refs = pnrs.map((pnr, i) => ({ airline_iata: existing[i]?.airline_iata ?? "", pnr }));
-    save(b, { booking_refs_airline: refs.length ? refs : null });
+    return save(b, { booking_refs_airline: refs.length ? refs : null });
   };
 
   return (

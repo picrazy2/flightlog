@@ -150,6 +150,8 @@ export function SearchBox({ ctx, iconOnly }: { ctx: StatContext; iconOnly?: bool
         <li key={s.key}>
           <button
             onClick={() => {
+              // clear any open popup + its dimming first, so the new selection highlights cleanly
+              window.dispatchEvent(new CustomEvent("journia:closepopup"));
               s.run();
               close();
             }}

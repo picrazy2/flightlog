@@ -321,21 +321,26 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
       // Fits the route, highlights it, and shows the FlightPopup at the route midpoint.
       showFlightRef.current = (flightId: string) => {
         const flight = ctxRef.current.flights.find((x) => x.id === flightId);
-        if (!flight || flight.dep_lng == null || flight.arr_lng == null) return;
-        const mid: [number, number] = [
-          (flight.dep_lng + flight.arr_lng) / 2,
-          ((flight.dep_lat ?? 0) + (flight.arr_lat ?? 0)) / 2,
-        ];
-        map.fitBounds(
-          [
-            [Math.min(flight.dep_lng, flight.arr_lng), Math.min(flight.dep_lat ?? 0, flight.arr_lat ?? 0)],
-            [Math.max(flight.dep_lng, flight.arr_lng), Math.max(flight.dep_lat ?? 0, flight.arr_lat ?? 0)],
-          ],
-          { padding: 120, duration: 800, maxZoom: 6 },
-        );
+        if (!flight) return;
+        const dLng = flight.dep_lng, dLat = flight.dep_lat, aLng = flight.arr_lng, aLat = flight.arr_lat;
+        const mid: [number, number] =
+          dLng != null && aLng != null ? [(dLng + aLng) / 2, ((dLat ?? 0) + (aLat ?? 0)) / 2] : [aLng ?? dLng ?? 0, aLat ?? dLat ?? 0];
         if (isMobileRef.current) {
+          if (dLng != null) map.flyTo({ center: mid, zoom: 3.5, duration: 700 });
           useStore.getState().setMapSelection({ kind: "flight", flightId: flight.id });
           return;
+        }
+        try {
+          if (dLng != null && aLng != null) {
+            map.fitBounds(
+              [[Math.min(dLng, aLng), Math.min(dLat ?? 0, aLat ?? 0)], [Math.max(dLng, aLng), Math.max(dLat ?? 0, aLat ?? 0)]],
+              { padding: 140, duration: 700, maxZoom: 6 },
+            );
+          } else if (dLng != null || aLng != null) {
+            map.flyTo({ center: mid, zoom: 4, duration: 700 });
+          }
+        } catch {
+          map.flyTo({ center: mid, zoom: 3.5, duration: 700 });
         }
         setHighlight({ kind: "route", field: "fid", id: flight.id, dep: flight.dep_iata, arr: flight.arr_iata });
         showReactPopup(mid, "route", <FlightPopup flight={flight} settings={ctxRef.current.settings} />);
@@ -475,13 +480,22 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
       const d = (e as CustomEvent).detail as { flightId: string };
       showFlightRef.current?.(d.flightId);
     };
+    // dismiss any open popup + undim before a new search action takes effect, so the
+    // previous selection's highlight doesn't linger over the new one
+    const closePopup = () => {
+      clickPopup.current?.remove(); // fires 'close' → restoreHighlight
+      if (isMobileRef.current) useStore.getState().setMapSelection(null);
+      else restoreHighlightRef.current?.();
+    };
     window.addEventListener("journia:flyto", fly);
     window.addEventListener("journia:fit", fit);
     window.addEventListener("journia:showflight", showFlight as EventListener);
+    window.addEventListener("journia:closepopup", closePopup);
     return () => {
       window.removeEventListener("journia:flyto", fly);
       window.removeEventListener("journia:fit", fit);
       window.removeEventListener("journia:showflight", showFlight as EventListener);
+      window.removeEventListener("journia:closepopup", closePopup);
     };
   }, []);
 
