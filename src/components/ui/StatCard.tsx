@@ -33,7 +33,8 @@ function Compare({
   const diff = value - compareValue;
   const fmt = (n: number) => {
     const r = format ? format(n, settings) : { value: compact(n), unit: unit ?? "" };
-    return r.unit ? `${r.value} ${r.unit}` : r.value;
+    // keep only short units (km, mi, %); drop wordy ones (flights, airports, pts…)
+    return r.unit && r.unit.length <= 2 ? `${r.value} ${r.unit}` : r.value;
   };
   const shown = fmt(Math.abs(diff));
   if (diff === 0 || shown === "0" || shown === "0%") return <span className="tnum text-caption text-ink-faint">—</span>;

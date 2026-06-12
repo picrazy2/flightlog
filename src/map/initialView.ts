@@ -21,6 +21,14 @@ export interface InitialView {
   zoom: number;
 }
 
+// The globe's on-screen diameter is ≈ (512·2^zoom)/π px (its circumference = the mercator
+// world width). A fixed zoom is therefore a fixed pixel size — fine on a phone, tiny in a
+// big desktop window. Pick the zoom so the diameter is ~1.18× the smaller viewport
+// dimension (fills it with a slight crop, matching how it already looks on mobile).
+const GLOBE_FILL = 1.18;
+const globeZoom = (w: number, h: number) =>
+  Math.max(0.3, Math.min(5, Math.log2((GLOBE_FILL * Math.min(w, h) * Math.PI) / 512)));
+
 export function computeInitialView(w: number, h: number, ctx: StatContext): InitialView {
   if (flatFitsViewport(w, h)) {
     // mercator world width = 512·2^zoom px → set it equal to the viewport width so the
@@ -30,5 +38,5 @@ export function computeInitialView(w: number, h: number, ctx: StatContext): Init
   const top = [...ctx.airports.values()]
     .filter((a) => a.lng != null && a.lat != null)
     .sort((a, b) => b.visits - a.visits)[0];
-  return { projection: "globe", center: top ? [top.lng!, top.lat!] : [10, 25], zoom: 1.5 };
+  return { projection: "globe", center: top ? [top.lng!, top.lat!] : [10, 25], zoom: globeZoom(w, h) };
 }
