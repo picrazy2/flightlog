@@ -5,6 +5,17 @@ const OPENFLIGHTS_AIRLINES_URL =
   "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airlines.dat";
 const UPSERT_BATCH_SIZE = 1_000;
 
+// IATA codes OpenFlights has wrong — the code was reassigned to a newer carrier, or
+// the dataset never updated. These corrected name/ICAO values are applied after the
+// OpenFlights merge so a reference refresh can't revert them (a wrong ICAO silently
+// breaks AeroAPI enrichment — see W9 → WUK). Add a row here whenever you fix one by hand.
+const AIRLINE_OVERRIDES: Record<string, { name: string; icao: string }> = {
+  A6: { name: "Air Travel Co. Ltd", icao: "OTC" }, // OpenFlights: Air Alps Aviation
+  W4: { name: "Wizz Air Malta", icao: "WMT" }, // OpenFlights: Aero Services Executive
+  W9: { name: "Wizz Air UK", icao: "WUK" }, // OpenFlights: Abelag Aviation
+  XW: { name: "NokScoot", icao: "NCT" }, // OpenFlights: Sky Express
+};
+
 type AirlineRecord = {
   airline_id?: string;
   name?: string;
@@ -59,6 +70,18 @@ export async function refreshAirlines(
     if (!existing || isBetterAirlineRecord(candidate, existing)) {
       airlinesByIata.set(iata, candidate);
     }
+  }
+
+  // Apply hand-corrected overrides last so they win over (and survive) OpenFlights.
+  for (const [iata, override] of Object.entries(AIRLINE_OVERRIDES)) {
+    if (targetAirline && iata !== targetAirline) continue;
+    const existing = airlinesByIata.get(iata) as { country?: unknown } | undefined;
+    airlinesByIata.set(iata, {
+      iata,
+      icao: override.icao,
+      name: override.name,
+      country: existing?.country ?? null,
+    });
   }
 
   const airlines = Array.from(airlinesByIata.values());
