@@ -26,7 +26,7 @@ export function AboutModal() {
   const setAboutOpen = useStore((s) => s.setAboutOpen);
   const [methodOpen, setMethodOpen] = useState(false);
   return (
-    <Modal title="About" onClose={() => setAboutOpen(false)} className="w-[min(600px,95vw)]">
+    <Modal title="About" onClose={() => setAboutOpen(false)} className="w-[min(760px,95vw)]">
       <div className="flex flex-col gap-7 p-6">
         {/* hero — the mark, big and centred */}
         <div className="flex flex-col items-center gap-4 text-center">
