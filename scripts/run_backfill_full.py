@@ -100,7 +100,7 @@ def call(ids):
     except urllib.error.HTTPError as e:
         return {"ok": False, "error": e.read().decode()[:200]}
 
-tot = Counter(); linked = 0; discrep = []; unmatched = set()
+tot = Counter(); linked = 0; cabins = 0; discrep = []; unmatched = set()
 for i in range(0, len(todo), BATCH):
     r = call(todo[i:i+BATCH])
     if not r.get("ok"):
@@ -109,7 +109,7 @@ for i in range(0, len(todo), BATCH):
         tot[res["outcome"]] += 1
         if res["outcome"] != "failed": done.add(res["message_id"])
     json.dump(sorted(done), open(STATE, "w"))
-    linked += r.get("bookings_linked", 0)
+    linked += r.get("bookings_linked", 0); cabins += r.get("cabins_set", 0)
     discrep += r.get("discrepancies", [])
     for u in r.get("unmatched_legs", []): unmatched.add(u)
     print(f"  {min(i+BATCH,len(todo))}/{len(todo)}  linked_total={linked}  flights_with_booking={r.get('flights_with_booking')}")
@@ -117,7 +117,7 @@ for i in range(0, len(todo), BATCH):
 
 print("\n=== Full sweep done ===")
 print("outcomes:", dict(tot))
-print("bookings linked this run:", linked)
+print("bookings linked this run:", linked); print("cabins set this run:", cabins)
 if discrep:
     print(f"\nflight-number conflicts ({len(discrep)}) — kept import as truth:")
     for d in sorted(set(discrep)): print("  -", d)

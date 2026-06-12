@@ -1,8 +1,52 @@
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { color } from "@/lib/palette";
+import { restGet } from "@/lib/supabase";
 import { formatDistance, formatDuration, durationMin, schedDep, schedArr, departureDelayMin, arrivalDelayMin } from "@/lib/format";
 import { cabinLabel, segmentCost, bookingCost, isMultiLeg, gmailLink } from "@/lib/cabin";
 import type { Flight, Settings } from "@/lib/types";
+
+const PersonIcon = ({ size = 11 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+    <circle cx="12" cy="7.5" r="4" />
+    <path d="M3.5 20.5c0-4.4 3.8-7 8.5-7s8.5 2.6 8.5 7z" />
+  </svg>
+);
+
+// Other logged users who were on this exact flight (same date + airline + number + route).
+function useCoTravelers(f: Flight): string[] {
+  const [names, setNames] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const q = [
+          `flight_date=eq.${f.flight_date}`,
+          `airline_iata=eq.${f.airline_iata}`,
+          `flight_number=eq.${f.flight_number}`,
+          `dep_iata=eq.${f.dep_iata}`,
+          `arr_iata=eq.${f.arr_iata}`,
+          `user_id=neq.${f.user_id}`,
+          "select=user_id",
+        ].join("&");
+        const rows = await restGet<{ user_id: string }[]>(`v_flights_with_airports?${q}`);
+        const ids = [...new Set(rows.map((r) => r.user_id))].filter(Boolean);
+        if (!ids.length) {
+          if (!cancelled) setNames([]);
+          return;
+        }
+        const users = await restGet<{ id: string; name: string }[]>(`users?select=id,name&id=in.(${ids.join(",")})`);
+        if (!cancelled) setNames(users.map((u) => u.name));
+      } catch {
+        if (!cancelled) setNames([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [f.id]);
+  return names;
+}
 
 const GREEN = "#34D399";
 const RED = "#FB7185";
@@ -69,6 +113,7 @@ function TaxiRow({ label, sched, actual }: { label: string; sched: number | null
 
 export function FlightPopup({ flight, settings, fluid, hideHeader }: { flight: Flight; settings: Settings; fluid?: boolean; hideHeader?: boolean }) {
   const f = flight;
+  const coTravelers = useCoTravelers(f);
   const rich = f.actual_dep != null || f.actual_arr != null; // AeroAPI gate data
   const depActual = f.actual_dep ?? f.actual_takeoff;
   const arrActual = f.actual_arr ?? f.actual_landing;
@@ -120,6 +165,13 @@ export function FlightPopup({ flight, settings, fluid, hideHeader }: { flight: F
           {f.aircraft_type_name && <span>{f.aircraft_type_name}</span>}
         </div>
       </div>
+
+      {coTravelers.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: color.accent, padding: "2px 0" }}>
+          <PersonIcon />
+          <span>Also flown by {coTravelers.join(", ")}</span>
+        </div>
+      )}
 
       {rich ? (
         <>
