@@ -80,7 +80,9 @@ function funFacts(flights: Flight[], settings: { units: "mi" | "km" }): Fact[] {
     if (f.flown_distance_mi == null) continue;
     const min = flightMinutes(f);
     if (min <= 0) continue;
-    const mph = (flightDistanceMi(f) * 60) / min;
+    // always the actual flown-track distance (true ground speed), independent of the
+    // Show-tracks map toggle — every candidate already has a track (guarded above)
+    const mph = (f.flown_distance_mi * 60) / min;
     if (!fastest || mph > fastest.mph) fastest = { mph, label: `${f.dep_iata}–${f.arr_iata}`, id: f.id };
   }
   if (fastest) {
