@@ -9,8 +9,18 @@ import { useCreateFlight, useUpdateFlight, usePatchFlight, useDeleteFlight, type
 import { invokeFunction } from "@/lib/supabase";
 import { useAuth, signInWithGoogle, signOut } from "@/lib/auth";
 import type { Flight } from "@/lib/types";
+import { compact } from "@/lib/format";
+import { currencySymbol } from "@/lib/fx";
 import { FlightForm } from "./FlightForm";
 import { BookingsTab } from "./BookingsTab";
+
+// Per-flight (segment) cost: cash in its currency and/or points.
+const costLabel = (f: Flight): string => {
+  const parts: string[] = [];
+  if (f.cost_cash_segment != null) parts.push(`${currencySymbol((f.cost_currency ?? "USD").toUpperCase())}${Math.round(f.cost_cash_segment).toLocaleString()}`);
+  if ((f.cost_points_segment ?? 0) > 0) parts.push(`${compact(f.cost_points_segment!)} pts`);
+  return parts.length ? parts.join(" + ") : "—";
+};
 
 type Tab = "flights" | "bookings" | "import";
 
@@ -208,7 +218,7 @@ export function DatabaseModal() {
                   <th className={th}>Route</th>
                   <th className={th}>Cabin</th>
                   <th className={th}>Status</th>
-                  <th className={th}>Dist</th>
+                  <th className={th}>Cost</th>
                   <th className={th}>Booking</th>
                   <th className={th}></th>
                 </tr>
@@ -254,7 +264,7 @@ export function DatabaseModal() {
                       )}
                     </td>
                     <td className={`${td} text-ink-muted`}>{f.status}</td>
-                    <td className={`${td} tnum text-ink-muted`}>{f.distance_mi?.toLocaleString() ?? "—"}</td>
+                    <td className={`${td} tnum whitespace-nowrap text-ink-muted`}>{costLabel(f)}</td>
                     <td className={td}>
                       {f.booking_id ? (
                         <button
