@@ -21,11 +21,12 @@ export const arrivalDelayMin = (f: Flight): number | null => {
   return a == null ? null : Math.round((Date.parse(a) - Date.parse(schedArr(f))) / 60000);
 };
 
-// Distance follows the "Show tracks" toggle: in tracks mode prefer the actual filed
-// route distance (fall back to great-circle); in great-circle mode use great-circle only.
+// Distance follows the "Show tracks" toggle: in tracks mode prefer the actual flown
+// track distance (incl. GC fillers), then the filed route distance, then great-circle;
+// in great-circle mode use great-circle only.
 export const flightDistanceMi = (f: Flight): number => {
   const preferActual = useStore.getState().settings.showTracks;
-  if (preferActual && f.route_distance_mi != null) return f.route_distance_mi;
+  if (preferActual) return f.flown_distance_mi ?? f.route_distance_mi ?? f.distance_mi ?? 0;
   return f.distance_mi ?? 0;
 };
 

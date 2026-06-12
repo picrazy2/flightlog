@@ -1,6 +1,6 @@
 import { Icon } from "@/components/ui/Icon";
 import { color } from "@/lib/palette";
-import { formatDistance } from "@/lib/format";
+import { formatDistance, flightDistanceMi } from "@/lib/format";
 import { cabinLabel, segmentCost, gmailLink } from "@/lib/cabin";
 import type { Flight, Settings } from "@/lib/types";
 
@@ -8,7 +8,7 @@ import type { Flight, Settings } from "@/lib/types";
 // instead of one flight's times, summarise the route and list each flight.
 export function RouteAggPopup({ flights, dep, arr, settings, fluid, hideHeader }: { flights: Flight[]; dep: string; arr: string; settings: Settings; fluid?: boolean; hideHeader?: boolean }) {
   const rows = [...flights].sort((a, b) => b.flight_date.localeCompare(a.flight_date));
-  const totalMi = rows.reduce((s, f) => s + (f.route_distance_mi ?? f.distance_mi ?? 0), 0);
+  const totalMi = rows.reduce((s, f) => s + flightDistanceMi(f), 0);
   const dist = totalMi ? formatDistance(totalMi, settings) : null;
 
   return (

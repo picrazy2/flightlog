@@ -20,6 +20,32 @@ const LANDING_BUFFER_MS = 30 * 60 * 1000;
 // on every run forever.
 const TRACK_RETRY_MS = 14 * 24 * 60 * 60 * 1000;
 
+// Actual flown distance (mi) = haversine over [dep, ...track points, arr]; gap bridges
+// and gate stitches are great circles, and haversine between two points IS that arc.
+function havMi(a: [number, number], b: [number, number]): number {
+  const R = 3958.7613;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const h = Math.sin(rad(b[1] - a[1]) / 2) ** 2 + Math.cos(rad(a[1])) * Math.cos(rad(b[1])) * Math.sin(rad(b[0] - a[0]) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function trackCoords(geojson: unknown): [number, number][] {
+  const g = geojson as { type?: string; coordinates?: unknown } | null;
+  if (g?.type === "LineString") return (g.coordinates as [number, number][]) ?? [];
+  if (g?.type === "MultiLineString") return ((g.coordinates as [number, number][][]) ?? []).flat();
+  return [];
+}
+async function setFlownDistance(supabase: SupabaseClient, flight: RefreshRecentCandidate, geojson: unknown) {
+  const f = flight as unknown as { dep_lat?: number | null; dep_lng?: number | null; arr_lat?: number | null; arr_lng?: number | null };
+  const pts: [number, number][] = [];
+  if (f.dep_lat != null && f.dep_lng != null) pts.push([f.dep_lng, f.dep_lat]);
+  for (const c of trackCoords(geojson)) if (c && c.length >= 2) pts.push([c[0], c[1]]);
+  if (f.arr_lat != null && f.arr_lng != null) pts.push([f.arr_lng, f.arr_lat]);
+  if (pts.length < 2) return;
+  let mi = 0;
+  for (let i = 1; i < pts.length; i++) mi += havMi(pts[i - 1], pts[i]);
+  await supabase.from("flights").update({ flown_distance_mi: Math.round(mi) }).eq("id", flight.id);
+}
+
 export async function refreshRecentFlights(
   supabase: SupabaseClient,
   request: RefreshRecentRequest = {},
@@ -157,6 +183,7 @@ async function copyTwinEnrichment(
       await supabase
         .from("tracks")
         .upsert({ flight_id: flight.id, geojson: track.geojson, source: track.source, recorded_at: track.recorded_at }, { onConflict: "flight_id" });
+      await setFlownDistance(supabase, flight, track.geojson);
     }
   }
 }
@@ -311,6 +338,7 @@ async function refreshRecentFlight(
           `Failed to save refreshed track for ${flight.id}: ${error.message}`,
         );
       }
+      await setFlownDistance(supabase, flight, enrichment.track!.geojson);
     }
 
     return {

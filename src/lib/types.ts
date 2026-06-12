@@ -41,6 +41,7 @@ export interface Flight {
   cabin_class: CabinClass | null;
   distance_mi: number | null; // great-circle
   route_distance_mi: number | null; // actual filed route distance (AeroAPI)
+  flown_distance_mi: number | null; // length of the recorded track incl. GC fillers
   terminal_origin: string | null;
   terminal_destination: string | null;
   gate_origin: string | null;

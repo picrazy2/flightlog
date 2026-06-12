@@ -124,7 +124,9 @@ export function FlightPopup({ flight, settings, fluid, hideHeader }: { flight: F
   // non-rich fallback: prefer air, else block
   const actMins = actualAir ?? (depActual && arrActual ? durationMin(depActual, arrActual) : null);
   const gc = f.distance_mi != null ? formatDistance(f.distance_mi, settings) : null;
-  const rt = f.route_distance_mi != null ? formatDistance(f.route_distance_mi, settings) : null;
+  // actual flown track distance (incl. GC fillers) preferred, else filed route distance
+  const realMi = f.flown_distance_mi ?? f.route_distance_mi;
+  const rt = realMi != null ? formatDistance(realMi, settings) : null;
   const cost = segmentCost(f);
   const full = bookingCost(f);
   const multiLeg = isMultiLeg(f);

@@ -5,7 +5,7 @@ import type { Flight } from "@/lib/types";
 
 const COLUMNS = [
   "id,user_id,flight_date,airline_iata,flight_number,dep_iata,arr_iata,sched_dep,sched_arr,provider_sched_dep,provider_sched_arr,provider_sched_takeoff,provider_sched_landing",
-  "actual_dep,actual_arr,actual_takeoff,actual_landing,aircraft_type_code,registration,cabin_class,distance_mi,route_distance_mi,status,source,booking_id",
+  "actual_dep,actual_arr,actual_takeoff,actual_landing,aircraft_type_code,registration,cabin_class,distance_mi,route_distance_mi,flown_distance_mi,status,source,booking_id",
   "terminal_origin,terminal_destination,gate_origin,gate_destination,actual_runway_off,actual_runway_on,diverted,provider_status",
   "cost_cash_segment,cost_points_segment,trip_type",
   "dep_name,dep_city,dep_country,dep_country_name,dep_continent,dep_lat,dep_lng,dep_timezone",
