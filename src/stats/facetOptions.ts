@@ -5,6 +5,7 @@ import { CABIN_LABELS } from "@/lib/cabin";
 import { routeKeyUndirected } from "@/lib/geo";
 import { COUNTRY_GEO, CONTINENTS, sovereignOf } from "@/lib/continents";
 import { bodyClassOf, BODY_LABELS, type BodyClass } from "@/lib/aircraft";
+import { airlineKey, airlineLabel } from "@/lib/airlines";
 
 const CONT_NAME: Record<string, string> = Object.fromEntries(CONTINENTS.map((c) => [c.code, c.name]));
 
@@ -48,9 +49,10 @@ export function facetOptions(flights: Flight[]): Record<string, FacetCand[]> {
 
   for (const f of flights) {
     if (f.airline_iata) {
-      const e = airline.get(f.airline_iata) ?? { name: f.airline_name ?? f.airline_iata, n: 0 };
+      const k = airlineKey(f.airline_iata);
+      const e = airline.get(k) ?? { name: airlineLabel(f.airline_iata, f.airline_name), n: 0 };
       e.n++;
-      airline.set(f.airline_iata, e);
+      airline.set(k, e);
     }
     if (f.aircraft_type_code) {
       const e = aircraft.get(f.aircraft_type_code) ?? { name: f.aircraft_type_name ?? f.aircraft_type_code, n: 0 };

@@ -27,6 +27,7 @@ import { CHART, axisTick } from "@/components/charts/chartTheme";
 import { color } from "@/lib/palette";
 import { useStore } from "@/state/store";
 import { airlineFilter } from "../filters";
+import { airlineKey, airlineLabel } from "@/lib/airlines";
 
 const VERY_MIN = 60; // > 1h late = "very delayed"
 const GREEN = "#34D399";
@@ -90,14 +91,15 @@ export const delays: StatModule = {
       }));
     // per-airline arrival performance — airlines with >= 10 timed flights
     const byAirline = new Map<string, { label: string; sum: number; n: number; late: number }>();
-    for (const f of ctx.facetFlights("airline")) {
+    for (const f of ctx.flights) {
       const d = delayMin(f);
       if (d == null) continue;
-      const cur = byAirline.get(f.airline_iata) ?? { label: f.airline_name ?? f.airline_iata, sum: 0, n: 0, late: 0 };
+      const k = airlineKey(f.airline_iata);
+      const cur = byAirline.get(k) ?? { label: airlineLabel(f.airline_iata, f.airline_name), sum: 0, n: 0, late: 0 };
       cur.n += 1;
       cur.sum += d;
       if (d > 0) cur.late += 1;
-      byAirline.set(f.airline_iata, cur);
+      byAirline.set(k, cur);
     }
     const worst = [...byAirline.entries()]
       .filter(([, a]) => a.n >= 8)

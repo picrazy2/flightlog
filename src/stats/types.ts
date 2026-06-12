@@ -5,10 +5,7 @@ import type { LegendFilter, CrossFilter } from "@/state/store";
 
 // Everything a module needs, prepared by the shell. Pure data in → pure model out.
 export interface StatContext {
-  flights: Flight[]; // filtered by the active date range (+ legend isolation)
-  // flights filtered by every active cross-filter EXCEPT the given facet, so a facet's
-  // own chart keeps showing all options and supports toggling several (multi-select).
-  facetFlights: (facet: string) => Flight[];
+  flights: Flight[]; // filtered by the active date range, temporal + all cross-filters
   compareFlights: Flight[] | null; // previous-period set when compare is on
   airports: Map<string, AirportAgg>;
   settings: Settings;

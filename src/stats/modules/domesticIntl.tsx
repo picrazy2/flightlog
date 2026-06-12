@@ -47,7 +47,7 @@ export const domesticIntl: StatModule = {
     // dom/intl split per year, weighted by the active metric (over flights not narrowed by trip)
     const byYear = new Map<string, { domestic: number; international: number }>();
     let dom = 0, intl = 0;
-    for (const f of ctx.facetFlights("trip")) {
+    for (const f of ctx.flights) {
       const v = metricValue(f, metric);
       const y = f.flight_date.slice(0, 4);
       const a = byYear.get(y) ?? { domestic: 0, international: 0 };

@@ -69,9 +69,7 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
   // the unique-count metric only applies to the airport/city stacked breakdowns
   const canCount = chartType === "bar" && (breakdown === "airport" || breakdown === "city");
   const metric = canCount && countMode ? "count" : "visits";
-  // exclude this facet so picking one bar keeps the others visible (multi-select)
-  const airports = airportsFrom(ctx.facetFlights(facet));
-  const facetFlights = ctx.facetFlights(facet);
+  const airports = airportsFrom(ctx.flights);
   const activeId = crossFilters.filter((c) => c.id.startsWith(`${facet}:`)).map((c) => c.id.slice(facet.length + 1));
   const unit = metric === "count" ? (breakdown === "airport" ? "airports" : "cities") : "visits";
 
@@ -87,7 +85,7 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
           : breakdown === "city"
             ? buildStack(airports, level, "city")
             : breakdown === "type"
-              ? buildTypeStack(facetFlights, level)
+              ? buildTypeStack(ctx.flights, level)
               : buildVisitTypeStack(airports, level);
 
   // country bars/slices get a flag emoji prefix (row id = ISO code at country level)
@@ -143,7 +141,7 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
         // unique mode stacks by the parent geography (cities → country, countries → continent);
         // visits mode stacks by the top entity itself.
         const yc = yearStack({
-          flights: facetFlights,
+          flights: ctx.flights,
           entities: (f) => {
             if (isCity) {
               const mk = (city: string | null, cName: string | null, iso: string | null) =>

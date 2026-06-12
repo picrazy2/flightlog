@@ -75,7 +75,7 @@ export const airports: StatModule = {
     const [percent, setPercent] = useState(false);
     const { toggleCrossFilter, crossFilters } = useStore();
     // airport charts exclude the airport facet so selecting airports doesn't hide the rest
-    const airportFlights = ctx.facetFlights("airport");
+    const airportFlights = ctx.flights;
     const aggs = [...airportsFrom(airportFlights).values()];
     const airportActive = crossFilters.filter((c) => c.id.startsWith("airport:")).map((c) => c.id.slice("airport:".length));
 

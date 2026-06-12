@@ -22,7 +22,7 @@ export function countModule(opts: {
 }): StatModule {
   const rank = (ctx: StatContext, metric: Parameters<typeof metricValue>[1]) => {
     const acc = new Map<string, { label: string; v: number }>();
-    for (const f of ctx.facetFlights(opts.facet)) {
+    for (const f of ctx.flights) {
       const k = opts.key(f);
       if (!k) continue;
       const cur = acc.get(k) ?? { label: opts.label(f), v: 0 };

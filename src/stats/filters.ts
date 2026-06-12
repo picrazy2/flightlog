@@ -3,6 +3,7 @@ import { routeKeyUndirected } from "@/lib/geo";
 import { COUNTRY_GEO, sovereignOf } from "@/lib/continents";
 import { flightDistanceMi, flightMinutes } from "@/lib/format";
 import { bodyClassOf, BODY_LABELS, type BodyClass } from "@/lib/aircraft";
+import { airlineKey } from "@/lib/airlines";
 
 export const bodyFilter = (kind: BodyClass): CrossFilter => ({
   id: `body:${kind}`,
@@ -67,9 +68,10 @@ export const regionFilter = (region: string): CrossFilter => ({
 });
 
 export const airlineFilter = (iata: string, name: string): CrossFilter => ({
-  id: `airline:${iata}`,
+  // canonical key so Ryanair FR + RK collapse to one filter
+  id: `airline:${airlineKey(iata)}`,
   label: name,
-  test: (f) => f.airline_iata === iata,
+  test: (f) => airlineKey(f.airline_iata) === airlineKey(iata),
 });
 
 export const cityFilter = (city: string): CrossFilter => ({

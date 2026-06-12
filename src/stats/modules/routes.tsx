@@ -125,11 +125,11 @@ export const routes: StatModule = {
 
     // main chart: top routes, each stacked by airline (exclude the route facet so picking
     // a route doesn't hide the others — supports selecting several)
-    const main = routesByAirline(ctx.facetFlights("route"), directed === "directed", metric);
+    const main = routesByAirline(ctx.flights, directed === "directed", metric);
 
     // histogram: distribution of flights by per-flight distance or air time, fixed bins.
     // Exclude the matching bin facet so the distribution stays whole under multi-select.
-    const histFlights = ctx.facetFlights(histMetric === "distance" ? "distbin" : "timebin");
+    const histFlights = ctx.flights;
     const histRows =
       histMetric === "distance"
         ? histogram(

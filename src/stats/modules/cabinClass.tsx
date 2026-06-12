@@ -60,7 +60,7 @@ export const cabinClass: StatModule = {
     ];
 
     const agg = new Map<string, { domestic: number; international: number }>();
-    for (const f of ctx.facetFlights("class")) {
+    for (const f of ctx.flights) {
       if (!f.cabin_class) continue;
       const cur = agg.get(f.cabin_class) ?? { domestic: 0, international: 0 };
       if (f.trip_type === "international") cur.international += metricValue(f, metric);
@@ -78,7 +78,7 @@ export const cabinClass: StatModule = {
     // second chart: class breakdown per year (one bar per year, stacked by cabin).
     // Uses the same metric + 100%-toggle as the first chart; click a year to filter the range.
     const byYear = new Map<string, Record<string, number>>();
-    for (const f of ctx.facetFlights("class")) {
+    for (const f of ctx.flights) {
       if (!f.cabin_class) continue;
       const y = f.flight_date.slice(0, 4);
       const row = byYear.get(y) ?? {};

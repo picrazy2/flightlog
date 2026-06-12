@@ -117,7 +117,7 @@ export const continents: StatModule = {
     const activeRegions = new Set(crossFilters.filter((c) => c.id.startsWith("region:")).map((c) => c.id.slice("region:".length)));
 
     // continent chart shouldn't collapse when you select continents → exclude that facet
-    const visited = visitedCountries({ ...ctx, flights: ctx.facetFlights("continent") });
+    const visited = visitedCountries({ ...ctx, flights: ctx.flights });
     const visitedByCont = new Map<ContinentCode, Set<string>>();
     for (const iso of visited.keys()) {
       const c = COUNTRY_GEO[iso].continent;
@@ -287,7 +287,7 @@ export const continents: StatModule = {
         {(() => {
           const uniqueMode = metric === "countries";
           const yc = yearStack({
-            flights: ctx.facetFlights("continent"),
+            flights: ctx.flights,
             entities: (f) =>
               [contOf(f.dep_country), contOf(f.arr_country)].filter(Boolean).map((c) => ({ id: c as string, group: c as string })),
             value: () => 1,

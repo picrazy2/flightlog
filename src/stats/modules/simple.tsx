@@ -16,6 +16,7 @@ import { useChartType } from "../useChartType";
 import { Switch } from "@/components/ui/Switch";
 import { OptionsButton } from "@/components/ui/OptionsButton";
 import { bodyClassOf, BODY_LABELS, type BodyClass } from "@/lib/aircraft";
+import { airlineKey, airlineLabel } from "@/lib/airlines";
 import { MiniStats } from "@/components/ui/MiniStat";
 import { useStore } from "@/state/store";
 import { useMetricToggle, metricValue, metricName } from "../useMetric";
@@ -30,9 +31,11 @@ function airlineColors(ctx: StatContext) {
   if (alCache && alCache.key === ctx.flights) return alCache.map;
   const counts = new Map<string, { name: string; n: number }>();
   for (const f of ctx.flights) {
-    const cur = counts.get(f.airline_iata) ?? { name: f.airline_name ?? f.airline_iata, n: 0 };
+    const k = airlineKey(f.airline_iata);
+    if (!k) continue;
+    const cur = counts.get(k) ?? { name: airlineLabel(f.airline_iata, f.airline_name), n: 0 };
     cur.n++;
-    counts.set(f.airline_iata, cur);
+    counts.set(k, cur);
   }
   const top = [...counts.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 7);
   const map = new Map(top.map(([iata, info], i) => [iata, { name: info.name, color: CATEGORICAL[i % CATEGORICAL.length] }]));
@@ -58,10 +61,10 @@ export const airlines: StatModule = {
     const { chartType, control: chartControl } = useChartType();
 
     const acc = new Map<string, { label: string; domestic: number; international: number }>();
-    for (const f of ctx.facetFlights("airline")) {
-      const k = f.airline_iata;
+    for (const f of ctx.flights) {
+      const k = airlineKey(f.airline_iata);
       if (!k) continue;
-      const cur = acc.get(k) ?? { label: f.airline_name ?? f.airline_iata, domestic: 0, international: 0 };
+      const cur = acc.get(k) ?? { label: airlineLabel(f.airline_iata, f.airline_name), domestic: 0, international: 0 };
       const v = metricValue(f, metric);
       if (f.trip_type === "international") cur.international += v;
       else cur.domestic += v;
@@ -101,8 +104,8 @@ export const airlines: StatModule = {
         />
         {(() => {
           const yc = yearStack({
-            flights: ctx.facetFlights("airline"),
-            entities: (f) => (f.airline_iata ? [{ id: f.airline_iata, group: f.airline_iata }] : []),
+            flights: ctx.flights,
+            entities: (f) => (airlineKey(f.airline_iata) ? [{ id: airlineKey(f.airline_iata), group: airlineKey(f.airline_iata) }] : []),
             value: (f) => metricValue(f, metric),
             label: (id) => acc.get(id)?.label ?? id,
             color: (id, i) => alColors.get(id)?.color ?? CATEGORICAL[i % CATEGORICAL.length],
@@ -122,8 +125,8 @@ export const airlines: StatModule = {
   // Per-flight colouring: each flight gets its airline's colour (top-7 by flights),
   // anything else is "other".
   map: {
-    colorFlight: (f, ctx) => airlineColors(ctx).get(f.airline_iata)?.color ?? OTHER,
-    flightLegendId: (f, ctx) => (airlineColors(ctx).get(f.airline_iata) ? f.airline_iata : "other"),
+    colorFlight: (f, ctx) => airlineColors(ctx).get(airlineKey(f.airline_iata))?.color ?? OTHER,
+    flightLegendId: (f, ctx) => (airlineColors(ctx).get(airlineKey(f.airline_iata)) ? airlineKey(f.airline_iata) : "other"),
     legend: (ctx) => ({
       title: "Airlines",
       items: [
@@ -175,12 +178,12 @@ export const aircraft: StatModule = {
 
     // body-class counts belong to the "body" facet → exclude it so all classes stay visible
     const bodyCount: Record<BodyClass, number> = { double: 0, wide: 0, narrow: 0, unknown: 0 };
-    for (const f of ctx.facetFlights("body")) bodyCount[bodyClassOf(f)]++;
+    for (const f of ctx.flights) bodyCount[bodyClassOf(f)]++;
     // body class per year (for the second chart), weighted by the active metric
     const BODY_ORDER: BodyClass[] = ["wide", "narrow", "double", "unknown"];
     const bodyByYear = new Map<string, Record<BodyClass, number>>();
     const bodyMetricTotal: Record<BodyClass, number> = { double: 0, wide: 0, narrow: 0, unknown: 0 };
-    for (const f of ctx.facetFlights("body")) {
+    for (const f of ctx.flights) {
       const b = bodyClassOf(f);
       const v = metricValue(f, metric);
       const y = f.flight_date.slice(0, 4);
@@ -202,7 +205,7 @@ export const aircraft: StatModule = {
     // aircraft-type chart + tail numbers (the "aircraft" facet)
     const types = new Map<string, { label: string; domestic: number; international: number }>();
     const regFlights = new Map<string, Flight[]>();
-    for (const f of ctx.facetFlights("aircraft")) {
+    for (const f of ctx.flights) {
       if (f.aircraft_type_code) {
         const v = metricValue(f, metric);
         const cur = types.get(f.aircraft_type_code) ?? {
