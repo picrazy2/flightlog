@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Flight, Settings } from "@/lib/types";
+import { flatFitsViewport } from "@/map/initialView";
 
 // A drill-down filter created by clicking a chart bar / map feature. Generic:
 // the module supplies the predicate, the shell just AND-applies them.
@@ -34,9 +35,9 @@ export type LegendFilter = Record<string, boolean>; // key -> isOff
 
 // phone viewport at first load → drives mobile-only default state
 const MOBILE_INIT = typeof window !== "undefined" && window.innerWidth < 768;
-// landscape viewport → default to the flat map (it can show the whole world width);
-// a tall/portrait viewport defaults to the globe instead
-const LANDSCAPE_INIT = typeof window !== "undefined" && window.innerWidth >= window.innerHeight;
+// wide enough to frame the whole flat world without overshooting the pole → flat map;
+// otherwise the globe (MapHost re-confirms this from the actual container size on load)
+const FLAT_INIT = typeof window !== "undefined" && flatFitsViewport(window.innerWidth, window.innerHeight);
 
 // mobile: which bottom drawer is expanded, and what map feature is selected (the
 // "popup" drawer's content). On desktop these are unused (popups render on the map).
@@ -96,7 +97,7 @@ export const useStore = create<AppState>()(
   crossFilters: [],
   // mobile opens on the globe with the legend expanded (persisted projection wins for
   // returning users); desktop defaults to the flat map with drawers collapsed
-  projection: LANDSCAPE_INIT ? "mercator" : "globe",
+  projection: FLAT_INIT ? "mercator" : "globe",
   temporal: "all",
   dbOpen: false,
   aboutOpen: false,
@@ -155,10 +156,11 @@ export const useStore = create<AppState>()(
     {
       name: "journia-settings",
       // persist display preferences only — not transient view state (filters,
-      // open panel, date range) or the non-serialisable cross-filter predicates
+      // open panel, date range) or the non-serialisable cross-filter predicates.
+      // projection is intentionally NOT persisted: each load re-decides flat-vs-globe
+      // from the viewport aspect ratio (the toggle is a per-session override).
       partialize: (s) => ({
         settings: s.settings,
-        projection: s.projection,
         showAirports: s.showAirports,
         compare: s.compare,
       }),

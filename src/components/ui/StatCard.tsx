@@ -9,6 +9,7 @@ interface Props {
   compareMode: "delta" | "recent" | null;
   active: boolean;
   onClick: () => void;
+  className?: string;
 }
 
 // Period-over-period change as an ABSOLUTE delta in the stat's own units — "+340 km",
@@ -44,7 +45,7 @@ function Compare({
   );
 }
 
-export function StatCard({ model, settings, compareMode, active, onClick }: Props) {
+export function StatCard({ model, settings, compareMode, active, onClick, className }: Props) {
   const grouped = model.stats.length > 1;
   return (
     <button
@@ -52,6 +53,7 @@ export function StatCard({ model, settings, compareMode, active, onClick }: Prop
       className={cn(
         "focus-ring group flex shrink-0 flex-col gap-1.5 rounded-lg border bg-surface-1 px-3.5 py-2.5 text-left shadow-2 transition-[transform,border-color] duration-150 ease-out hover:-translate-y-px",
         active ? "border-accent ring-1 ring-inset ring-accent" : "border-border hover:border-border-strong",
+        className,
       )}
     >
       <span className="text-eyebrow tracking-[0.01em] text-ink-faint">{model.eyebrow}</span>
