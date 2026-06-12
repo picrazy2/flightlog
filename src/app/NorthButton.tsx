@@ -15,7 +15,7 @@ export function NorthButton({ mobile }: { mobile?: boolean }) {
   const reset = () => window.dispatchEvent(new CustomEvent("journia:resetnorth"));
   const icon = (
     <span className="inline-flex" style={{ transform: `rotate(${-bearing}deg)`, transition: "transform .2s ease" }}>
-      <Icon name="compass" size={18} />
+      <Icon name="compass" size={15} />
     </span>
   );
   const label = "Reset to 2D and north";
