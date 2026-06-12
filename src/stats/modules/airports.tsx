@@ -77,7 +77,6 @@ export const airports: StatModule = {
 
     const groupControl = (
       <>
-      <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Most-visited airports — choose how to break each bar down</div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Segmented
           aria-label="Breakdown"
@@ -103,6 +102,7 @@ export const airports: StatModule = {
           )}
         </OptionsButton>
       </div>
+      <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Most-visited airports — choose how to break each bar down</div>
       </>
     );
 

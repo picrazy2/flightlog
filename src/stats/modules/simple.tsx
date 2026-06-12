@@ -68,7 +68,6 @@ export const airlines: StatModule = {
 
     return (
       <>
-        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Airlines by {metricName[metric]}, split domestic vs international</div>
         <div className="flex items-center justify-between gap-2">
           {metricControl}
           <OptionsButton>
@@ -78,6 +77,7 @@ export const airlines: StatModule = {
             </div>
           </OptionsButton>
         </div>
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Airlines by {metricName[metric]}, split domestic vs international</div>
         <EntityChart
           rows={ranked.map((r) => ({ id: r.id, label: r.label, domestic: r.domestic, international: r.international }))}
           series={[
@@ -200,7 +200,6 @@ export const aircraft: StatModule = {
     return (
       <>
         <MiniStats items={cards} cols={4} />
-        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Aircraft types by {metricName[metric]}, split domestic vs international</div>
         <div className="flex items-center justify-between gap-2">
           {control}
           <OptionsButton>
@@ -210,6 +209,7 @@ export const aircraft: StatModule = {
             </div>
           </OptionsButton>
         </div>
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Aircraft types by {metricName[metric]}, split domestic vs international</div>
         <BarsH
           rows={typeRows}
           percent={percent}

@@ -186,9 +186,6 @@ export const overall: StatModule = {
 
     return (
       <>
-        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
-          {metricName[metric]} by {group === "year" ? "year" : group === "season" ? "season" : group === "month" ? "month" : "day of week"}
-        </div>
         <div className="flex items-center justify-between gap-3">
           <Segmented
             aria-label="Group"
