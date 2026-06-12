@@ -50,6 +50,7 @@ export function DatabaseModal() {
   const canWrite = !!user; // writing requires a signed-in (allowed) Google account
   const [tab, setTab] = useState<Tab>("flights");
   const [q, setQ] = useState("");
+  const [savingCabinId, setSavingCabinId] = useState<string | null>(null); // row mid-save → show spinner
   const [editing, setEditing] = useState<(Partial<FlightFormValues> & { id?: string }) | null>(null);
   const [csv, setCsv] = useState("");
   const [csvResult, setCsvResult] = useState<string | null>(null);
@@ -223,18 +224,29 @@ export function DatabaseModal() {
                     </td>
                     <td className={`${td} text-ink-muted`}>
                       {canWrite ? (
-                        <select
-                          value={f.cabin_class ?? ""}
-                          disabled={patchM.isPending}
-                          onChange={(e) => patchM.mutate({ id: f.id, cabin_class: e.target.value || null })}
-                          className="focus-ring rounded-md border border-border bg-surface-2 px-1.5 py-1 text-label text-ink"
-                        >
-                          {CABIN_OPTS.map((c) => (
-                            <option key={c} value={c}>
-                              {c ? CABIN_LABELS[c] ?? c : "—"}
-                            </option>
-                          ))}
-                        </select>
+                        <span className="inline-flex items-center gap-1.5">
+                          <select
+                            value={f.cabin_class ?? ""}
+                            disabled={savingCabinId === f.id}
+                            onChange={(e) => {
+                              const cabin = e.target.value || null;
+                              setSavingCabinId(f.id);
+                              patchM
+                                .mutateAsync({ id: f.id, cabin_class: cabin })
+                                .finally(() => setSavingCabinId((cur) => (cur === f.id ? null : cur)));
+                            }}
+                            className="focus-ring rounded-md border border-border bg-surface-2 px-1.5 py-1 text-label text-ink"
+                          >
+                            {CABIN_OPTS.map((c) => (
+                              <option key={c} value={c}>
+                                {c ? CABIN_LABELS[c] ?? c : "—"}
+                              </option>
+                            ))}
+                          </select>
+                          {savingCabinId === f.id && (
+                            <span className="inline-block h-3 w-3 animate-spin rounded-full border border-ink-faint border-t-transparent" />
+                          )}
+                        </span>
                       ) : (
                         CABIN_LABELS[f.cabin_class ?? ""] ?? f.cabin_class ?? "—"
                       )}
