@@ -7,6 +7,7 @@ import { useChartType } from "./useChartType";
 import { useStore } from "@/state/store";
 import type { CrossFilter } from "@/state/store";
 import type { StatContext } from "./types";
+import { airportsFrom } from "@/lib/aggregate";
 import { buildStack, buildCount, buildTypeStack, buildVisitTypeStack, buildVisits, type EntityLevel } from "./entityBreakdown";
 
 export type Breakdown = "airport" | "city" | "type" | "visitType";
@@ -31,11 +32,12 @@ interface Props {
   facet: string; // cross-filter prefix, e.g. "city" / "country"
   breakdowns: Breakdown[];
   filterFor: (id: string, name: string) => CrossFilter;
+  title: string; // short description shown above the chart
 }
 
 // Shared Cities/Countries panel: visits, broken down by a configurable dimension,
 // as a stacked bar (with the breakdown toggle) or a top-N + Other pie.
-export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor }: Props) {
+export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, title }: Props) {
   const [breakdown, setBreakdown] = useState<Breakdown>(breakdowns[0]);
   const [countMode, setCountMode] = useState(false); // visits vs # of unique airports/cities
   const { chartType, control: chartControl } = useChartType();
@@ -43,23 +45,26 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor }: 
   // the unique-count metric only applies to the airport/city stacked breakdowns
   const canCount = chartType === "bar" && (breakdown === "airport" || breakdown === "city");
   const metric = canCount && countMode ? "count" : "visits";
-  const activeId = crossFilters.find((c) => c.id.startsWith(`${facet}:`))?.id.split(":")[1] ?? null;
+  // exclude this facet so picking one bar keeps the others visible (multi-select)
+  const airports = airportsFrom(ctx.facetFlights(facet));
+  const facetFlights = ctx.facetFlights(facet);
+  const activeId = crossFilters.filter((c) => c.id.startsWith(`${facet}:`)).map((c) => c.id.slice(facet.length + 1));
   const unit = metric === "count" ? (breakdown === "airport" ? "airports" : "cities") : "visits";
 
   // pie has no breakdown — just visit totals; bar uses the selected breakdown.
   // visits are connection-deduped (AirportAgg.visits / connection-aware dom-intl).
   const built =
     chartType === "pie"
-      ? buildVisits(ctx.airports, level)
+      ? buildVisits(airports, level)
       : metric === "count"
-        ? buildCount(ctx.airports, level, breakdown === "city" ? "city" : "airport")
+        ? buildCount(airports, level, breakdown === "city" ? "city" : "airport")
         : breakdown === "airport"
-          ? buildStack(ctx.airports, level, "airport")
+          ? buildStack(airports, level, "airport")
           : breakdown === "city"
-            ? buildStack(ctx.airports, level, "city")
+            ? buildStack(airports, level, "city")
             : breakdown === "type"
-              ? buildTypeStack(ctx.flights, level)
-              : buildVisitTypeStack(ctx.airports, level);
+              ? buildTypeStack(facetFlights, level)
+              : buildVisitTypeStack(airports, level);
 
   // country bars/slices get a flag emoji prefix (row id = ISO code at country level)
   const rows =
@@ -96,6 +101,7 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor }: 
           </div>
         </OptionsButton>
       </div>
+      <div className="text-eyebrow tracking-[0.01em] text-ink-faint">{title}</div>
       <EntityChart
         rows={rows}
         series={built.series}
