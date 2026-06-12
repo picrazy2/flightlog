@@ -68,6 +68,7 @@ interface AppState {
 
   setRange: (r: DateRange) => void;
   toggleCompare: () => void;
+  setCompare: (v: boolean) => void;
   setActiveModule: (id: string | null) => void;
   setSettings: (patch: Partial<Settings>) => void;
   toggleLegend: (key: string) => void;
@@ -115,6 +116,7 @@ export const useStore = create<AppState>()(
   // Changing the range via the picker supersedes any year drill-down chip.
   setRange: (range) => set((s) => ({ range, crossFilters: s.crossFilters.filter((c) => !c.id.startsWith("year:")) })),
   toggleCompare: () => set((s) => ({ compare: !s.compare })),
+  setCompare: (compare) => set({ compare }),
   setActiveModule: (id) =>
     set((s) => {
       const activeModuleId = s.activeModuleId === id ? null : id;

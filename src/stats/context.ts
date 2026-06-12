@@ -46,18 +46,25 @@ export function useStatContext(): { ctx: StatContext | null; isLoading: boolean;
     const passesCross = (f: (typeof data)[number]) => groups.every((g) => g.some((c) => c.test(f)));
     const flights = data.filter((f) => inRange(f, range) && passesTemporal(f) && passesCross(f));
 
-    // A bounded range compares to the immediately-preceding equal-length window
-    // (a ▲/▼ delta). All-time has no meaningful previous period → no comparison.
+    // Comparison deltas:
+    //  • future view → vs everything already flown (the upcoming totals vs the past)
+    //  • all-time view → vs everything already flown (what the upcoming flights add)
+    //  • a bounded range → vs the immediately-preceding equal-length window
     let compareFlights: Flight[] | null = null;
     let compareMode: "delta" | "recent" | null = null;
-    if (compare && temporal === "future") {
-      // upcoming view: the delta is the future total vs everything already flown
-      compareFlights = data.filter((f) => f.flight_date <= today && passesCross(f));
-      compareMode = "delta";
-    } else if (compare && (range.start || range.end)) {
-      const prev = previousRange(range);
-      if (prev) {
-        compareFlights = data.filter((f) => inRange(f, prev) && passesTemporal(f) && passesCross(f));
+    const pastAll = () => data.filter((f) => f.flight_date <= today && passesCross(f));
+    if (compare) {
+      if (temporal === "future") {
+        compareFlights = pastAll();
+        compareMode = "delta";
+      } else if (range.start || range.end) {
+        const prev = previousRange(range);
+        if (prev) {
+          compareFlights = data.filter((f) => inRange(f, prev) && passesTemporal(f) && passesCross(f));
+          compareMode = "delta";
+        }
+      } else if (temporal === "all") {
+        compareFlights = pastAll();
         compareMode = "delta";
       }
     }

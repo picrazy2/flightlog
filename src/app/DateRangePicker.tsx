@@ -58,7 +58,7 @@ function presets(years: number[]): DateRange[] {
 }
 
 export function DateRangePicker(_props: { ctx: StatContext }) {
-  const { range, setRange, compare, toggleCompare, temporal, setTemporal } = useStore();
+  const { range, setRange, compare, toggleCompare, setCompare, temporal, setTemporal } = useStore();
   // presets come from the FULL dataset so they don't vanish when temporal=future filters the view
   const all = useFlights().data ?? [];
   const years = [...new Set(all.map((f) => Number(f.flight_date.slice(0, 4))))].sort();
@@ -122,7 +122,8 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
             value={temporal}
             onChange={(t) => {
               setTemporal(t);
-              if (t === "future") setRange(ALL_TIME); // ranges/compare don't apply to future
+              if (t === "future") setRange(ALL_TIME); // ranges don't apply to future
+              setCompare(false); // all-time / past / future default to no comparison
             }}
             options={[
               { value: "all", label: "All" },
@@ -149,6 +150,7 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
                   key={o.label}
                   onClick={() => {
                     setRange(o);
+                    setCompare(!!(o.start || o.end)); // bounded → compare on; All time → off
                     close();
                   }}
                   className={cn(
@@ -184,13 +186,18 @@ export function DateRangePicker(_props: { ctx: StatContext }) {
               />
             </div>
           </div>
-          {(range.start || range.end) && (
+          {(range.start || range.end || (isAllTime && temporal === "all")) && (
             <div className="mt-2 flex flex-col gap-1 border-t border-border px-2.5 pt-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-label text-ink-muted">Compare to prev.</span>
+                <span className="text-label text-ink-muted">{isAllTime ? "Compare to past" : "Compare to prev."}</span>
                 <Switch checked={compare} onChange={toggleCompare} />
               </div>
-              {compare && prev && <span className="text-caption text-ink-faint">vs {compactRange(prev.start, prev.end)}</span>}
+              {compare &&
+                (isAllTime ? (
+                  <span className="text-caption text-ink-faint">All-time vs everything flown so far.</span>
+                ) : (
+                  prev && <span className="text-caption text-ink-faint">vs {compactRange(prev.start, prev.end)}</span>
+                ))}
             </div>
           )}
             </>
