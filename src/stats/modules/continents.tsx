@@ -56,6 +56,19 @@ for (const { continent, subregion } of Object.values(COUNTRY_GEO)) {
 for (const c of CONTINENTS) {
   SUBREGIONS_OF.set(c.code, [...new Set(Object.values(COUNTRY_GEO).filter((g) => g.continent === c.code).map((g) => g.subregion))].sort());
 }
+export const REGION_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
+const countryName = (iso: string) => {
+  try {
+    return REGION_NAMES.of(iso) ?? iso;
+  } catch {
+    return iso;
+  }
+};
+const flagEmoji = (iso: string) =>
+  /^[A-Za-z]{2}$/.test(iso) ? String.fromCodePoint(...[...iso.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)) : "";
+const countriesInRegion = (sub: string) =>
+  Object.entries(COUNTRY_GEO).filter(([, g]) => g.subregion === sub).map(([iso]) => iso).sort((a, b) => countryName(a).localeCompare(countryName(b)));
+
 export const TOTAL_COUNTRIES = Object.keys(COUNTRY_GEO).length;
 export const TOTAL_REGIONS = TOTAL_BY_SUBREGION.size;
 
@@ -96,6 +109,7 @@ export const continents: StatModule = {
     const [metric, setMetric] = useState<"countries" | "visits">("countries");
     const [display, setDisplay] = useState<"percent" | "number">("percent");
     const [expanded, setExpanded] = useState<ContinentCode | null>(null);
+    const [openRegion, setOpenRegion] = useState<string | null>(null);
     const activeCont = crossFilters.find((c) => c.id.startsWith("continent:"))?.id.split(":")[1] ?? null;
     const activeRegion = crossFilters.find((c) => c.id.startsWith("region:"))?.id.split(":")[1] ?? null;
 
@@ -193,19 +207,38 @@ export const continents: StatModule = {
         {expanded && (
           <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface-2/40 p-1.5">
             {expandedSubs.map(({ sub, vis, total, pct: p }) => (
-              <button
-                key={sub}
-                onClick={() => toggleCrossFilter(regionFilter(sub))}
-                className="focus-ring grid grid-cols-[6rem_1fr_auto] items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-3"
-              >
-                <span className={`truncate text-left text-caption ${activeRegion === sub ? "text-accent" : "text-ink-muted"}`}>{sub}</span>
-                <span className="h-2 rounded-full bg-surface-3">
-                  <span className="block h-full rounded-full" style={{ width: `${p}%`, backgroundColor: CONT_COLOR[expanded] }} />
-                </span>
-                <span className="tnum whitespace-nowrap text-caption text-ink-muted">
-                  {vis}/{total} · <span className="text-ink">{p}%</span>
-                </span>
-              </button>
+              <div key={sub}>
+                <button
+                  onClick={() => {
+                    setOpenRegion(openRegion === sub ? null : sub);
+                    toggleCrossFilter(regionFilter(sub));
+                  }}
+                  className="focus-ring grid w-full grid-cols-[6rem_1fr_auto] items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-3"
+                >
+                  <span className={`truncate text-left text-caption ${activeRegion === sub ? "text-accent" : "text-ink-muted"}`}>{sub}</span>
+                  <span className="h-2 rounded-full bg-surface-3">
+                    <span className="block h-full rounded-full" style={{ width: `${p}%`, backgroundColor: CONT_COLOR[expanded] }} />
+                  </span>
+                  <span className="tnum whitespace-nowrap text-caption text-ink-muted">
+                    {vis}/{total} · <span className="text-ink">{p}%</span>
+                  </span>
+                </button>
+                {openRegion === sub && (
+                  <div className="flex flex-wrap gap-1 px-1.5 pb-1.5 pt-1">
+                    {countriesInRegion(sub).map((iso) => {
+                      const seen = visited.has(iso);
+                      return (
+                        <span
+                          key={iso}
+                          className={`rounded px-1.5 py-0.5 text-caption ${seen ? "bg-surface-3 text-ink" : "text-ink-faint line-through decoration-ink-faint/40"}`}
+                        >
+                          {flagEmoji(iso)} {countryName(iso)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
