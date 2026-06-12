@@ -144,7 +144,7 @@ function bucket(flights: Flight[], group: Group, metric: Metric, today: string) 
   // split each bucket into already-flown vs future (not-yet-flown)
   const m = new Map<string, { flown: number; future: number; label: string; sort: string }>();
   for (const f of flights) {
-    const d = new Date(f.sched_dep);
+    const d = new Date(schedDep(f));
     const y = f.flight_date.slice(0, 4);
     let key: string, label: string, sort: string;
     if (group === "year") {

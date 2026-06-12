@@ -11,6 +11,7 @@ import { BarsV } from "@/components/charts/BarsV";
 import { useStore, ALL_TIME } from "@/state/store";
 import { airportFilter, yearRange, yearOfRange } from "../filters";
 import { color, categoricalFor } from "@/lib/palette";
+import { schedDep, schedArr } from "@/lib/format";
 import { buildYearGroups } from "@/lib/yearGroups";
 import { visitClassByAirport } from "../entityBreakdown";
 import { yearStack } from "../yearStack";
@@ -43,12 +44,12 @@ function visitsByAirportYear(flights: Flight[]) {
     bump(f.dep_iata, y, 1);
     bump(f.arr_iata, y, 1);
   }
-  const chrono = [...flights].sort((a, b) => a.sched_dep.localeCompare(b.sched_dep));
+  const chrono = [...flights].sort((a, b) => schedDep(a).localeCompare(schedDep(b)));
   for (let i = 0; i < chrono.length - 1; i++) {
     const cur = chrono[i];
     const next = chrono[i + 1];
     if (cur.arr_iata !== next.dep_iata) continue;
-    const gap = new Date(next.sched_dep).getTime() - new Date(cur.sched_arr).getTime();
+    const gap = new Date(schedDep(next)).getTime() - new Date(schedArr(cur)).getTime();
     if (gap >= 0 && gap <= CONNECTION_MS) bump(cur.arr_iata, cur.flight_date.slice(0, 4), -1);
   }
   return m;
@@ -181,21 +182,41 @@ export const airports: StatModule = {
         .sort((a, b) => Number(b.__total) - Number(a.__total));
     }
 
-    // second chart: per-year, by top airport (visits = sum; destinations = unique airports/yr)
-    // destinations (unique airports) stacks by the airport's country; visits stacks by airport
+    // second chart: per-year, by top airport. destinations = unique airports/yr (stacked by
+    // the airport's country); visits = connection-deduped visits/yr (stacked by airport).
     const uniqueYear = metric === "destinations";
-    const yc = yearStack({
-      flights: airportFlights,
-      entities: (f) => [
-        { id: f.dep_iata, group: uniqueYear ? f.dep_country_name ?? f.dep_country ?? "—" : f.dep_iata },
-        { id: f.arr_iata, group: uniqueYear ? f.arr_country_name ?? f.arr_country ?? "—" : f.arr_iata },
-      ],
-      value: () => 1,
-      label: (g) => g,
-      color: (g, i) => categoricalFor(g, i),
-      mode: uniqueYear ? "unique" : "sum",
-      topN: 8,
-    });
+    let yc: { rows: BarRowData[]; series: { key: string; name: string; color: string }[] };
+    if (uniqueYear) {
+      yc = yearStack({
+        flights: airportFlights,
+        entities: (f) => [
+          { id: f.dep_iata, group: f.dep_country_name ?? f.dep_country ?? "—" },
+          { id: f.arr_iata, group: f.arr_country_name ?? f.arr_country ?? "—" },
+        ],
+        value: () => 1,
+        label: (g) => g,
+        color: (g, i) => categoricalFor(g, i),
+        mode: "unique",
+        topN: 8,
+      });
+    } else {
+      // connection-deduped visits per airport per year (matches the rest of the app)
+      const vby = visitsByAirportYear(airportFlights);
+      const top = [...vby.entries()]
+        .map(([iata, ym]) => [iata, [...ym.values()].reduce((s, v) => s + v, 0)] as const)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([iata]) => iata);
+      const allYears = [...new Set([...vby.values()].flatMap((ym) => [...ym.keys()]))].sort();
+      yc = {
+        series: top.map((iata, i) => ({ key: iata, name: iata, color: categoricalFor(iata, i) })),
+        rows: allYears.map((y) => {
+          const row: BarRowData = { id: y, label: y };
+          for (const iata of top) row[iata] = vby.get(iata)?.get(y) ?? 0;
+          return row;
+        }),
+      };
+    }
 
     return (
       <>

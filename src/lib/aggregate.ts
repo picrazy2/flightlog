@@ -1,5 +1,5 @@
 import type { Flight } from "./types";
-import { flightDistanceMi, flightMinutes } from "./format";
+import { flightDistanceMi, flightMinutes, schedDep, schedArr } from "./format";
 import { routeKeyUndirected, routeKeyDirected } from "./geo";
 
 export interface AirportAgg {
@@ -48,12 +48,12 @@ export function airportsFrom(flights: Flight[]): Map<string, AirportAgg> {
 
   // Connections: an arrival followed by a departure from the SAME airport within
   // 16h, scanning the trip in chronological order.
-  const chrono = [...flights].sort((x, y) => x.sched_dep.localeCompare(y.sched_dep));
+  const chrono = [...flights].sort((x, y) => schedDep(x).localeCompare(schedDep(y)));
   for (let i = 0; i < chrono.length - 1; i++) {
     const cur = chrono[i];
     const next = chrono[i + 1];
     if (cur.arr_iata !== next.dep_iata) continue;
-    const gap = new Date(next.sched_dep).getTime() - new Date(cur.sched_arr).getTime();
+    const gap = new Date(schedDep(next)).getTime() - new Date(schedArr(cur)).getTime();
     if (gap >= 0 && gap <= CONNECTION_WINDOW_MS) {
       const a = m.get(cur.arr_iata);
       if (a) a.connections++;

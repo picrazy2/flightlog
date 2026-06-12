@@ -114,8 +114,11 @@ export function formatPoints(n: number): { value: string; unit: string; full: st
   return { value: compact(n), unit: "pts", full: `${grouped(n)} pts` };
 }
 
+// Percentages: ≥10 → integer, 1–10 → one decimal, <1 → two decimals.
 export function formatPct(n: number): { value: string; unit: string; full: string } {
-  return { value: `${Math.round(n)}%`, unit: "", full: `${n.toFixed(1)}%` };
+  const a = Math.abs(n);
+  const dp = a >= 10 ? 0 : a >= 1 ? 1 : 2;
+  return { value: `${n.toFixed(dp)}%`, unit: "", full: `${n.toFixed(Math.max(1, dp))}%` };
 }
 
 // minutes between two ISO instants

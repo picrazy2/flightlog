@@ -3,6 +3,7 @@ import type { AirportAgg } from "@/lib/aggregate";
 import type { BarRowData } from "@/components/charts/BarsH";
 import type { Series } from "@/components/charts/chartTheme";
 import { categoricalFor, color } from "@/lib/palette";
+import { schedDep, schedArr } from "@/lib/format";
 import { sovereignOf } from "@/lib/continents";
 
 export type EntityLevel = "city" | "country";
@@ -164,12 +165,12 @@ export function visitClassByAirport(flights: Flight[]) {
     }
   }
   // merge connection touches: remove the arrival of i and departure of i+1, add one
-  const chrono = [...flights].sort((a, b) => a.sched_dep.localeCompare(b.sched_dep));
+  const chrono = [...flights].sort((a, b) => schedDep(a).localeCompare(schedDep(b)));
   for (let i = 0; i < chrono.length - 1; i++) {
     const cur = chrono[i];
     const next = chrono[i + 1];
     if (cur.arr_iata !== next.dep_iata) continue;
-    const gap = new Date(next.sched_dep).getTime() - new Date(cur.sched_arr).getTime();
+    const gap = new Date(schedDep(next)).getTime() - new Date(schedArr(cur)).getTime();
     if (gap < 0 || gap > CONNECTION_MS) continue;
     const x = m.get(cur.arr_iata);
     if (!x) continue;

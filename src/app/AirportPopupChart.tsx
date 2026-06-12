@@ -3,6 +3,7 @@ import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import { CHART, axisTick } from "@/components/charts/chartTheme";
 import { Icon } from "@/components/ui/Icon";
 import { color } from "@/lib/palette";
+import { schedDep, schedArr } from "@/lib/format";
 import type { Flight } from "@/lib/types";
 import { PopupFlightTable } from "./PopupFlightTable";
 
@@ -18,10 +19,10 @@ function yearly(flights: Flight[], iata: string, years: number[]) {
     if (f.dep_iata === iata) ensure(y).dep++;
     if (f.arr_iata === iata) ensure(y).arr++;
   }
-  const chrono = [...flights].sort((a, b) => a.sched_dep.localeCompare(b.sched_dep));
+  const chrono = [...flights].sort((a, b) => schedDep(a).localeCompare(schedDep(b)));
   for (let i = 0; i < chrono.length - 1; i++) {
     if (chrono[i].arr_iata !== iata || chrono[i + 1].dep_iata !== iata) continue;
-    const gap = new Date(chrono[i + 1].sched_dep).getTime() - new Date(chrono[i].sched_arr).getTime();
+    const gap = new Date(schedDep(chrono[i + 1])).getTime() - new Date(schedArr(chrono[i])).getTime();
     if (gap >= 0 && gap <= CONNECTION_MS) ensure(Number(chrono[i].flight_date.slice(0, 4))).conn++;
   }
   return [...m.entries()]
@@ -78,7 +79,7 @@ export function AirportPopupChart({ flights, iata, name, city, visits, years, fl
         <span><b style={{ color: color.secondary }}>{tot.arr}</b> arr</span>
         <span><b style={{ color: "#A78BFA" }}>{tot.conn}</b> conn</span>
       </div>
-      {touching.length > 5 ? (
+      {destinations >= 3 ? (
         <div style={{ height: 130 }}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={rows} margin={{ left: -22, right: 4, top: 4, bottom: 0 }}>
@@ -96,7 +97,7 @@ export function AirportPopupChart({ flights, iata, name, city, visits, years, fl
         <PopupFlightTable
           rows={touching
             .slice()
-            .sort((a, b) => b.sched_dep.localeCompare(a.sched_dep))
+            .sort((a, b) => schedDep(b).localeCompare(schedDep(a)))
             .map((f) => ({ id: f.id, date: f.flight_date, code: `${f.airline_iata}${f.flight_number}`, route: `${f.dep_iata}→${f.arr_iata}` }))}
         />
       )}
