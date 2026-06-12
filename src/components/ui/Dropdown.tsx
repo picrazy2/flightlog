@@ -1,4 +1,5 @@
 import { Popover } from "./Popover";
+import { Chevron } from "./Icon";
 import { cn } from "@/lib/cn";
 
 export interface DropdownOption<T extends string> {
@@ -32,7 +33,7 @@ export function Dropdown<T extends string>({ value, options, onChange, size = "s
           )}
         >
           {current?.label ?? value}
-          <span className="text-ink-faint">▾</span>
+          <Chevron dir={open ? "up" : "down"} size={11} color="var(--ink-faint)" />
         </button>
       )}
     >
