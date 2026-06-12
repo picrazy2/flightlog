@@ -109,9 +109,9 @@ export const continents: StatModule = {
     const [metric, setMetric] = useState<"countries" | "visits">("countries");
     const [display, setDisplay] = useState<"percent" | "number">("percent");
     const [expanded, setExpanded] = useState<ContinentCode | null>(null);
-    const [openRegion, setOpenRegion] = useState<string | null>(null);
+    const [openRegions, setOpenRegions] = useState<Set<string>>(() => new Set());
     const activeCont = crossFilters.find((c) => c.id.startsWith("continent:"))?.id.split(":")[1] ?? null;
-    const activeRegion = crossFilters.find((c) => c.id.startsWith("region:"))?.id.split(":")[1] ?? null;
+    const activeRegions = new Set(crossFilters.filter((c) => c.id.startsWith("region:")).map((c) => c.id.slice("region:".length)));
 
     const visited = visitedCountries(ctx);
     const visitedByCont = new Map<ContinentCode, Set<string>>();
@@ -210,12 +210,17 @@ export const continents: StatModule = {
               <div key={sub}>
                 <button
                   onClick={() => {
-                    setOpenRegion(openRegion === sub ? null : sub);
+                    setOpenRegions((s) => {
+                      const n = new Set(s);
+                      if (n.has(sub)) n.delete(sub);
+                      else n.add(sub);
+                      return n;
+                    });
                     toggleCrossFilter(regionFilter(sub));
                   }}
                   className="focus-ring grid w-full grid-cols-[6rem_1fr_auto] items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-3"
                 >
-                  <span className={`truncate text-left text-caption ${activeRegion === sub ? "text-accent" : "text-ink-muted"}`}>{sub}</span>
+                  <span className={`truncate text-left text-caption ${activeRegions.has(sub) ? "text-accent" : "text-ink-muted"}`}>{sub}</span>
                   <span className="h-2 rounded-full bg-surface-3">
                     <span className="block h-full rounded-full" style={{ width: `${p}%`, backgroundColor: CONT_COLOR[expanded] }} />
                   </span>
@@ -223,7 +228,7 @@ export const continents: StatModule = {
                     {vis}/{total} · <span className="text-ink">{p}%</span>
                   </span>
                 </button>
-                {openRegion === sub && (
+                {openRegions.has(sub) && (
                   <div className="flex flex-wrap gap-1 px-1.5 pb-1.5 pt-1">
                     {countriesInRegion(sub).map((iso) => {
                       const seen = visited.has(iso);

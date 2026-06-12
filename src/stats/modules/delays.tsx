@@ -206,9 +206,11 @@ export const delays: StatModule = {
             />
           </div>
         )}
-        <Button variant="secondary" size="sm" className="w-full" onClick={() => setShowList(true)}>
-          Most &amp; least delayed flights
-        </Button>
+        <div className="sticky bottom-0 -mx-5 -mb-4 mt-auto shrink-0 border-t border-border bg-surface-1 px-5 py-3">
+          <Button variant="secondary" size="sm" className="w-full" onClick={() => setShowList(true)}>
+            Most &amp; least delayed flights
+          </Button>
+        </div>
         {showList && (
           <Modal title="Most & least delayed flights" onClose={() => setShowList(false)} className="w-[min(720px,95vw)]">
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 p-5 sm:grid-cols-2">
