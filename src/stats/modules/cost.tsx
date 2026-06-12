@@ -39,7 +39,7 @@ const hasPoints = (f: Flight) => (f.cost_points_segment ?? 0) > 0;
 
 export const cost: StatModule = {
   id: "cost",
-  order: 11,
+  order: 8.6, // right after Premium (cabin, 8.5)
   card: (ctx) => {
     const priced = ctx.flights.filter((f) => f.cost_cash_segment != null || f.cost_points_segment != null).length;
     const cmp = ctx.compareFlights;
@@ -224,9 +224,9 @@ export const cost: StatModule = {
                     <YAxis yAxisId="points" orientation="right" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => compact(Number(v))} />
                   )}
                   <Tooltip content={<ChartTooltip units={tipUnits} />} cursor={{ fill: CHART.cursor }} />
-                  <Bar yAxisId="cash" dataKey="cash" name={cashName} fill={CASH_COLOR} radius={[3, 3, 0, 0]} maxBarSize={14} isAnimationActive={false}
+                  <Bar yAxisId="cash" dataKey="cash" name={cashName} fill={CASH_COLOR} radius={[3, 3, 0, 0]} maxBarSize={10} isAnimationActive={false}
                     cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
-                  <Bar yAxisId={metric === "spend" ? "points" : "cash"} dataKey="points" name={pointsName} fill={POINTS_COLOR} radius={[3, 3, 0, 0]} maxBarSize={14} isAnimationActive={false}
+                  <Bar yAxisId={metric === "spend" ? "points" : "cash"} dataKey="points" name={pointsName} fill={POINTS_COLOR} radius={[3, 3, 0, 0]} maxBarSize={10} isAnimationActive={false}
                     cursor={noPick ? undefined : "pointer"} onClick={noPick ? undefined : (_: unknown, i: number) => onYear(rows[i].id)} />
                 </ComposedChart>
               </ResponsiveContainer>

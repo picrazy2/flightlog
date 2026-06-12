@@ -54,18 +54,18 @@ export function smartNum(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: smartDecimals(n) });
 }
 
+// Abbreviated, always ~3 significant figures (1.23k, 52.3k, 1.23m). Used for cards/axes.
 export function compact(n: number): string {
   if (!isFinite(n)) return "0";
   const sign = n < 0 ? "-" : "";
   let x = Math.abs(n);
-  const dp = smartDecimals(x); // by the value's magnitude, so big numbers carry no decimals
   const units = ["", "k", "m", "b", "t"];
   let u = 0;
   while (x >= 1000 && u < units.length - 1) {
     x /= 1000;
     u += 1;
   }
-  let s = x.toFixed(dp);
+  let s = x.toPrecision(3);
   if (s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, "");
   return sign + s + units[u];
 }

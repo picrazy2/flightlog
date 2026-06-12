@@ -46,7 +46,7 @@ function hourPair(
 
 export const timeOfDay: StatModule = {
   id: "time-of-day",
-  order: 9,
+  order: 10.5, // after Aircraft (10)
   card: (ctx) => {
     const pctAM = (fs: Flight[]) => {
       let am = 0;

@@ -20,7 +20,7 @@ const split = (flights: { trip_type: string | null }[]) => {
 
 export const domesticIntl: StatModule = {
   id: "domestic-intl",
-  order: 7,
+  order: 12, // kept last
   card: (ctx) => {
     const pctIntl = (fs: { trip_type: string | null }[]) => {
       const { dom, intl } = split(fs);
