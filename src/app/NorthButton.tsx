@@ -2,15 +2,15 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useStore } from "@/state/store";
 
-// "Reset north / 2D" — sits under the fullscreen button. Shows whenever there's something
-// to reset: the map is on the globe (i.e. "not 2D"), or it's been rotated/tilted. Tapping
-// drops to the flat (2D) map facing north with no tilt. The compass turns with the heading.
+// "Reset north / 2D" — sits under the fullscreen button. Appears once the map has been
+// rotated off north or tilted into 3D (cmd/shift-drag or two-finger drag). Tapping eases
+// back to north + flat (pitch 0); the projection (globe vs flat) is left as-is. The
+// compass turns with the heading.
 export function NorthButton({ mobile }: { mobile?: boolean }) {
   const bearing = useStore((s) => s.mapBearing);
   const pitch = useStore((s) => s.mapPitch);
-  const projection = useStore((s) => s.projection);
   const oriented = Math.abs(bearing) > 0.5 || pitch > 0.5;
-  if (!(projection === "globe" || oriented)) return null;
+  if (!oriented) return null;
 
   const reset = () => window.dispatchEvent(new CustomEvent("journia:resetnorth"));
   const icon = (
