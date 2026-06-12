@@ -125,6 +125,15 @@ export function BookingsTab({
     return m;
   }, [flights]);
 
+  // newest trips first (by the booking's latest linked flight date)
+  const ordered = useMemo(() => {
+    const lastDate = (b: BookingRow) => {
+      const fs = flightsByBooking.get(b.id);
+      return fs && fs.length ? fs[fs.length - 1].flight_date : "";
+    };
+    return [...bookings].sort((a, b) => lastDate(b).localeCompare(lastDate(a)));
+  }, [bookings, flightsByBooking]);
+
   const save = (b: BookingRow, fields: Record<string, unknown>) =>
     manage.mutate({ id: b.id, fields }, { onSuccess: onChanged });
 
@@ -162,7 +171,7 @@ export function BookingsTab({
             </tr>
           </thead>
           <tbody>
-            {bookings.map((b) => {
+            {ordered.map((b) => {
               const fs = flightsByBooking.get(b.id) ?? [];
               const dates = fs.length
                 ? fs[0].flight_date === fs[fs.length - 1].flight_date

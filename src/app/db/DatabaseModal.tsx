@@ -66,7 +66,8 @@ export function DatabaseModal() {
 
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
-    const data = flights.data ?? [];
+    // newest flights first in the table
+    const data = [...(flights.data ?? [])].sort((a, b) => b.sched_dep.localeCompare(a.sched_dep));
     if (!term) return data;
     return data.filter((f) =>
       `${f.flight_date} ${f.airline_iata}${f.flight_number} ${f.dep_iata} ${f.arr_iata}`.toLowerCase().includes(term),
