@@ -38,7 +38,8 @@ const CLASS_LABELS: Record<CabinClass, string> = {
   international_first: "First",
 };
 
-const cashUSD = (f: Flight) => (f.cost_cash_segment ?? 0) * toUSD((f.cost_currency ?? "USD").toUpperCase());
+// historical USD (converted at the flight date) when available; else static present-day rate
+const cashUSD = (f: Flight) => f.cost_cash_segment_usd ?? (f.cost_cash_segment ?? 0) * toUSD((f.cost_currency ?? "USD").toUpperCase());
 const hasPoints = (f: Flight) => (f.cost_points_segment ?? 0) > 0;
 
 export const cost: StatModule = {

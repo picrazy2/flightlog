@@ -124,14 +124,16 @@ export const sumDistanceMi = (flights: Flight[]): number =>
 export const sumMinutes = (flights: Flight[]): number =>
   flights.reduce((s, f) => s + flightMinutes(f), 0);
 
-// cost: dedupe by booking so a multi-leg booking is counted once.
+// cost: dedupe by booking so a multi-leg booking is counted once. Prefer the historical
+// USD (converted at the booking date); fall back to the static present-day rate.
 export function totalCash(flights: Flight[], fx: (cur: string) => number): number {
   const seen = new Set<string>();
   let sum = 0;
   for (const f of flights) {
     if (!f.booking_id || seen.has(f.booking_id)) continue;
     seen.add(f.booking_id);
-    if (f.cost_cash != null) sum += f.cost_cash * fx((f.cost_currency ?? "USD").toUpperCase());
+    if (f.cost_cash_usd != null) sum += f.cost_cash_usd;
+    else if (f.cost_cash != null) sum += f.cost_cash * fx((f.cost_currency ?? "USD").toUpperCase());
   }
   return sum;
 }

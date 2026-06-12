@@ -57,6 +57,7 @@ export interface Flight {
   // segment cost (distance-weighted share of the booking)
   cost_cash_segment: number | null;
   cost_points_segment: number | null;
+  cost_cash_segment_usd: number | null; // per-leg cash converted to USD at the flight date
 
   // derived in the view
   trip_type: TripType;
@@ -91,6 +92,7 @@ export interface Flight {
   booking_ref_platform: string | null;
   cost_cash: number | null;
   cost_currency: string | null;
+  cost_cash_usd: number | null; // whole-booking cash converted to USD at the booking date
   cost_points: number | null;
   points_program: string | null;
   emails: BookingEmail[] | null;
