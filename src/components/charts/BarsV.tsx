@@ -64,7 +64,7 @@ export function BarsV({ rows, series, percent, onPick, activeId, height, colorBy
             domain={percent ? [0, 100] : undefined}
             tickFormatter={percent ? (v) => `${v}%` : unit === "min" ? (v) => formatDuration(Number(v)).value : (v) => Number(v).toLocaleString()}
           />
-          <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ fill: CHART.cursor }} />
+          <Tooltip content={<ChartTooltip unit={unit} total />} cursor={{ fill: CHART.cursor }} />
           {series.map((s) => (
             <Bar
               key={s.key}

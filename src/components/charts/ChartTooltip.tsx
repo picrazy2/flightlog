@@ -6,7 +6,9 @@ const fmt = (v: number, unit?: string) =>
   unit === "min" ? formatDuration(v).value : `${v.toLocaleString()}${unit ? ` ${unit}` : ""}`;
 
 // Themed tooltip. `unit` (e.g. "flights", "mi", "min") formats/labels each value.
-export function ChartTooltip({ active, payload, label, unit }: TooltipProps<number, string> & { unit?: string }) {
+// `total` adds a summed row — only meaningful for a single-unit stacked bar, so callers
+// that mix units/axes (e.g. cost's $ bars + flight-count line) leave it off.
+export function ChartTooltip({ active, payload, label, unit, total: showTotal }: TooltipProps<number, string> & { unit?: string; total?: boolean }) {
   if (!active || !payload?.length) return null;
   // a row may carry a `sub` string (e.g. "12 of 34 delayed") shown under the values.
   // Prefer the row's own label (charts keyed on `id` pass the id as `label` otherwise).
@@ -25,10 +27,11 @@ export function ChartTooltip({ active, payload, label, unit }: TooltipProps<numb
         <div key={String(p.dataKey)} className="flex items-center gap-2 text-label">
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
           <span className="text-ink-muted">{p.name}</span>
-          <span className="tnum ml-auto text-ink">{fmt(p.value ?? 0, unit)}</span>
+          {/* a count line (e.g. "Priced flights") is a plain number, not the chart's $/min unit */}
+          <span className="tnum ml-auto text-ink">{fmt(p.value ?? 0, p.dataKey === "flights" ? "" : unit)}</span>
         </div>
       ))}
-      {shown.length > 1 && (
+      {showTotal && shown.length > 1 && (
         <div className="mt-0.5 flex items-center gap-2 border-t border-border pt-0.5 text-label">
           <span className="h-2 w-2" />
           <span className="text-ink-muted">Total</span>

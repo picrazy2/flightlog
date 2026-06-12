@@ -39,7 +39,7 @@ export const countries: StatModule = {
       facet="country"
       breakdowns={["airport", "city", "type", "visitType"]}
       filterFor={(id, name) => countryFilter(id, name)}
-      title="Most-visited countries — broken down by the selected dimension"
+      noun="countries"
     />
   ),
   map: {

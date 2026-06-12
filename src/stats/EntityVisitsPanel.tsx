@@ -32,12 +32,19 @@ interface Props {
   facet: string; // cross-filter prefix, e.g. "city" / "country"
   breakdowns: Breakdown[];
   filterFor: (id: string, name: string) => CrossFilter;
-  title: string; // short description shown above the chart
+  noun: string; // "cities" / "countries" — used to build the chart title
 }
+
+const BREAKDOWN_DESC: Record<Breakdown, string> = {
+  airport: "by airport",
+  city: "by city",
+  type: "by domestic vs international",
+  visitType: "by visit type",
+};
 
 // Shared Cities/Countries panel: visits, broken down by a configurable dimension,
 // as a stacked bar (with the breakdown toggle) or a top-N + Other pie.
-export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, title }: Props) {
+export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, noun }: Props) {
   const [breakdown, setBreakdown] = useState<Breakdown>(breakdowns[0]);
   const [countMode, setCountMode] = useState(false); // visits vs # of unique airports/cities
   const { chartType, control: chartControl } = useChartType();
@@ -101,7 +108,10 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, ti
           </div>
         </OptionsButton>
       </div>
-      <div className="text-eyebrow tracking-[0.01em] text-ink-faint">{title}</div>
+      <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
+        Most-visited {noun}
+        {chartType === "bar" ? ` ${metric === "count" ? `· unique ${breakdown === "airport" ? "airports" : "cities"}` : BREAKDOWN_DESC[breakdown]}` : ""}
+      </div>
       <EntityChart
         rows={rows}
         series={built.series}

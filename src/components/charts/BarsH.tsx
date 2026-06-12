@@ -129,7 +129,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
                 : axisTick
             }
           />
-          <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ fill: CHART.cursor }} />
+          <Tooltip content={<ChartTooltip unit={unit} total />} cursor={{ fill: CHART.cursor }} />
           {series.map((s) => (
             <Bar
               key={s.key}

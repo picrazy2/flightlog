@@ -125,7 +125,7 @@ export const cities: StatModule = {
       facet="city"
       breakdowns={["airport", "type", "visitType"]}
       filterFor={(id) => cityFilter(id)}
-      title="Most-visited cities — broken down by the selected dimension"
+      noun="cities"
     />
   ),
 };
