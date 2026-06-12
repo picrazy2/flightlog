@@ -4,9 +4,13 @@ import { CHART, axisTick, type Series } from "./chartTheme";
 import { formatDuration } from "@/lib/format";
 import { ChartTooltip } from "./ChartTooltip";
 import { ChartLegend } from "./ChartLegend";
-import { PieSlices } from "./Pie";
+import { PieSlices, type Slice } from "./Pie";
 import { makeBarShape } from "./stackedBarShape";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { Modal } from "@/components/ui/Modal";
+import { CATEGORICAL } from "@/lib/palette";
+
+const OTHER_COLOR = "#475569";
 
 export interface BarRowData {
   id: string;
@@ -25,19 +29,21 @@ interface Props {
   tickBadge?: (row: BarRowData) => { color: string } | undefined; // colored dot beside label
   colorByRow?: (row: BarRowData) => string | undefined; // per-bar color (single-series)
   unit?: string; // tooltip unit suffix
-  cap?: number; // show only the first `cap` rows with a "see all" toggle to reveal the rest
+  cap?: number; // show only the first `cap` rows, with a "see all" button that opens a modal
   barSize?: number; // fixed bar thickness (px); default lets recharts size it
   rowPx?: number; // vertical space per row (px); default 26 — smaller = skinnier/tighter
   topAxis?: boolean; // put the value axis at the top (visible above a tall scrolling list)
+  autoPie?: boolean; // when a stacked breakdown collapses to one series, draw a donut of the rows
+  title?: string; // header for the "see all" modal
 }
 
 // Horizontal, optionally stacked / 100%-stacked, interactive bar chart.
-export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit, cap, barSize, rowPx, topAxis }: Props) {
+export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit, cap, barSize, rowPx, topAxis, autoPie, title }: Props) {
   // on touch (mobile/tablet) a tap is the only way to see a value, so don't let it filter
   const pick = useIsMobile(1024) ? undefined : onPick;
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(false); // opens the "see all" modal
   const hasMore = cap != null && rows.length > cap;
-  const shown = hasMore && !showAll ? rows.slice(0, cap) : rows;
+  const shown = hasMore ? rows.slice(0, cap!) : rows;
   const data = percent
     ? shown.map((r) => {
         const total = series.reduce((s, k) => s + (Number(r[k.key]) || 0), 0) || 1;
@@ -61,6 +67,22 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
         <PieSlices slices={slices} unit={unit} />
       </div>
     );
+  }
+
+  // a breakdown that has collapsed to a single non-empty series is just a share-of-total
+  // across the rows → draw it as a donut (top `cap` slices + Other) instead of lone bars
+  const liveSeries = series.filter((s) => rows.some((r) => (Number(r[s.key]) || 0) > 0));
+  if (autoPie && !percent && liveSeries.length <= 1 && rows.length > 1) {
+    const key = (liveSeries[0] ?? series[0]).key;
+    const sorted = rows
+      .map((r) => ({ id: String(r.id), label: r.label, value: Number(r[key]) || 0, byColor: colorByRow?.(r) }))
+      .filter((s) => s.value > 0)
+      .sort((a, b) => b.value - a.value);
+    const lim = cap ?? 9;
+    const slices: Slice[] = sorted.slice(0, lim).map((t, i) => ({ id: t.id, label: t.label, value: t.value, color: t.byColor ?? CATEGORICAL[i % CATEGORICAL.length] }));
+    const otherSum = sorted.slice(lim).reduce((s, t) => s + t.value, 0);
+    if (otherSum > 0) slices.push({ id: "__other", label: "Other", value: otherSum, color: OTHER_COLOR });
+    return <PieSlices slices={slices} unit={unit} activeId={activeId} onPick={onPick ? (id) => id !== "__other" && onPick(id) : undefined} />;
   }
 
   return (
@@ -148,11 +170,31 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
       </div>
       {hasMore && (
         <button
-          onClick={() => setShowAll((v) => !v)}
+          onClick={() => setShowAll(true)}
           className="focus-ring mt-1 px-1.5 text-caption text-accent hover:underline"
         >
-          {showAll ? "Show less" : `See all ${rows.length}`}
+          See all {rows.length}
         </button>
+      )}
+      {showAll && (
+        <Modal title={title ?? "All"} onClose={() => setShowAll(false)} className="w-[min(560px,95vw)]">
+          <div className="overflow-y-auto p-4" style={{ maxHeight: "75vh" }}>
+            <BarsH
+              rows={rows}
+              series={series}
+              percent={percent}
+              onPick={onPick}
+              activeId={activeId}
+              tickIcon={tickIcon}
+              tickBadge={tickBadge}
+              colorByRow={colorByRow}
+              unit={unit}
+              barSize={barSize}
+              rowPx={rowPx}
+              topAxis={topAxis}
+            />
+          </div>
+        </Modal>
       )}
     </div>
   );

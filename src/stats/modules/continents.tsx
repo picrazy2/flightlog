@@ -296,7 +296,7 @@ export const continents: StatModule = {
             mode: uniqueMode ? "unique" : "sum",
             topN: 6,
           });
-          return yc.rows.length > 1 ? (
+          return yc.rows.length > 0 ? (
             <div>
               <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">
                 {uniqueMode ? "Continents visited" : "Visits"} per year, by continent

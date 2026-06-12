@@ -8,8 +8,8 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { OptionsButton } from "@/components/ui/OptionsButton";
 import { BarsH, type BarRowData } from "@/components/charts/BarsH";
 import { BarsV } from "@/components/charts/BarsV";
-import { useStore } from "@/state/store";
-import { airportFilter } from "../filters";
+import { useStore, ALL_TIME } from "@/state/store";
+import { airportFilter, yearRange, yearOfRange } from "../filters";
 import { color, categoricalFor } from "@/lib/palette";
 import { buildYearGroups } from "@/lib/yearGroups";
 import { visitClassByAirport } from "../entityBreakdown";
@@ -73,7 +73,8 @@ export const airports: StatModule = {
     const [vBreak, setVBreak] = useState<"type" | "domintl" | "year">("type");
     const [dBreak, setDBreak] = useState<"domintl" | "country" | "continent">("domintl");
     const [percent, setPercent] = useState(false);
-    const { toggleCrossFilter, crossFilters } = useStore();
+    const { toggleCrossFilter, crossFilters, range, setRange } = useStore();
+    const activeYear = yearOfRange(range);
     // airport charts exclude the airport facet so selecting airports doesn't hide the rest
     const airportFlights = ctx.flights;
     const aggs = [...airportsFrom(airportFlights).values()];
@@ -246,14 +247,20 @@ export const airports: StatModule = {
         <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
           {metric === "visits" ? "Most-visited airports" : "Airports by distinct destinations reached"}
         </div>
-        <BarsH rows={rows} percent={percent} series={series} activeId={airportActive} unit={unit} cap={TOP} onPick={(id) => toggleCrossFilter(airportFilter(id))} />
+        <BarsH rows={rows} percent={percent} autoPie title={metric === "visits" ? "Most-visited airports" : "Airports by destinations"} series={series} activeId={airportActive} unit={unit} cap={TOP} onPick={(id) => toggleCrossFilter(airportFilter(id))} />
 
-        {yc.rows.length > 1 && (
+        {yc.rows.length > 0 && (
           <>
             <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
               {metric === "destinations" ? "Unique airports" : "Visits"} per year, by top airport
             </div>
-            <BarsV rows={yc.rows} series={yc.series} unit={metric === "destinations" ? "airports" : "visits"} />
+            <BarsV
+              rows={yc.rows}
+              series={yc.series}
+              unit={metric === "destinations" ? "airports" : "visits"}
+              activeId={activeYear}
+              onPick={(id) => setRange(activeYear === id ? ALL_TIME : yearRange(id))}
+            />
           </>
         )}
       </>

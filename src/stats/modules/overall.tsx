@@ -7,11 +7,19 @@ import { Segmented } from "@/components/ui/Segmented";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { BarsV } from "@/components/charts/BarsV";
 import { Lines } from "@/components/charts/Lines";
-import { FactList, type Fact } from "@/components/ui/FactList";
+import { FactList, type Fact, type FactAction } from "@/components/ui/FactList";
+import type { DateRange } from "@/state/store";
 import { useStore, ALL_TIME } from "@/state/store";
-import { yearRange, yearOfRange } from "../filters";
+import { yearRange, yearOfRange, airportFilter, airlineFilter, routeFilter } from "../filters";
+import { airlineKey, airlineNameOf } from "@/lib/airlines";
 import { metricName } from "../useMetric";
 import { color } from "@/lib/palette";
+
+const monthRange = (ym: string): DateRange => {
+  const [y, mo] = ym.split("-").map(Number);
+  const end = new Date(y, mo, 0).getDate(); // day 0 of next month = last day of this one
+  return { start: `${ym}-01`, end: `${ym}-${String(end).padStart(2, "0")}`, label: `${MONTHS[mo - 1]} ${y}` };
+};
 
 const EARTH_CIRC_MI = 24901;
 const MOON_MI = 238855;
@@ -39,15 +47,25 @@ function funFacts(flights: Flight[], settings: { units: "mi" | "km" }): Fact[] {
   facts.push({ label: "Days in the air", value: `${(totalMin / 1440).toFixed(1)}`, sub: "days" });
 
   const home = mode(flights, (f) => f.dep_iata);
-  if (home) facts.push({ label: "Home base", value: home.key, sub: `${home.n} departures` });
+  if (home) facts.push({ label: "Home base", value: home.key, sub: `${home.n} departures`, action: { kind: "filter", filter: airportFilter(home.key) } });
 
-  const airline = mode(flights, (f) => f.airline_name ?? f.airline_iata);
-  if (airline) facts.push({ label: "Go-to airline", value: airline.key, sub: `${airline.n} flights` });
+  // go-to airline, with the two-code carriers (e.g. Ryanair FR/RK) merged
+  const alCount = new Map<string, { name: string; n: number }>();
+  for (const f of flights) {
+    const k = airlineKey(f.airline_iata);
+    if (!k) continue;
+    const cur = alCount.get(k) ?? { name: airlineNameOf(f), n: 0 };
+    cur.n++;
+    alCount.set(k, cur);
+  }
+  let topAl: { key: string; name: string; n: number } | null = null;
+  for (const [k, v] of alCount) if (!topAl || v.n > topAl.n) topAl = { key: k, name: v.name, n: v.n };
+  if (topAl) facts.push({ label: "Go-to airline", value: topAl.name, sub: `${topAl.n} flights`, action: { kind: "filter", filter: airlineFilter(topAl.key, topAl.name) } });
 
   const busiestMonth = mode(flights, (f) => f.flight_date.slice(0, 7));
   if (busiestMonth) {
     const [y, mo] = busiestMonth.key.split("-");
-    facts.push({ label: "Busiest month", value: `${MONTHS[Number(mo) - 1]} ${y}`, sub: `${busiestMonth.n} flights` });
+    facts.push({ label: "Busiest month", value: `${MONTHS[Number(mo) - 1]} ${y}`, sub: `${busiestMonth.n} flights`, action: { kind: "range", range: monthRange(busiestMonth.key) } });
   }
 
   const km = settings.units === "km";
@@ -57,37 +75,37 @@ function funFacts(flights: Flight[], settings: { units: "mi" | "km" }): Fact[] {
   facts.push({ label: "Average flight length", value: `${conv(avgMi)} ${u}` });
 
   // fastest flight (ground speed) — only flights with a real track + air time
-  let fastest: { mph: number; label: string; date: string } | null = null;
+  let fastest: { mph: number; label: string; id: string } | null = null;
   for (const f of flights) {
     if (f.flown_distance_mi == null) continue;
     const min = flightMinutes(f);
     if (min <= 0) continue;
     const mph = (flightDistanceMi(f) * 60) / min;
-    if (!fastest || mph > fastest.mph) fastest = { mph, label: `${f.dep_iata}–${f.arr_iata}`, date: f.flight_date };
+    if (!fastest || mph > fastest.mph) fastest = { mph, label: `${f.dep_iata}–${f.arr_iata}`, id: f.id };
   }
   if (fastest) {
     const spd = Math.round(fastest.mph * (km ? 1.60934 : 1));
-    facts.push({ label: "Fastest flight", value: `${spd.toLocaleString()} ${km ? "km/h" : "mph"}`, sub: fastest.label });
+    facts.push({ label: "Fastest flight", value: `${spd.toLocaleString()} ${km ? "km/h" : "mph"}`, sub: fastest.label, action: { kind: "flight", flightId: fastest.id } });
   }
 
   // biggest detour — flight whose flown path most exceeds the great-circle distance
-  let detour: { ratio: number; label: string } | null = null;
+  let detour: { ratio: number; label: string; id: string } | null = null;
   for (const f of flights) {
     const gc = f.distance_mi ?? 0;
     if (f.flown_distance_mi == null || gc < 100) continue; // skip short hops where the ratio is noisy
     const ratio = f.flown_distance_mi / gc;
     if (ratio < 1.02) continue;
-    if (!detour || ratio > detour.ratio) detour = { ratio, label: `${f.dep_iata}–${f.arr_iata}` };
+    if (!detour || ratio > detour.ratio) detour = { ratio, label: `${f.dep_iata}–${f.arr_iata}`, id: f.id };
   }
-  if (detour) facts.push({ label: "Biggest detour", value: `${detour.ratio.toFixed(2)}× direct`, sub: detour.label });
+  if (detour) facts.push({ label: "Biggest detour", value: `${detour.ratio.toFixed(2)}× direct`, sub: detour.label, action: { kind: "flight", flightId: detour.id } });
   // route whose per-leg distance is closest to the average
-  let closest: { label: string; per: number; d: number } | null = null;
+  let closest: { label: string; per: number; d: number; dep: string; arr: string } | null = null;
   for (const r of routesFrom(flights, false).values()) {
     const per = r.distanceMi / r.flights;
     const d = Math.abs(per - avgMi);
-    if (!closest || d < closest.d) closest = { label: `${r.dep}–${r.arr}`, per, d };
+    if (!closest || d < closest.d) closest = { label: `${r.dep}–${r.arr}`, per, d, dep: r.dep, arr: r.arr };
   }
-  if (closest) facts.push({ label: "Closest route to avg length", value: closest.label, sub: `${conv(closest.per)} ${u}` });
+  if (closest) facts.push({ label: "Closest route to avg length", value: closest.label, sub: `${conv(closest.per)} ${u}`, action: { kind: "filter", filter: routeFilter(closest.dep, closest.arr) } });
 
   // shortest layover from connections (arrive→depart same airport within 16h). Use the
   // provider (airline) scheduled times when present — manually-imported flights often have
@@ -180,9 +198,18 @@ export const overall: StatModule = {
   Panel: ({ ctx }) => {
     const [metric, setMetric] = useState<Metric>("flights");
     const [group, setGroup] = useState<Group>("year");
-    const { range, setRange } = useStore();
+    const { range, setRange, toggleCrossFilter } = useStore();
     const today = new Date().toISOString().slice(0, 10);
     const activeYear = yearOfRange(range);
+    const runFact = (a: FactAction) => {
+      if (a.kind === "filter") toggleCrossFilter(a.filter);
+      else if (a.kind === "range") setRange(a.range);
+      else {
+        // open this flight's popup on the map (mirrors the flight-number search action)
+        window.dispatchEvent(new CustomEvent("journia:closepopup"));
+        window.dispatchEvent(new CustomEvent("journia:showflight", { detail: { flightId: a.flightId } }));
+      }
+    };
 
     return (
       <>
@@ -233,7 +260,7 @@ export const overall: StatModule = {
             onPick={group === "year" ? (id) => setRange(activeYear === id ? ALL_TIME : yearRange(id)) : undefined}
           />
         )}
-        <FactList title="Fun facts" facts={funFacts(ctx.flights, ctx.settings)} />
+        <FactList title="Fun facts" facts={funFacts(ctx.flights, ctx.settings)} onAction={runFact} />
       </>
     );
   },

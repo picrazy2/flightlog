@@ -19,6 +19,7 @@ import { BarsH } from "@/components/charts/BarsH";
 import { MiniStats } from "@/components/ui/MiniStat";
 import { PanelFooter } from "@/components/ui/Panel";
 import { Segmented } from "@/components/ui/Segmented";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ChartTooltip } from "@/components/charts/ChartTooltip";
@@ -60,10 +61,37 @@ export const delays: StatModule = {
     const { toggleCrossFilter, crossFilters } = useStore();
     const airlineActive = crossFilters.filter((c) => c.id.startsWith("airline:")).map((c) => c.id.slice("airline:".length));
 
+    // panel-local filters (do not touch the global cross-filters) — narrow this panel by
+    // airline / airport / year. Options are built from the full panel set so they're stable.
+    const [fAirline, setFAirline] = useState("all");
+    const [fAirport, setFAirport] = useState("all");
+    const [fYear, setFYear] = useState("all");
+    const alCounts = new Map<string, { label: string; n: number }>();
+    const apCounts = new Map<string, number>();
+    for (const f of ctx.flights) {
+      const k = airlineKey(f.airline_iata);
+      if (k) {
+        const c = alCounts.get(k) ?? { label: airlineLabel(f.airline_iata, f.airline_name), n: 0 };
+        c.n++;
+        alCounts.set(k, c);
+      }
+      apCounts.set(f.dep_iata, (apCounts.get(f.dep_iata) ?? 0) + 1);
+      apCounts.set(f.arr_iata, (apCounts.get(f.arr_iata) ?? 0) + 1);
+    }
+    const airlineOpts = [{ value: "all", label: "All airlines" }, ...[...alCounts.entries()].sort((a, b) => b[1].n - a[1].n).map(([k, v]) => ({ value: k, label: v.label }))];
+    const airportOpts = [{ value: "all", label: "All airports" }, ...[...apCounts.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => ({ value: k, label: k }))];
+    const yearOpts = [{ value: "all", label: "All years" }, ...[...new Set(ctx.flights.map((f) => f.flight_date.slice(0, 4)))].sort().reverse().map((y) => ({ value: y, label: y }))];
+    const flights = ctx.flights.filter(
+      (f) =>
+        (fAirline === "all" || airlineKey(f.airline_iata) === fAirline) &&
+        (fAirport === "all" || f.dep_iata === fAirport || f.arr_iata === fAirport) &&
+        (fYear === "all" || f.flight_date.slice(0, 4) === fYear),
+    );
+
     // average departure vs arrival delay (min) by year over all timed flights
     const depD = (f: Flight) => departureDelayMin(f);
     const byYear = new Map<string, { dep: number; depN: number; arr: number; arrN: number; late: number }>();
-    for (const f of ctx.flights) {
+    for (const f of flights) {
       const y = f.flight_date.slice(0, 4);
       const cur = byYear.get(y) ?? { dep: 0, depN: 0, arr: 0, arrN: 0, late: 0 };
       const d = depD(f);
@@ -91,7 +119,7 @@ export const delays: StatModule = {
       }));
     // per-airline arrival performance — airlines with >= 10 timed flights
     const byAirline = new Map<string, { label: string; sum: number; n: number; late: number }>();
-    for (const f of ctx.flights) {
+    for (const f of flights) {
       const d = delayMin(f);
       if (d == null) continue;
       const k = airlineKey(f.airline_iata);
@@ -112,7 +140,7 @@ export const delays: StatModule = {
       .sort((a, b) => b.value - a.value);
 
     // distribution of arrival punctuality across timed flights
-    const timed = ctx.flights.filter((f) => actualArr(f));
+    const timed = flights.filter((f) => actualArr(f));
     let early = 0, delayed = 0, veryLate = 0, netMin = 0;
     for (const f of timed) {
       const d = delayMin(f) ?? 0;
@@ -141,11 +169,20 @@ export const delays: StatModule = {
     const mostDelayed = ranked.filter((x) => x.d > 0).sort((a, b) => b.d - a.d);
     const mostEarly = ranked.filter((x) => x.d <= 0).sort((a, b) => a.d - b.d);
 
+    const filterRow = (
+      <div className="flex flex-wrap items-center gap-2">
+        {airlineOpts.length > 2 && <Dropdown aria-label="Airline" size="sm" value={fAirline} onChange={setFAirline} options={airlineOpts} />}
+        {airportOpts.length > 2 && <Dropdown aria-label="Airport" size="sm" value={fAirport} onChange={setFAirport} options={airportOpts} />}
+        {yearOpts.length > 2 && <Dropdown aria-label="Year" size="sm" value={fYear} onChange={setFYear} options={yearOpts} />}
+      </div>
+    );
+
     if (rows.length === 0) {
       return (
         <>
+          {filterRow}
           <MiniStats items={cards} cols={3} />
-          <p className="text-label text-ink-muted">No actual-time data in this range.</p>
+          <p className="text-label text-ink-muted">No actual-time data for this selection.</p>
         </>
       );
     }
@@ -161,6 +198,7 @@ export const delays: StatModule = {
     const axisMin = Math.min(0, ...minVals);
     return (
       <>
+        {filterRow}
         <MiniStats items={cards} cols={3} />
         <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Average departure &amp; arrival delay (min) and % of flights delayed, by year</div>
         <ChartLegend series={lineSeries} />
@@ -209,6 +247,7 @@ export const delays: StatModule = {
               series={[{ key: "value", name: airlineMetric === "mins" ? "min" : "%", color: color.routeIntl }]}
               activeId={airlineActive}
               unit={airlineMetric === "mins" ? "min" : "%"}
+              title="Delays by airline"
               cap={10}
               onPick={(id) => {
                 const a = worst.find((x) => x.id === id);

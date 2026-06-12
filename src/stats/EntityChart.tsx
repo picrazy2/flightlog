@@ -17,12 +17,16 @@ interface Props {
   tickIcon?: (row: BarRowData) => string | undefined;
   topPie?: number; // top N slices before "Other"
   cap?: number; // bar: show top N rows with a "see all" toggle
+  title?: string; // header for the "see all" modal
 }
 
 // Shared entity visual: horizontal stacked bars OR a top-N + "Other" donut.
 // The pie value for each row is the sum of all bar series (i.e. its total).
-export function EntityChart({ rows, series, chartType, onPick, activeId, unit, percent, tickIcon, topPie = 9, cap = 8 }: Props) {
-  if (chartType === "pie") {
+export function EntityChart({ rows, series, chartType, onPick, activeId, unit, percent, tickIcon, topPie = 9, cap = 8, title }: Props) {
+  // when the breakdown collapses to a single non-empty series, force the donut — lone
+  // stacked bars carry no more information than a share-of-total pie of the same rows
+  const liveSeries = series.filter((s) => rows.some((r) => (Number(r[s.key]) || 0) > 0));
+  if (chartType === "pie" || (!percent && liveSeries.length <= 1)) {
     const totals = rows
       .map((r) => ({ id: r.id, label: r.label, value: series.reduce((s, k) => s + (Number(r[k.key]) || 0), 0) }))
       .sort((a, b) => b.value - a.value);
@@ -42,6 +46,7 @@ export function EntityChart({ rows, series, chartType, onPick, activeId, unit, p
       unit={unit}
       tickIcon={tickIcon}
       cap={cap}
+      title={title}
       onPick={onPick}
     />
   );

@@ -162,6 +162,7 @@ export const domesticIntl: StatModule = {
               rows={pairRows}
               series={[{ key: "flights", name: metricName[metric], color: color.secondary }]}
               unit={metricName[metric]}
+              title="Top country pairs"
               cap={8}
               colorByRow={(row) => (String(row.id).endsWith("·dom") ? color.accent : color.secondary)}
             />

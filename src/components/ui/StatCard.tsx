@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
-import { compact, deltaPct } from "@/lib/format";
-import type { CardModel } from "@/stats/types";
+import { compact } from "@/lib/format";
+import type { CardModel, Formatter } from "@/stats/types";
 import type { Settings } from "@/lib/types";
 
 interface Props {
@@ -11,22 +11,35 @@ interface Props {
   onClick: () => void;
 }
 
+// Period-over-period change as an ABSOLUTE delta in the stat's own units — "+340 km",
+// "+12 flights", or for a percentage stat the point change ("+3%"). No change → a dash.
 function Compare({
   value,
   compareValue,
   mode,
+  format,
+  unit,
+  settings,
 }: {
   value: number;
   compareValue?: number | null;
   mode: "delta" | "recent" | null;
+  format?: Formatter;
+  unit?: string;
+  settings: Settings;
 }) {
   if (compareValue == null || mode !== "delta") return null;
-  const pct = deltaPct(value, compareValue);
-  if (pct == null || Math.abs(pct) < 0.5) return <span className="tnum text-caption text-ink-faint">±0%</span>;
-  const up = pct > 0;
+  const diff = value - compareValue;
+  const fmt = (n: number) => {
+    const r = format ? format(n, settings) : { value: compact(n), unit: unit ?? "" };
+    return r.unit ? `${r.value} ${r.unit}` : r.value;
+  };
+  const shown = fmt(Math.abs(diff));
+  if (diff === 0 || shown === "0" || shown === "0%") return <span className="tnum text-caption text-ink-faint">—</span>;
+  const up = diff > 0;
   return (
     <span className={cn("tnum text-caption font-medium", up ? "text-positive" : "text-negative")}>
-      {up ? "▲" : "▼"} {Math.abs(Math.round(pct))}%
+      {up ? "▲" : "▼"} {shown}
     </span>
   );
 }
@@ -53,7 +66,7 @@ export function StatCard({ model, settings, compareMode, active, onClick }: Prop
                   <span className="whitespace-nowrap text-caption font-medium text-ink-muted">{f.unit || s.unit}</span>
                 )}
               </div>
-              <Compare value={s.value} compareValue={s.compareValue} mode={compareMode} />
+              <Compare value={s.value} compareValue={s.compareValue} mode={compareMode} format={s.format} unit={s.unit} settings={settings} />
             </div>
           );
         })}

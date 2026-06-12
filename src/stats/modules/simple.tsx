@@ -97,6 +97,7 @@ export const airlines: StatModule = {
           chartType={chartType}
           activeId={activeId}
           unit={metricName[metric]}
+          title="Airlines"
           onPick={(id) => {
             const r = ranked.find((x) => x.id === id);
             toggleCrossFilter(airlineFilter(id, r?.label ?? id));
@@ -112,7 +113,7 @@ export const airlines: StatModule = {
             mode: "sum",
             topN: 7,
           });
-          return yc.rows.length > 1 ? (
+          return yc.rows.length > 0 ? (
             <>
               <div className="text-eyebrow tracking-[0.01em] text-ink-faint">{metricName[metric]} per year, by top airline</div>
               <BarsV rows={yc.rows} series={yc.series} unit={metricName[metric]} />

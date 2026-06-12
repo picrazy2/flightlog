@@ -3,6 +3,7 @@ import { CHART, axisTick, type Series } from "./chartTheme";
 import { formatDuration } from "@/lib/format";
 import { ChartTooltip } from "./ChartTooltip";
 import { ChartLegend } from "./ChartLegend";
+import { PieSlices } from "./Pie";
 import { makeBarShape } from "./stackedBarShape";
 import { useIsMobile } from "@/lib/useIsMobile";
 import type { BarRowData } from "./BarsH";
@@ -30,6 +31,23 @@ export function BarsV({ rows, series, percent, onPick, activeId, height, colorBy
         return out;
       })
     : rows;
+
+  // a single period with a breakdown (e.g. one year after a year filter) reads better as
+  // a donut of that period's composition than a lone stacked bar
+  if (rows.length === 1 && series.length > 1 && !percent) {
+    const r = rows[0];
+    const slices = series
+      .map((s) => ({ id: s.key, label: s.name, value: Number(r[s.key]) || 0, color: s.color }))
+      .filter((s) => s.value > 0);
+    if (slices.length > 0) {
+      return (
+        <div>
+          <div className="mb-1 text-eyebrow tracking-[0.01em] text-ink-faint">{r.label}</div>
+          <PieSlices slices={slices} unit={unit} />
+        </div>
+      );
+    }
+  }
 
   // category by unique id (labels may repeat or be blank, e.g. season timeline)
   const labelById = new Map(rows.map((r) => [r.id, r.label]));

@@ -5,8 +5,9 @@ import { OptionsButton } from "@/components/ui/OptionsButton";
 import { EntityChart } from "./EntityChart";
 import { BarsV } from "@/components/charts/BarsV";
 import { useChartType } from "./useChartType";
-import { useStore } from "@/state/store";
+import { useStore, ALL_TIME } from "@/state/store";
 import type { CrossFilter } from "@/state/store";
+import { yearRange, yearOfRange } from "./filters";
 import type { StatContext } from "./types";
 import { airportsFrom } from "@/lib/aggregate";
 import { buildStack, buildCount, buildTypeStack, buildVisitTypeStack, buildVisits, type EntityLevel } from "./entityBreakdown";
@@ -65,7 +66,10 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
   const [countMode, setCountMode] = useState(false); // visits vs # of unique airports/cities
   const [yearMode, setYearMode] = useState<"visits" | "unique">("visits"); // per-year chart's own toggle
   const { chartType, control: chartControl } = useChartType();
-  const { toggleCrossFilter, crossFilters } = useStore();
+  const { toggleCrossFilter, crossFilters, range, setRange } = useStore();
+  const activeYear = yearOfRange(range);
+  // unique-mode stacks by the parent geography, so name it in the chart title
+  const parentNoun = level === "city" ? "country" : "continent";
   // the unique-count metric only applies to the airport/city stacked breakdowns
   const canCount = chartType === "bar" && (breakdown === "airport" || breakdown === "city");
   const metric = canCount && countMode ? "count" : "visits";
@@ -133,6 +137,7 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
         chartType={chartType}
         activeId={activeId}
         unit={unit}
+        title={`Most-visited ${noun}`}
         onPick={(id) => toggleCrossFilter(filterFor(id, built.names.get(id) ?? id))}
       />
       {(() => {
@@ -162,11 +167,11 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
           mode: uniqueMode ? "unique" : "sum",
           topN: 6,
         });
-        return yc.rows.length > 1 ? (
+        return yc.rows.length > 0 ? (
           <>
             <div className="flex items-start justify-between gap-2">
               <span className="text-eyebrow tracking-[0.01em] text-ink-faint">
-                {uniqueMode ? `Unique ${noun}` : "Visits"} per year, by top {noun}
+                {uniqueMode ? `Unique ${noun} per year, by top ${parentNoun}` : `Visits per year, by top ${noun}`}
               </span>
               <Segmented
                 aria-label="Year metric"
@@ -179,7 +184,13 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
                 ]}
               />
             </div>
-            <BarsV rows={yc.rows} series={yc.series} unit={uniqueMode ? noun : "visits"} />
+            <BarsV
+              rows={yc.rows}
+              series={yc.series}
+              unit={uniqueMode ? noun : "visits"}
+              activeId={activeYear}
+              onPick={(id) => setRange(activeYear === id ? ALL_TIME : yearRange(id))}
+            />
           </>
         ) : null;
       })()}

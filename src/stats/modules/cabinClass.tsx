@@ -112,6 +112,7 @@ export const cabinClass: StatModule = {
         <BarsH
           rows={rows}
           percent={percent}
+          autoPie
           series={[
             { key: "domestic", name: "Domestic", color: color.accent },
             { key: "international", name: "International", color: color.secondary },
