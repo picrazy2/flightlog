@@ -6,6 +6,7 @@ export type IconName =
   | "add"
   | "airplane"
   | "calendar"
+  | "compass"
   | "distance"
   | "globe"
   | "magnifying-glass"

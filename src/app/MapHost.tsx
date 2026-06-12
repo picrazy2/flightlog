@@ -494,8 +494,14 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
       if (isMobileRef.current) useStore.getState().setMapSelection(null);
       else restoreHighlightRef.current?.();
     };
-    // reset-north button → rotate back to north and drop the tilt (2D)
-    const resetNorth = () => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 400 });
+    // reset-north button → flat (2D) map facing north, no tilt
+    const resetNorth = () => {
+      const map = mapRef.current;
+      if (!map) return;
+      map.easeTo({ bearing: 0, pitch: 0, duration: 400 });
+      // "2D" = the flat projection; the globe is the 3D view. The projection effect applies it.
+      if (useStore.getState().projection === "globe") useStore.setState({ projection: "mercator" });
+    };
     window.addEventListener("journia:flyto", fly);
     window.addEventListener("journia:fit", fit);
     window.addEventListener("journia:showflight", showFlight as EventListener);
