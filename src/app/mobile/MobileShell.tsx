@@ -7,6 +7,7 @@ import { FilterChips } from "../FilterChips";
 import { DateRangePicker } from "../DateRangePicker";
 import { OverflowMenu } from "./OverflowMenu";
 import { DrawerStack } from "./DrawerStack";
+import { NorthButton } from "../NorthButton";
 import type { StatContext, MapEncoding } from "@/stats/types";
 
 // Mobile chrome over the full-screen map: a solid header, floating stat cards, a
@@ -23,10 +24,11 @@ export function MobileShell({ ctx, encoding }: { ctx: StatContext; encoding: Map
 
   if (immersive) {
     return (
-      <div className="pointer-events-auto fixed right-3 top-3 z-40" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      <div className="pointer-events-auto fixed right-3 top-3 z-40 flex flex-col items-end gap-2" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <Button variant="secondary" size="md" iconOnly aria-label="Exit fullscreen" onClick={onFullscreen}>
           ✕
         </Button>
+        <NorthButton mobile />
       </div>
     );
   }
@@ -54,13 +56,16 @@ export function MobileShell({ ctx, encoding }: { ctx: StatContext; encoding: Map
             <FilterChips />
             <SearchBox ctx={ctx} iconOnly />
           </div>
-          <button
-            onClick={onFullscreen}
-            aria-label="Fullscreen"
-            className="focus-ring pointer-events-auto grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-surface-1 text-ink"
-          >
-            ⛶
-          </button>
+          <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-2">
+            <button
+              onClick={onFullscreen}
+              aria-label="Fullscreen"
+              className="focus-ring grid h-10 w-10 place-items-center rounded-full border border-border bg-surface-1 text-ink"
+            >
+              ⛶
+            </button>
+            <NorthButton mobile />
+          </div>
         </div>
       </div>
 

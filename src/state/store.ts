@@ -55,6 +55,8 @@ interface AppState {
   legendFilter: LegendFilter;
   crossFilters: CrossFilter[];
   projection: "mercator" | "globe";
+  mapBearing: number; // live map bearing (deg) — drives the reset-north button
+  mapPitch: number; // live map pitch (deg)
   temporal: "all" | "past" | "future";
   dbOpen: boolean;
   aboutOpen: boolean; // the "About Journia" modal
@@ -76,6 +78,7 @@ interface AppState {
   removeFacet: (facet: string) => void;
   clearCrossFilters: () => void;
   toggleProjection: () => void;
+  setMapView: (bearing: number, pitch: number) => void;
   setTemporal: (t: "all" | "past" | "future") => void;
   setDbOpen: (v: boolean) => void;
   setAboutOpen: (v: boolean) => void;
@@ -98,6 +101,8 @@ export const useStore = create<AppState>()(
   // mobile opens on the globe with the legend expanded (persisted projection wins for
   // returning users); desktop defaults to the flat map with drawers collapsed
   projection: FLAT_INIT ? "mercator" : "globe",
+  mapBearing: 0,
+  mapPitch: 0,
   temporal: "all",
   dbOpen: false,
   aboutOpen: false,
@@ -137,6 +142,7 @@ export const useStore = create<AppState>()(
   removeFacet: (facet) => set((s) => ({ crossFilters: s.crossFilters.filter((c) => c.id.split(":")[0] !== facet) })),
   clearCrossFilters: () => set({ crossFilters: [] }),
   toggleProjection: () => set((s) => ({ projection: s.projection === "globe" ? "mercator" : "globe" })),
+  setMapView: (mapBearing, mapPitch) => set({ mapBearing, mapPitch }),
   setTemporal: (temporal) => set({ temporal }),
   setDbOpen: (dbOpen) => set({ dbOpen }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),

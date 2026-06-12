@@ -218,6 +218,13 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
       if (useStore.getState().projection !== view.projection) useStore.setState({ projection: view.projection });
       pushData();
 
+      // publish bearing/pitch so the reset-north button can show + reflect the heading
+      const syncOrient = () => useStore.getState().setMapView(map.getBearing(), map.getPitch());
+      map.on("rotate", syncOrient);
+      map.on("pitch", syncOrient);
+      map.on("moveend", syncOrient);
+      syncOrient();
+
       // hover popups
       map.on("mousemove", "airports", (e) => {
         if (isMobileRef.current) return; // no hover popups on touch
@@ -487,15 +494,19 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
       if (isMobileRef.current) useStore.getState().setMapSelection(null);
       else restoreHighlightRef.current?.();
     };
+    // reset-north button → rotate back to north and drop the tilt (2D)
+    const resetNorth = () => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 400 });
     window.addEventListener("journia:flyto", fly);
     window.addEventListener("journia:fit", fit);
     window.addEventListener("journia:showflight", showFlight as EventListener);
     window.addEventListener("journia:closepopup", closePopup);
+    window.addEventListener("journia:resetnorth", resetNorth);
     return () => {
       window.removeEventListener("journia:flyto", fly);
       window.removeEventListener("journia:fit", fit);
       window.removeEventListener("journia:showflight", showFlight as EventListener);
       window.removeEventListener("journia:closepopup", closePopup);
+      window.removeEventListener("journia:resetnorth", resetNorth);
     };
   }, []);
 

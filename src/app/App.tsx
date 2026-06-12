@@ -8,6 +8,7 @@ import { StatCardsRow } from "./StatCardsRow";
 import { DetailPanelHost } from "./DetailPanelHost";
 import { DatabaseModal } from "./db/DatabaseModal";
 import { AboutModal } from "./AboutModal";
+import { NorthButton } from "./NorthButton";
 import { SplashScreen } from "./SplashScreen";
 import { MobileShell } from "./mobile/MobileShell";
 import { Legend } from "@/components/ui/Legend";
@@ -112,7 +113,10 @@ export function App() {
             <ControlBar ctx={ctx} />
             <StatCardsRow ctx={ctx} />
             <div className="flex items-start justify-end gap-3">
-              <div className="pointer-events-auto shrink-0">{fsButton}</div>
+              <div className="pointer-events-auto flex shrink-0 flex-col gap-2">
+                {fsButton}
+                <NorthButton />
+              </div>
             </div>
           </div>
 
@@ -129,8 +133,11 @@ export function App() {
           )}
         </>
       ) : (
-        /* desktop immersive: exit button only */
-        <div className="pointer-events-auto absolute right-4 top-4 z-30">{fsButton}</div>
+        /* desktop immersive: exit + reset-north */
+        <div className="pointer-events-auto absolute right-4 top-4 z-30 flex flex-col gap-2">
+          {fsButton}
+          <NorthButton />
+        </div>
       )}
 
       {dbOpen && <DatabaseModal />}

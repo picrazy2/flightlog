@@ -25,7 +25,7 @@ export interface InitialView {
 // world width). A fixed zoom is therefore a fixed pixel size — fine on a phone, tiny in a
 // big desktop window. Pick the zoom so the diameter is ~1.18× the smaller viewport
 // dimension (fills it with a slight crop, matching how it already looks on mobile).
-const GLOBE_FILL = 1.18;
+const GLOBE_FILL = 1.05;
 const globeZoom = (w: number, h: number) =>
   Math.max(0.3, Math.min(5, Math.log2((GLOBE_FILL * Math.min(w, h) * Math.PI) / 512)));
 
