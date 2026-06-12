@@ -100,10 +100,21 @@ export const cost: StatModule = {
     const denom = (b: { flights: number; dist: number; hours: number }) =>
       basis === "total" ? 1 : basis === "flight" ? b.flights || 1 : basis === "km" ? b.dist || 1 : b.hours || 1;
     const r2 = (n: number) => Math.round(n * 100) / 100;
+    // dom/intl breakdown only makes sense for absolute totals — a per-flight/km/hour RATE
+    // can't be split and summed, so those bases show a single combined bar.
+    const split = basis === "total";
+    const pct = percent && split;
     let rows = [...buckets.entries()]
-      .map(([id, b]) => ({ id, label: b.label, domestic: r2(b.dom / denom(b)), international: r2(b.intl / denom(b)), flights: b.flights }))
+      .map(([id, b]) => ({
+        id,
+        label: b.label,
+        domestic: r2(b.dom / denom(b)),
+        international: r2(b.intl / denom(b)),
+        combined: r2((b.dom + b.intl) / denom(b)),
+        flights: b.flights,
+      }))
       .sort((a, b) => (buckets.get(a.id)!.sort - buckets.get(b.id)!.sort));
-    if (percent) {
+    if (pct) {
       rows = rows.map((r) => {
         const t = r.domestic + r.international || 1;
         return { ...r, domestic: r2((r.domestic / t) * 100), international: r2((r.international / t) * 100) };
@@ -120,11 +131,16 @@ export const cost: StatModule = {
       else toggleCrossFilter(classFilter(id, CLASS_LABELS[id as CabinClass] ?? id));
     };
 
-    const series = [
-      { key: "domestic", name: "Domestic", color: color.accent },
-      { key: "international", name: "International", color: color.secondary },
-      { key: "flights", name: "Priced flights", color: "#A78BFA" },
-    ];
+    const series = split
+      ? [
+          { key: "domestic", name: "Domestic", color: color.accent },
+          { key: "international", name: "International", color: color.secondary },
+          { key: "flights", name: "Priced flights", color: "#A78BFA" },
+        ]
+      : [
+          { key: "combined", name: metric === "cash" ? "Cost" : "Points", color: color.accent },
+          { key: "flights", name: "Priced flights", color: "#A78BFA" },
+        ];
 
     // booking-method mix per class (always shown)
     const methods = new Map<string, { label: string; cashOnly: number; pointsOnly: number; pointsCash: number; sort: number }>();
@@ -171,10 +187,12 @@ export const cost: StatModule = {
               ]}
             />
             <OptionsButton>
-              <div className="flex items-center justify-between">
-                <span className="text-label text-ink-muted">100% stacked</span>
-                <Switch checked={percent} onChange={setPercent} />
-              </div>
+              {basis === "total" && (
+                <div className="flex items-center justify-between">
+                  <span className="text-label text-ink-muted">100% stacked</span>
+                  <Switch checked={percent} onChange={setPercent} />
+                </div>
+              )}
               <div className="flex items-center justify-between gap-3">
                 <span className="text-label text-ink-muted">Basis</span>
                 {/* native select avoids a portal-in-popover outside-click conflict */}
@@ -209,15 +227,22 @@ export const cost: StatModule = {
                 tick={axisTick}
                 axisLine={false}
                 tickLine={false}
-                domain={percent ? [0, 100] : undefined}
-                tickFormatter={percent ? (v) => `${v}%` : (v) => compact(Number(v))}
+                domain={pct ? [0, 100] : undefined}
+                tickFormatter={pct ? (v) => `${v}%` : (v) => compact(Number(v))}
               />
               <YAxis yAxisId="count" orientation="right" tick={axisTick} axisLine={false} tickLine={false} allowDecimals={false} />
               <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ fill: CHART.cursor }} />
-              <Bar yAxisId="cost" dataKey="domestic" name="Domestic" stackId="a" fill={color.accent} isAnimationActive={false}
-                cursor="pointer" onClick={(_: unknown, i: number) => onPick(rows[i].id)} />
-              <Bar yAxisId="cost" dataKey="international" name="International" stackId="a" fill={color.secondary} radius={[3, 3, 0, 0]} isAnimationActive={false}
-                cursor="pointer" onClick={(_: unknown, i: number) => onPick(rows[i].id)} />
+              {split ? (
+                <>
+                  <Bar yAxisId="cost" dataKey="domestic" name="Domestic" stackId="a" fill={color.accent} isAnimationActive={false}
+                    cursor="pointer" onClick={(_: unknown, i: number) => onPick(rows[i].id)} />
+                  <Bar yAxisId="cost" dataKey="international" name="International" stackId="a" fill={color.secondary} radius={[3, 3, 0, 0]} isAnimationActive={false}
+                    cursor="pointer" onClick={(_: unknown, i: number) => onPick(rows[i].id)} />
+                </>
+              ) : (
+                <Bar yAxisId="cost" dataKey="combined" name={metric === "cash" ? "Cost" : "Points"} fill={color.accent} radius={[3, 3, 0, 0]} isAnimationActive={false}
+                  cursor="pointer" onClick={(_: unknown, i: number) => onPick(rows[i].id)} />
+              )}
               <Line yAxisId="count" type="monotone" dataKey="flights" name="Priced flights" stroke="#A78BFA" strokeWidth={2} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
