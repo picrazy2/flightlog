@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { restGet } from "@/lib/supabase";
+import { useStore } from "@/state/store";
 
 export interface BookingRow {
   id: string;
@@ -14,11 +15,12 @@ export interface BookingRow {
 }
 
 export function useBookings() {
+  const userId = useStore((s) => s.userId); // scope to the active log, like useFlights
   return useQuery({
-    queryKey: ["bookings"],
+    queryKey: ["bookings", userId],
     queryFn: () =>
       restGet<BookingRow[]>(
-        "bookings?select=id,booking_refs_airline,booking_ref_platform,booking_platform,cost_cash,cost_currency,cost_points,points_program,emails&order=cost_cash.desc.nullslast",
+        `bookings?user_id=eq.${userId}&select=id,booking_refs_airline,booking_ref_platform,booking_platform,cost_cash,cost_currency,cost_points,points_program,emails&order=cost_cash.desc.nullslast`,
       ),
   });
 }
