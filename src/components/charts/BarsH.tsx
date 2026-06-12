@@ -91,6 +91,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
             dataKey="label"
             tickLine={false}
             axisLine={false}
+            interval={0}
             width={tickIcon ? 76 : 92}
             tick={
               tickBadge

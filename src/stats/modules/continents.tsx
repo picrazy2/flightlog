@@ -9,15 +9,16 @@ import { categoricalFor, color } from "@/lib/palette";
 import { useStore } from "@/state/store";
 import { continentFilter, regionFilter } from "../filters";
 
+// Six distinct hues; none is the amber reserved for inter-continental (color.secondary).
 const CONT_COLOR: Record<ContinentCode, string> = {
-  AF: "#FFC061",
-  AS: "#FB7185",
-  EU: "#5B9DFF",
-  NA: "#34D399",
-  OC: "#A78BFA",
-  SA: "#F59E0B",
+  AF: "#FB923C", // orange
+  AS: "#FB7185", // rose
+  EU: "#5B9DFF", // blue
+  NA: "#34D399", // green
+  OC: "#A78BFA", // purple
+  SA: "#22D3EE", // cyan
 };
-const INTERCONT = color.secondary; // inter-continental flights
+const INTERCONT = color.secondary; // inter-continental flights (amber)
 
 // World totals from the country reference.
 const TOTAL_BY_CONT = new Map<ContinentCode, number>();
@@ -214,7 +215,6 @@ export const continents: StatModule = {
   // Map: intra-continent flights take the continent colour; inter-continental flights
   // take the international colour. Airports/countries are tinted by continent.
   map: {
-    layers: ["choropleth"],
     colorAirport: (a) => {
       const c = a.country ? contOf(a.country) : null;
       return c ? CONT_COLOR[c] : null;
@@ -230,8 +230,6 @@ export const continents: StatModule = {
       const a = contOf(f.arr_country);
       return d && a && d === a ? d : "intercont";
     },
-    choropleth: () =>
-      Object.entries(COUNTRY_GEO).map(([iso, g]) => ({ iso, color: CONT_COLOR[g.continent] })),
     legend: () => ({
       title: "Continents",
       items: [
