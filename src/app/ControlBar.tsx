@@ -40,13 +40,14 @@ export function ControlBar({ ctx }: { ctx: StatContext }) {
           <div className="flex shrink-0 items-center gap-1.5">
             <Button
               variant="ghost"
-              size="md"
+              size="lg"
               iconOnly
               aria-label="Database"
               title="Database (flights, bookings, import)"
+              className="rounded-full bg-[rgba(91,157,255,0.14)] text-accent hover:scale-105 hover:bg-[rgba(91,157,255,0.28)]"
               onClick={() => setDbOpen(true)}
             >
-              <Icon name="add" color="var(--accent)" />
+              <Icon name="add" color="currentColor" size={20} />
             </Button>
             <SettingsMenu />
           </div>

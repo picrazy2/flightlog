@@ -34,6 +34,9 @@ export type LegendFilter = Record<string, boolean>; // key -> isOff
 
 // phone viewport at first load → drives mobile-only default state
 const MOBILE_INIT = typeof window !== "undefined" && window.innerWidth < 768;
+// landscape viewport → default to the flat map (it can show the whole world width);
+// a tall/portrait viewport defaults to the globe instead
+const LANDSCAPE_INIT = typeof window !== "undefined" && window.innerWidth >= window.innerHeight;
 
 // mobile: which bottom drawer is expanded, and what map feature is selected (the
 // "popup" drawer's content). On desktop these are unused (popups render on the map).
@@ -93,7 +96,7 @@ export const useStore = create<AppState>()(
   crossFilters: [],
   // mobile opens on the globe with the legend expanded (persisted projection wins for
   // returning users); desktop defaults to the flat map with drawers collapsed
-  projection: MOBILE_INIT ? "globe" : "mercator",
+  projection: LANDSCAPE_INIT ? "mercator" : "globe",
   temporal: "all",
   dbOpen: false,
   aboutOpen: false,

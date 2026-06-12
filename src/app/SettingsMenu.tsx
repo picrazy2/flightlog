@@ -29,9 +29,12 @@ export function SettingsMenu() {
           onClick={toggle}
           aria-label="Settings"
           title="Settings"
-          className={cn("focus-ring grid h-9 w-9 place-items-center rounded-full", open ? "bg-surface-2" : "hover:bg-surface-2")}
+          className={cn(
+            "focus-ring grid h-10 w-10 place-items-center rounded-full transition-[background-color,transform,color] duration-150 ease-out hover:scale-105 active:scale-95",
+            open ? "bg-surface-3 text-accent" : "text-ink-muted hover:bg-surface-3 hover:text-ink",
+          )}
         >
-          <Icon name="setting" size={18} color={open ? "var(--accent)" : "currentColor"} />
+          <Icon name="setting" size={19} color={open ? "var(--accent)" : "currentColor"} />
         </button>
       )}
     >

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import maplibregl from "maplibre-gl";
-import { DARK_STYLE, INITIAL_VIEW } from "@/map/darkStyle";
+import { DARK_STYLE } from "@/map/darkStyle";
 import { buildFeatures } from "@/map/features";
 import { useStore } from "@/state/store";
 import { useFlights } from "@/data/useFlights";
@@ -37,6 +37,24 @@ interface Props {
   ctx: StatContext;
   encoding: MapEncoding | undefined;
   isMobile?: boolean;
+}
+
+// Initial framing for the current projection + viewport. Flat: fit the world so the two
+// antimeridians sit at the left/right edges, centred on the prime meridian a touch north
+// of the equator. Globe: centre on the most-visited airport (as mobile does).
+function initialView(
+  w: number,
+  proj: "mercator" | "globe",
+  ctx: StatContext,
+): { center: [number, number]; zoom: number } {
+  if (proj === "globe") {
+    const top = [...ctx.airports.values()]
+      .filter((a) => a.lng != null && a.lat != null)
+      .sort((a, b) => b.visits - a.visits)[0];
+    return { center: top ? [top.lng!, top.lat!] : [10, 25], zoom: 1.5 };
+  }
+  // mercator world width = 512·2^zoom px → set it equal to the viewport width
+  return { center: [0, 16], zoom: Math.max(0, Math.log2(w / 512)) };
 }
 
 export function MapHost({ ctx, encoding, isMobile }: Props) {
@@ -76,11 +94,13 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
   // init once
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+    const proj = useStore.getState().projection;
+    const view = initialView(containerRef.current.clientWidth || window.innerWidth, proj, ctxRef.current);
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: DARK_STYLE,
-      center: INITIAL_VIEW.center,
-      zoom: INITIAL_VIEW.zoom,
+      center: view.center,
+      zoom: view.zoom,
       attributionControl: { compact: true },
     });
     mapRef.current = map;
@@ -207,16 +227,8 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
 
       readyRef.current = true;
       setReady(true);
-      map.setProjection({ type: useStore.getState().projection });
+      map.setProjection({ type: proj });
       pushData();
-
-      // mobile first load: zoom out onto the most-visited airport (globe view)
-      if (isMobileRef.current) {
-        const top = [...ctxRef.current.airports.values()]
-          .filter((a) => a.lng != null && a.lat != null)
-          .sort((a, b) => b.visits - a.visits)[0];
-        if (top) map.jumpTo({ center: [top.lng!, top.lat!], zoom: 1.5 });
-      }
 
       // hover popups
       map.on("mousemove", "airports", (e) => {

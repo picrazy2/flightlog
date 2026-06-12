@@ -19,6 +19,7 @@ const AIRPORT_CITY_OVERRIDES: Record<string, string> = {
   MXP: "Milan",
   XIY: "Xi'an",
   XNN: "Xining",
+  IAD: "Washington", // Dulles sits in Dulles/Sterling VA but serves Washington DC
 };
 
 // OurAirports municipalities often carry a "(District)" suffix (e.g. "Shanghai
