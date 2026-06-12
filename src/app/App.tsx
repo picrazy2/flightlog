@@ -13,11 +13,36 @@ import { MobileShell } from "./mobile/MobileShell";
 import { Legend } from "@/components/ui/Legend";
 import { Button } from "@/components/ui/Button";
 import { useIsMobile } from "@/lib/useIsMobile";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Visit with ?splash to hold the intro for a few seconds (to preview the animation).
 const wantSplashPreview = () =>
   typeof window !== "undefined" && /(?:[?&]|#).*splash/.test(window.location.search + window.location.hash);
+
+const SPLASH_DELAY = 450; // blank dark screen before the intro fades in
+const SPLASH_MIN = 1300; // once the intro is shown, keep it at least this long (≈ its run)
+
+// Decides whether the splash is on screen. While `active`, it's shown. When `active`
+// clears: hide immediately if we never crossed SPLASH_DELAY (fast load → no flash), else
+// linger until the intro has had its minimum run so it never cuts off mid-animation.
+function useSplashGate(active: boolean) {
+  const [visible, setVisible] = useState(active);
+  const start = useRef(typeof performance !== "undefined" ? performance.now() : 0);
+  useEffect(() => {
+    if (active) {
+      setVisible(true);
+      return;
+    }
+    const elapsed = performance.now() - start.current;
+    if (elapsed < SPLASH_DELAY) {
+      setVisible(false);
+      return;
+    }
+    const t = setTimeout(() => setVisible(false), Math.max(0, SPLASH_DELAY + SPLASH_MIN - elapsed));
+    return () => clearTimeout(t);
+  }, [active]);
+  return visible;
+}
 
 export function App() {
   const { ctx, isLoading, error } = useStatContext();
@@ -34,6 +59,7 @@ export function App() {
     const t = setTimeout(() => setHeld(false), 3500);
     return () => clearTimeout(t);
   }, [held]);
+  const splashVisible = useSplashGate(held || isLoading);
 
   if (error) {
     return (
@@ -42,13 +68,8 @@ export function App() {
       </div>
     );
   }
-  if (held || !ctx) {
-    return held || isLoading ? (
-      <SplashScreen />
-    ) : (
-      <div className="grid h-full place-items-center text-ink-muted">No data</div>
-    );
-  }
+  if (splashVisible) return <SplashScreen />;
+  if (!ctx) return <div className="grid h-full place-items-center text-ink-muted">No data</div>;
 
   // no active stat panel: colour by year when tracks are on, else dom/intl binary
   const encoding = moduleById(activeId)?.map ?? (showTracks ? yearMapEncoding : defaultEncodingModule.map);
