@@ -68,6 +68,7 @@ export const airlines: StatModule = {
 
     return (
       <>
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Airlines by {metricName[metric]}, split domestic vs international</div>
         <div className="flex items-center justify-between gap-2">
           {metricControl}
           <OptionsButton>
@@ -199,6 +200,7 @@ export const aircraft: StatModule = {
     return (
       <>
         <MiniStats items={cards} cols={4} />
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Aircraft types by {metricName[metric]}, split domestic vs international</div>
         <div className="flex items-center justify-between gap-2">
           {control}
           <OptionsButton>

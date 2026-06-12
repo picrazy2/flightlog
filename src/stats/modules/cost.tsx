@@ -148,6 +148,10 @@ export const cost: StatModule = {
 
     return (
       <>
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
+          {metric === "cash" ? "Cash spend" : "Points spent"} by {group === "year" ? "year" : "cabin class"}
+          {basis !== "total" ? ` · per ${basis === "km" ? (km ? "km" : "mi") : basis}` : ""}, with priced-flight count
+        </div>
         <div className="flex items-center justify-between gap-2">
           <Segmented
             aria-label="Cost metric"

@@ -52,7 +52,12 @@ export function countModule(opts: {
         .map((c) => c.id.slice(opts.facet.length + 1));
       return (
         <>
-          {control}
+          <div className="flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-eyebrow tracking-[0.01em] text-ink-faint">
+              Top {opts.eyebrow.toLowerCase()} by {metricName[metric]}
+            </span>
+            {control}
+          </div>
           <BarsH
             rows={ranked.map((r) => ({ id: r.id, label: r.label, count: r.v }))}
             series={[{ key: "count", name: metricName[metric], color: color.accent }]}

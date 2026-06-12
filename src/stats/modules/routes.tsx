@@ -295,6 +295,9 @@ export const routes: StatModule = {
 
     return (
       <>
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
+          Top {directed === "directed" ? "directed routes" : "routes"} by {metric}, stacked by airline
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Segmented
             aria-label="Direction"

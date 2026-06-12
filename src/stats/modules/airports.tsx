@@ -76,6 +76,8 @@ export const airports: StatModule = {
     const airportActive = crossFilters.filter((c) => c.id.startsWith("airport:")).map((c) => c.id.slice("airport:".length));
 
     const groupControl = (
+      <>
+      <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Most-visited airports — choose how to break each bar down</div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Segmented
           aria-label="Breakdown"
@@ -101,6 +103,7 @@ export const airports: StatModule = {
           )}
         </OptionsButton>
       </div>
+      </>
     );
 
     // Visit type → one airport per bar, stacked departures / arrivals / connections.

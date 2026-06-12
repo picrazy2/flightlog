@@ -76,6 +76,7 @@ export const cabinClass: StatModule = {
     return (
       <>
         <MiniStats items={cards} />
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Cabin by {metricName[metric]}, split domestic vs international</div>
         <div className="flex items-center justify-between gap-2">
           {control}
           <OptionsButton>

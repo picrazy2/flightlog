@@ -160,6 +160,7 @@ export const delays: StatModule = {
     return (
       <>
         <MiniStats items={cards} cols={3} />
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Average departure &amp; arrival delay (min) and % of flights delayed, by year</div>
         <ChartLegend series={lineSeries} />
         <div className="shrink-0" style={{ height: 200 }}>
           <ResponsiveContainer width="100%" height="100%">

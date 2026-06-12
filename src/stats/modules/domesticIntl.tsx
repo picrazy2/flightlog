@@ -72,7 +72,10 @@ export const domesticIntl: StatModule = {
 
     return (
       <>
-        {control}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-eyebrow tracking-[0.01em] text-ink-faint">Domestic vs international by {metricName[metric]}</span>
+          {control}
+        </div>
         <BarsH
           height={110}
           rows={[
