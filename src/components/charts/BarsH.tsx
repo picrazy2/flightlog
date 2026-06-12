@@ -66,7 +66,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
   return (
     <div>
       <ChartLegend series={series} />
-      <div style={{ height: h, cursor: pick ? "pointer" : undefined }}>
+      <div className="transition-[height] duration-300 ease-out" style={{ height: h, cursor: pick ? "pointer" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           layout="vertical"

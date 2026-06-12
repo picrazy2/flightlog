@@ -5,6 +5,7 @@ import { BarsV } from "@/components/charts/BarsV";
 import { type BarRowData } from "@/components/charts/BarsH";
 import { Segmented } from "@/components/ui/Segmented";
 import { Chevron } from "@/components/ui/Icon";
+import { Collapse } from "@/components/ui/Collapse";
 import { categoricalFor, color } from "@/lib/palette";
 import { useStore, type CrossFilter } from "@/state/store";
 import { continentFilter, regionFilter } from "../filters";
@@ -205,7 +206,7 @@ export const continents: StatModule = {
             );
           })}
         </div>
-        {expanded && (
+        <Collapse open={!!expanded}>
           <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface-2/40 p-1.5">
             {expandedSubs.map(({ sub, vis, total, pct: p }) => (
               <div key={sub}>
@@ -223,13 +224,13 @@ export const continents: StatModule = {
                 >
                   <span className={`truncate text-left text-caption ${activeRegions.has(sub) ? "text-accent" : "text-ink-muted"}`}>{sub}</span>
                   <span className="h-2 rounded-full bg-surface-3">
-                    <span className="block h-full rounded-full" style={{ width: `${p}%`, backgroundColor: CONT_COLOR[expanded] }} />
+                    <span className="block h-full rounded-full transition-[width] duration-300 ease-out" style={{ width: `${p}%`, backgroundColor: expanded ? CONT_COLOR[expanded] : undefined }} />
                   </span>
                   <span className="tnum whitespace-nowrap text-caption text-ink-muted">
                     {vis}/{total} · <span className="text-ink">{p}%</span>
                   </span>
                 </button>
-                {openRegions.has(sub) && (
+                <Collapse open={openRegions.has(sub)}>
                   <div className="flex flex-wrap gap-1 px-1.5 pb-1.5 pt-1">
                     {countriesInRegion(sub).map((iso) => {
                       const seen = visited.has(iso);
@@ -243,11 +244,11 @@ export const continents: StatModule = {
                       );
                     })}
                   </div>
-                )}
+                </Collapse>
               </div>
             ))}
           </div>
-        )}
+        </Collapse>
 
         <div className="flex items-center gap-2">
           <Segmented
