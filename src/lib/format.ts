@@ -54,7 +54,9 @@ export function smartNum(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: smartDecimals(n) });
 }
 
-// Abbreviated, always ~3 significant figures (1.23k, 52.3k, 1.23m). Used for cards/axes.
+// Abbreviated for cards/axes: 2 significant figures, except a 3-integer-digit value
+// (100–999) keeps all 3. So 94,230→94k, 101,123→101k, 8,923→8.9k, 823.2→823, 8.42→8.4,
+// 0.123→0.12.
 export function compact(n: number): string {
   if (!isFinite(n)) return "0";
   const sign = n < 0 ? "-" : "";
@@ -65,7 +67,10 @@ export function compact(n: number): string {
     x /= 1000;
     u += 1;
   }
-  let s = x.toPrecision(3);
+  if (x === 0) return "0";
+  const sig = x >= 100 ? 3 : 2;
+  const decimals = Math.max(0, sig - 1 - Math.floor(Math.log10(x)));
+  let s = x.toFixed(decimals);
   if (s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, "");
   return sign + s + units[u];
 }
