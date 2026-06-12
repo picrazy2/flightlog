@@ -307,12 +307,24 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
         }
         // airport markers
         if (map.getLayer("airports")) {
-          const iconOpacity = expr(
-            hl.kind === "airport"
-              ? ["case", ["==", ["get", "iata"], hl.iata], 1, 0.12]
-              // route: keep the two endpoint airports
-              : ["case", ["in", ["get", "iata"], ["literal", [hl.dep, hl.arr]]], 1, 0.12],
-          );
+          let iconOpacity: maplibregl.ExpressionSpecification;
+          if (hl.kind === "airport") {
+            // keep the selected airport AND the airports at the far end of its routes lit
+            const neighbors = new Set<string>();
+            for (const f of ctxRef.current.flights) {
+              if (f.dep_iata === hl.iata) neighbors.add(f.arr_iata);
+              else if (f.arr_iata === hl.iata) neighbors.add(f.dep_iata);
+            }
+            iconOpacity = expr([
+              "case",
+              ["==", ["get", "iata"], hl.iata], 1,
+              ["in", ["get", "iata"], ["literal", [...neighbors]]], 0.9,
+              0.12,
+            ]);
+          } else {
+            // route: keep the two endpoint airports
+            iconOpacity = expr(["case", ["in", ["get", "iata"], ["literal", [hl.dep, hl.arr]]], 1, 0.12]);
+          }
           map.setPaintProperty("airports", "icon-opacity", iconOpacity);
         }
       };

@@ -16,7 +16,7 @@ export interface StatContext {
   compareMode: "delta" | "recent" | null;
 }
 
-export type Formatter = (n: number, s: Settings) => { value: string; unit: string };
+export type Formatter = (n: number, s: Settings) => { value: string; unit: string; full?: string };
 
 export interface CardStat {
   value: number;

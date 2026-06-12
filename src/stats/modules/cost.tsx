@@ -122,7 +122,7 @@ export const cost: StatModule = {
 
     // many years → make the grouped bars horizontally scrollable, opened at the most
     // recent (right-most) year
-    const PER_YEAR = 32;
+    const PER_YEAR = 42;
     const scrollRef = useRef<HTMLDivElement>(null);
     const scrollable = !showPie && rows.length > 10;
     useLayoutEffect(() => {

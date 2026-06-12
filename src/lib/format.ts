@@ -75,9 +75,12 @@ export function compact(n: number): string {
   return sign + s + units[u];
 }
 
-export function formatDistance(miles: number, settings: Settings): { value: string; unit: string } {
+// `full` is the un-abbreviated value (for card hover): "12,345 mi", "$52,345", etc.
+const grouped = (n: number) => Math.round(n).toLocaleString();
+
+export function formatDistance(miles: number, settings: Settings): { value: string; unit: string; full: string } {
   const v = settings.units === "km" ? miles * MI_TO_KM : miles;
-  return { value: compact(v), unit: settings.units };
+  return { value: compact(v), unit: settings.units, full: `${grouped(v)} ${settings.units}` };
 }
 
 // Standardized duration: <60min → "45 min"; <24h → "12h 30m"; ≥24h → "3d 4h".
@@ -97,21 +100,22 @@ export function formatInt(n: number): string {
   return compact(n);
 }
 
-export function formatUSD(n: number): { value: string; unit: string } {
-  return { value: `$${compact(n)}`, unit: "" };
+export function formatUSD(n: number): { value: string; unit: string; full: string } {
+  return { value: `$${compact(n)}`, unit: "", full: `$${grouped(n)}` };
 }
 
 // A USD amount rendered in the user's chosen display currency.
-export function formatMoney(usd: number, currency: string): { value: string; unit: string } {
-  return { value: `${currencySymbol(currency)}${compact(fromUSD(usd, currency))}`, unit: "" };
+export function formatMoney(usd: number, currency: string): { value: string; unit: string; full: string } {
+  const v = fromUSD(usd, currency);
+  return { value: `${currencySymbol(currency)}${compact(v)}`, unit: "", full: `${currencySymbol(currency)}${grouped(v)}` };
 }
 
-export function formatPoints(n: number): { value: string; unit: string } {
-  return { value: compact(n), unit: "pts" };
+export function formatPoints(n: number): { value: string; unit: string; full: string } {
+  return { value: compact(n), unit: "pts", full: `${grouped(n)} pts` };
 }
 
-export function formatPct(n: number): { value: string; unit: string } {
-  return { value: `${Math.round(n)}%`, unit: "" };
+export function formatPct(n: number): { value: string; unit: string; full: string } {
+  return { value: `${Math.round(n)}%`, unit: "", full: `${n.toFixed(1)}%` };
 }
 
 // minutes between two ISO instants

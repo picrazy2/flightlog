@@ -61,9 +61,11 @@ export function StatCard({ model, settings, compareMode, active, onClick, classN
       <div className={cn("flex", grouped ? "items-stretch divide-x divide-border" : "items-end")}>
         {model.stats.map((s, i) => {
           const f = s.format ? s.format(s.value, settings) : { value: compact(s.value), unit: s.unit ?? "" };
+          // hover shows the un-abbreviated value (e.g. "$52,345" / "12,345 mi" / "1,234 flights")
+          const full = "full" in f && f.full ? f.full : `${s.value.toLocaleString()}${s.unit ? ` ${s.unit}` : ""}`;
           return (
             <div key={i} className={cn("flex flex-col gap-0.5", grouped && (i > 0 ? "pl-2.5" : "pr-2.5"))}>
-              <div className="flex items-baseline gap-1">
+              <div className="flex items-baseline gap-1" title={full}>
                 <span className="tnum font-display text-[1.6rem] font-bold leading-none text-ink">{f.value}</span>
                 {grouped && (f.unit || s.unit) && (
                   <span className="whitespace-nowrap text-caption font-medium text-ink-muted">{f.unit || s.unit}</span>
