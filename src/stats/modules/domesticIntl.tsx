@@ -109,7 +109,7 @@ export const domesticIntl: StatModule = {
         <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
           Domestic vs international by {metricName[metric]}{chartType === "bar" ? ", by year" : " · all time"}
         </div>
-        <ChartLegend series={diSeries} />
+        {chartType === "pie" && <ChartLegend series={diSeries} />}
         {chartType === "bar" ? (
           <BarsV
             rows={yearRows}

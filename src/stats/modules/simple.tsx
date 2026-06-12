@@ -279,7 +279,7 @@ export const aircraft: StatModule = {
                 ]}
               />
             </div>
-            <ChartLegend series={bodySeries} />
+            {bodyChart === "pie" && <ChartLegend series={bodySeries} />}
             {bodyChart === "bar" ? (
               <BarsV rows={bodyYearRows} series={bodySeries} unit={metricName[metric]} />
             ) : (
