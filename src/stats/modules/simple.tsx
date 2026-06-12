@@ -38,7 +38,7 @@ export const airlines: StatModule = {
   // card (count of airlines) comes from countModule; Panel is custom below.
   ...countModule({
     id: "airlines",
-    order: 3,
+    order: 5.5, // right after Countries (5), before Routes (6)
     eyebrow: "Airlines",
     unit: "airlines",
     facet: "airline",
