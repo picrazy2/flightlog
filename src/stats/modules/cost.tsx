@@ -127,12 +127,6 @@ export const cost: StatModule = {
 
     // pie: cash vs points collapsed across years — sized by flight share (one common unit),
     // labelled with the active metric (counts, or cash $ / points pts).
-    const pieLabel = (kind: "cash" | "points") =>
-      metric === "flights"
-        ? `${kind === "cash" ? t.cashFlights : t.pointsFlights}`
-        : kind === "cash"
-        ? `${sym}${compact(t.cashSpend)}`
-        : `${compact(t.pointsSpend)} pts`;
     const pieData = [
       { id: "cash", name: cashName, value: t.cashFlights, color: CASH_COLOR },
       { id: "points", name: pointsName, value: t.pointsFlights, color: POINTS_COLOR },
@@ -212,10 +206,10 @@ export const cost: StatModule = {
               </ComposedChart>
             ) : (
               <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}
-                  label={(e: { index?: number }) => pieLabel(pieData[e.index ?? 0].id as "cash" | "points")} labelLine={false} isAnimationActive={false}>
+                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2} stroke="none" isAnimationActive={false}>
                   {pieData.map((s) => <Cell key={s.id} fill={s.color} />)}
                 </Pie>
+                <Tooltip content={<ChartTooltip unit="flights" />} />
               </PieChart>
             )}
           </ResponsiveContainer>

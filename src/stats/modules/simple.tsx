@@ -3,8 +3,9 @@ import { countModule } from "./countModule";
 import { color, CATEGORICAL } from "@/lib/palette";
 import { airlineFilter, cityFilter, aircraftFilter, bodyFilter } from "../filters";
 import { uniqueCount } from "@/lib/aggregate";
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { BarsH, type BarRowData } from "@/components/charts/BarsH";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import { BarsV } from "@/components/charts/BarsV";
 import { ChartLegend } from "@/components/charts/ChartLegend";
 import { Segmented } from "@/components/ui/Segmented";
@@ -293,13 +294,13 @@ export const aircraft: StatModule = {
                       innerRadius={45}
                       outerRadius={80}
                       paddingAngle={2}
+                      stroke="none"
                       isAnimationActive={false}
                       onClick={(e: { payload?: { id?: string } }) => e.payload?.id && toggleCrossFilter(bodyFilter(e.payload.id as BodyClass))}
-                      label={(e: { name?: string; value?: number }) => `${e.name}: ${Number(e.value ?? 0).toLocaleString()}`}
-                      labelLine={false}
                     >
-                      {bodyPie.map((s) => <Cell key={s.id} fill={s.color} cursor="pointer" />)}
+                      {bodyPie.map((s) => <Cell key={s.id} fill={s.color} cursor="pointer" fillOpacity={activeBodies.size && !activeBodies.has(s.id) ? 0.3 : 1} />)}
                     </Pie>
+                    <Tooltip content={<ChartTooltip unit={metricName[metric]} />} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

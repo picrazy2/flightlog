@@ -31,7 +31,7 @@ export function EntityChart({ rows, series, chartType, onPick, activeId, unit, p
     const slices: Slice[] = top.map((t, i) => ({ ...t, color: CATEGORICAL[i % CATEGORICAL.length] }));
     const otherSum = rest.reduce((s, t) => s + t.value, 0);
     if (otherSum > 0) slices.push({ id: "__other", label: "Other", value: otherSum, color: OTHER_COLOR });
-    return <PieSlices slices={slices} unit={unit} onPick={(id) => id !== "__other" && onPick?.(id)} />;
+    return <PieSlices slices={slices} unit={unit} activeId={activeId} onPick={(id) => id !== "__other" && onPick?.(id)} />;
   }
   return (
     <BarsH

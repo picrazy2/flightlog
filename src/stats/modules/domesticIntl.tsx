@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { StatModule } from "../types";
 import { color } from "@/lib/palette";
 import { BarsH } from "@/components/charts/BarsH";
 import { BarsV } from "@/components/charts/BarsV";
 import { ChartLegend } from "@/components/charts/ChartLegend";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import { Segmented } from "@/components/ui/Segmented";
 import { formatPct } from "@/lib/format";
 import { useStore, ALL_TIME } from "@/state/store";
@@ -38,9 +39,10 @@ export const domesticIntl: StatModule = {
     };
   },
   Panel: ({ ctx }) => {
-    const { toggleCrossFilter, range, setRange } = useStore();
+    const { toggleCrossFilter, crossFilters, range, setRange } = useStore();
     const { metric, control } = useMetricToggle();
     const [chartType, setChartType] = useState<"bar" | "pie">("bar");
+    const activeTrips = crossFilters.filter((c) => c.id.startsWith("trip:")).map((c) => c.id.slice("trip:".length));
 
     // dom/intl split per year, weighted by the active metric (over flights not narrowed by trip)
     const byYear = new Map<string, { domestic: number; international: number }>();
@@ -129,13 +131,13 @@ export const domesticIntl: StatModule = {
                   innerRadius={45}
                   outerRadius={80}
                   paddingAngle={2}
+                  stroke="none"
                   isAnimationActive={false}
                   onClick={(e: { payload?: { id?: string } }) => e.payload?.id && toggleCrossFilter(tripTypeFilter(e.payload.id as "domestic" | "international"))}
-                  label={(e: { name?: string; value?: number }) => `${e.name}: ${Number(e.value ?? 0).toLocaleString()}`}
-                  labelLine={false}
                 >
-                  {pieData.map((s) => <Cell key={s.id} fill={s.color} cursor="pointer" />)}
+                  {pieData.map((s) => <Cell key={s.id} fill={s.color} cursor="pointer" fillOpacity={activeTrips.length && !activeTrips.includes(s.id) ? 0.3 : 1} />)}
                 </Pie>
+                <Tooltip content={<ChartTooltip unit={metricName[metric]} />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
