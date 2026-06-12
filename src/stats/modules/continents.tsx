@@ -51,6 +51,8 @@ for (const { continent, subregion } of Object.values(COUNTRY_GEO)) {
 for (const c of CONTINENTS) {
   SUBREGIONS_OF.set(c.code, [...new Set(Object.values(COUNTRY_GEO).filter((g) => g.continent === c.code).map((g) => g.subregion))].sort());
 }
+const TOTAL_COUNTRIES = Object.keys(COUNTRY_GEO).length;
+const TOTAL_REGIONS = TOTAL_BY_SUBREGION.size;
 
 function visitedCountries(ctx: StatContext) {
   const m = new Map<string, { visits: number; name: string }>();
@@ -128,8 +130,9 @@ export const continents: StatModule = {
     CONTINENTS.forEach((c, ci) => {
       for (const sub of SUBREGIONS_OF.get(c.code) ?? []) {
         const total = TOTAL_BY_SUBREGION.get(sub) ?? 0;
+        const vis = subVisited(c.code, sub);
         const id = `${c.code}:${sub}`;
-        rows2.push({ id, label: sub, pct: total ? Math.round((subVisited(c.code, sub) / total) * 100) : 0 });
+        rows2.push({ id, label: sub, pct: total ? Math.round((vis / total) * 100) : 0, sub: `${vis} / ${total} countries` });
         rowColor.set(id, CONT_COLOR[c.code]);
       }
       if (ci < CONTINENTS.length - 1) rows2.push({ id: `__gap${ci}`, label: "", pct: 0 });
@@ -142,8 +145,17 @@ export const continents: StatModule = {
       color: CONT_COLOR[c.code],
     }));
 
+    const continentsVisited = visitedByCont.size;
+    const countriesVisited = visited.size;
+    const regionsVisited = new Set([...visited.keys()].map((iso) => COUNTRY_GEO[iso].subregion)).size;
+
     return (
       <>
+        <div className="text-label text-ink-muted">
+          <span className="text-ink">{continentsVisited}/6</span> continents ·{" "}
+          <span className="text-ink">{countriesVisited}/{TOTAL_COUNTRIES}</span> countries ·{" "}
+          <span className="text-ink">{regionsVisited}/{TOTAL_REGIONS}</span> regions
+        </div>
         {/* 6 metric cards (3 per row); click to expand a continent's per-region breakdown */}
         <div className="grid grid-cols-3 gap-1.5">
           {CONTINENTS.map((c) => {

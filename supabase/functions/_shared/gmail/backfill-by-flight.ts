@@ -128,20 +128,22 @@ export async function backfillByFlight(
           if (!matched.find((m) => m.id === f.id)) matched.push(f);
         }
 
+        const needsBooking = matched.filter((f) => !f.booking_id);
         if (matched.length === 0) {
           outcome = "no_match";
         } else if (!hasBookingContent(parsed)) {
           outcome = "no_booking_content";
+        } else if (needsBooking.length === 0) {
+          // every matched flight already has a booking — don't create an orphan
+          outcome = "already_linked";
         } else {
           const bookingId = await upsertBookingIfPresent(supabase, buildBookingInput(parsed, config.userId, msg), config.userId);
           if (bookingId) {
-            for (const f of matched) {
-              if (!f.booking_id) {
-                if (await linkBooking(supabase, f.id, bookingId, warnings)) {
-                  f.booking_id = bookingId;
-                  flightIds.push(f.id);
-                  linkedCount += 1;
-                }
+            for (const f of needsBooking) {
+              if (await linkBooking(supabase, f.id, bookingId, warnings)) {
+                f.booking_id = bookingId;
+                flightIds.push(f.id);
+                linkedCount += 1;
               }
             }
             await recomputeBookingSegmentCost(supabase, bookingId);
