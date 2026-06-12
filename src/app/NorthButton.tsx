@@ -12,15 +12,16 @@ function NorthNeedle({ bearing }: { bearing: number }) {
   );
 }
 
-// "Reset north / 2D" — appears under the fullscreen button on mobile/tablet, or on the
-// globe, whenever the map has been rotated or tilted. Tapping eases back to north + flat.
+// "Reset north / 2D" — sits under the fullscreen button on mobile/tablet and on the globe
+// (where the map is freely rotatable), plus on any rotated/tilted map. Tapping eases back
+// to north + flat. The needle reflects the live heading.
 export function NorthButton({ mobile }: { mobile?: boolean }) {
   const bearing = useStore((s) => s.mapBearing);
   const pitch = useStore((s) => s.mapPitch);
   const projection = useStore((s) => s.projection);
   const compact = useIsMobile(1024); // phone or tablet
   const oriented = Math.abs(bearing) > 0.5 || pitch > 0.5;
-  if (!((compact || projection === "globe") && oriented)) return null;
+  if (!(compact || projection === "globe" || oriented)) return null;
 
   const reset = () => window.dispatchEvent(new CustomEvent("journia:resetnorth"));
   const label = "Reset north and 2D";
