@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Popover } from "@/components/ui/Popover";
 import { useManageBooking } from "@/data/mutations";
 import type { BookingRow } from "@/data/useBookings";
 import type { Flight } from "@/lib/types";
+import { platformLabel, programLabel, PLATFORM_IDS, PROGRAM_IDS } from "@/lib/loyalty";
 
 const th = "px-3 py-2 text-left text-caption font-medium text-ink-faint whitespace-nowrap";
 const td = "px-3 py-1.5 text-label text-ink align-top";
@@ -20,18 +21,28 @@ function Cell({
   numeric,
   placeholder,
   onSave,
+  display,
+  truncate,
+  options,
 }: {
   value: string;
   canWrite: boolean;
   numeric?: boolean;
   placeholder?: string;
   onSave: (v: string) => Promise<void>;
+  display?: string; // shown instead of the raw value (e.g. a pretty program name)
+  truncate?: boolean; // ellipsize long values; full value on hover
+  options?: string[]; // autocomplete suggestions (known ids) while editing
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(false);
-  if (!canWrite) return <span className={value ? "" : "text-ink-faint"}>{value || "—"}</span>;
+  const dlId = useId();
+  const shown = display || value;
+  const trunc = truncate ? "block max-w-[150px] truncate" : "";
+  if (!canWrite)
+    return <span className={`${value ? "" : "text-ink-faint"} ${trunc}`} title={truncate && value ? value : undefined}>{shown || "—"}</span>;
   if (saving)
     return <span className="inline-flex items-center gap-1 text-caption text-ink-faint"><Spinner /> saving…</span>;
   if (!editing)
@@ -41,16 +52,18 @@ function Cell({
           setDraft(value);
           setEditing(true);
         }}
-        title={err ? "Save failed — click to retry" : undefined}
-        className={`focus-ring -mx-1 min-w-[2rem] rounded px-1 text-left hover:bg-surface-3 ${err ? "text-negative ring-1 ring-negative" : ""}`}
+        title={err ? "Save failed — click to retry" : truncate && value ? value : undefined}
+        className={`focus-ring -mx-1 min-w-[2rem] rounded px-1 text-left hover:bg-surface-3 ${trunc} ${err ? "text-negative ring-1 ring-negative" : ""}`}
       >
-        {value || <span className="text-ink-faint">{placeholder ?? "—"}</span>}
+        {shown || <span className="text-ink-faint">{placeholder ?? "—"}</span>}
       </button>
     );
   return (
+    <>
     <input
       autoFocus
       value={draft}
+      list={options ? dlId : undefined}
       inputMode={numeric ? "decimal" : undefined}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={async () => {
@@ -75,6 +88,8 @@ function Cell({
       }}
       className="focus-ring w-24 rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-label text-ink"
     />
+    {options && <datalist id={dlId}>{options.map((o) => <option key={o} value={o} />)}</datalist>}
+    </>
   );
 }
 
@@ -210,7 +225,12 @@ export function BookingsTab({
               const dates = fs.length
                 ? fs[0].flight_date === fs[fs.length - 1].flight_date
                   ? fs[0].flight_date
-                  : `${fs[0].flight_date} – ${fs[fs.length - 1].flight_date}`
+                  : (
+                    <>
+                      {fs[0].flight_date}
+                      <br />– {fs[fs.length - 1].flight_date}
+                    </>
+                  )
                 : "—";
               return (
                 <tr
@@ -226,10 +246,10 @@ export function BookingsTab({
                     {fs.length ? fs.map((f) => `${f.dep_iata}→${f.arr_iata}`).join(", ") : "—"}
                   </td>
                   <td className={`${td} font-mono`}>
-                    <Cell value={pnrText(b)} canWrite={canWrite} placeholder="add" onSave={(v) => savePnr(b, v)} />
+                    <Cell value={pnrText(b)} canWrite={canWrite} placeholder="add" truncate onSave={(v) => savePnr(b, v)} />
                   </td>
                   <td className={td}>
-                    <Cell value={b.booking_platform ?? b.booking_ref_platform ?? ""} canWrite={canWrite} onSave={(v) => save(b, { booking_platform: v || null })} />
+                    <Cell value={b.booking_platform ?? b.booking_ref_platform ?? ""} display={platformLabel(b.booking_platform ?? b.booking_ref_platform)} options={PLATFORM_IDS} canWrite={canWrite} truncate onSave={(v) => save(b, { booking_platform: v || null })} />
                   </td>
                   <td className={`${td} tnum`}>
                     <Cell value={b.cost_cash != null ? String(b.cost_cash) : ""} canWrite={canWrite} numeric onSave={(v) => save(b, { cost_cash: num(v) })} />
@@ -241,7 +261,7 @@ export function BookingsTab({
                     <Cell value={b.cost_points != null ? String(b.cost_points) : ""} canWrite={canWrite} numeric onSave={(v) => save(b, { cost_points: num(v) })} />
                   </td>
                   <td className={td}>
-                    <Cell value={b.points_program ?? ""} canWrite={canWrite} onSave={(v) => save(b, { points_program: v || null })} />
+                    <Cell value={b.points_program ?? ""} display={programLabel(b.points_program)} options={PROGRAM_IDS} canWrite={canWrite} truncate onSave={(v) => save(b, { points_program: v || null })} />
                   </td>
                   <td className={td}>
                     <EmailsCell emails={b.emails} />

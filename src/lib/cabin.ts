@@ -1,4 +1,5 @@
 import type { CabinClass, Flight } from "./types";
+import { programLabel } from "./loyalty";
 
 export const CABIN_LABELS: Record<CabinClass, string> = {
   economy: "Economy",
@@ -16,7 +17,8 @@ function fmtCost(cash: number | null, currency: string | null, points: number | 
     cash != null
       ? `${currency === "USD" || !currency ? "$" : ""}${Math.round(cash).toLocaleString()}${currency && currency !== "USD" ? ` ${currency}` : ""}`
       : null;
-  const pointsStr = points && points > 0 ? `${Math.round(points).toLocaleString()}${program ? ` ${program}` : " pts"}` : null;
+  const prog = program ? programLabel(program) : null;
+  const pointsStr = points && points > 0 ? `${Math.round(points).toLocaleString()}${prog ? ` ${prog}` : " pts"}` : null;
   return { cash: cashStr, points: pointsStr };
 }
 
