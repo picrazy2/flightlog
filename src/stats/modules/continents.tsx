@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { StatModule, StatContext } from "../types";
 import { CONTINENTS, COUNTRY_GEO, TERRITORY_PARENT, sovereignOf, type ContinentCode } from "@/lib/continents";
 import { BarsV } from "@/components/charts/BarsV";
-import { BarsH, type BarRowData } from "@/components/charts/BarsH";
+import { type BarRowData } from "@/components/charts/BarsH";
 import { Segmented } from "@/components/ui/Segmented";
 import { Chevron } from "@/components/ui/Icon";
 import { categoricalFor, color } from "@/lib/palette";
@@ -94,6 +94,7 @@ export const continents: StatModule = {
   Panel: ({ ctx }) => {
     const { toggleCrossFilter, crossFilters } = useStore();
     const [metric, setMetric] = useState<"countries" | "visits">("countries");
+    const [display, setDisplay] = useState<"percent" | "number">("percent");
     const [expanded, setExpanded] = useState<ContinentCode | null>(null);
     const activeCont = crossFilters.find((c) => c.id.startsWith("continent:"))?.id.split(":")[1] ?? null;
     const activeRegion = crossFilters.find((c) => c.id.startsWith("region:"))?.id.split(":")[1] ?? null;
@@ -107,16 +108,19 @@ export const continents: StatModule = {
     const subVisited = (cont: ContinentCode, sub: string) =>
       [...(visitedByCont.get(cont) ?? [])].filter((iso) => COUNTRY_GEO[iso].subregion === sub).length;
 
-    // Chart 1 — vertical bars per continent. Countries: single bar (coloured by
-    // continent). Visits: stacked by top country.
+    const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : 0);
+    const contVisits = (c: ContinentCode) => [...(visitedByCont.get(c) ?? [])].reduce((s, iso) => s + visited.get(iso)!.visits, 0);
+    const totalVisits = [...visited.values()].reduce((s, x) => s + x.visits, 0) || 1;
+    const isPct = display === "percent";
+
+    // Chart 1 — vertical bars per continent. Number shows the raw count (countries → one
+    // bar; visits → stacked by top country); % shows coverage (countries visited / total
+    // per continent) or share of total visits.
     let rows1: BarRowData[];
     let series1: { key: string; name: string; color: string }[];
     let colorByRow1: ((r: BarRowData) => string | undefined) | undefined;
-    if (metric === "countries") {
-      series1 = [{ key: "countries", name: "countries", color: color.accent }];
-      colorByRow1 = (r) => CONT_COLOR[r.id as ContinentCode];
-      rows1 = CONTINENTS.map((c) => ({ id: c.code, label: c.name, countries: visitedByCont.get(c.code)?.size ?? 0 }));
-    } else {
+    const unit1 = isPct ? "%" : metric === "countries" ? "countries" : "visits";
+    if (metric === "visits" && !isPct) {
       const top = [...visited.entries()].sort((a, b) => b[1].visits - a[1].visits).slice(0, 8).map(([iso]) => iso);
       const topSet = new Set(top);
       series1 = [
@@ -132,29 +136,33 @@ export const continents: StatModule = {
         }
         return row;
       });
+    } else {
+      series1 = [{ key: "v", name: unit1, color: color.accent }];
+      colorByRow1 = (r) => CONT_COLOR[r.id as ContinentCode];
+      rows1 = CONTINENTS.map((c) => {
+        const v = metric === "countries"
+          ? isPct ? pct(visitedByCont.get(c.code)?.size ?? 0, TOTAL_BY_CONT.get(c.code) ?? 0) : visitedByCont.get(c.code)?.size ?? 0
+          : pct(contVisits(c.code), totalVisits); // visits + percent → share of total visits
+        return { id: c.code, label: c.name, v };
+      });
     }
-
-    // Chart 2 — % of each region's countries visited; bars grouped by continent
-    // (a spacer row separates continents), skinnier than the default.
-    const rows2: BarRowData[] = [];
-    const rowColor = new Map<string, string>();
-    CONTINENTS.forEach((c, ci) => {
-      for (const sub of SUBREGIONS_OF.get(c.code) ?? []) {
-        const total = TOTAL_BY_SUBREGION.get(sub) ?? 0;
-        const vis = subVisited(c.code, sub);
-        const id = `${c.code}:${sub}`;
-        rows2.push({ id, label: sub, pct: total ? Math.round((vis / total) * 100) : 0, sub: `${vis} / ${total} countries` });
-        rowColor.set(id, CONT_COLOR[c.code]);
-      }
-      if (ci < CONTINENTS.length - 1) rows2.push({ id: `__gap${ci}`, label: "", pct: 0 });
-    });
-    const activeRegionRow = activeRegion ? rows2.find((r) => r.label === activeRegion)?.id ?? null : null;
 
     const cards = CONTINENTS.map((c) => ({
       label: c.name,
       value: `${visitedByCont.get(c.code)?.size ?? 0}/${TOTAL_BY_CONT.get(c.code) ?? 0}`,
       color: CONT_COLOR[c.code],
     }));
+
+    // Expanded continent → its regions as inline mini bars, sorted by % visited.
+    const expandedSubs = expanded
+      ? (SUBREGIONS_OF.get(expanded) ?? [])
+          .map((sub) => {
+            const total = TOTAL_BY_SUBREGION.get(sub) ?? 0;
+            const vis = subVisited(expanded, sub);
+            return { sub, vis, total, pct: total ? Math.round((vis / total) * 100) : 0 };
+          })
+          .sort((a, b) => b.pct - a.pct)
+      : [];
 
     return (
       <>
@@ -183,63 +191,62 @@ export const continents: StatModule = {
           })}
         </div>
         {expanded && (
-          <div className="rounded-lg border border-border bg-surface-2/40 p-1">
-            {(SUBREGIONS_OF.get(expanded) ?? []).map((sub) => (
+          <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface-2/40 p-1.5">
+            {expandedSubs.map(({ sub, vis, total, pct: p }) => (
               <button
                 key={sub}
                 onClick={() => toggleCrossFilter(regionFilter(sub))}
-                className="focus-ring flex w-full items-center justify-between rounded-md px-2 py-1 text-label hover:bg-surface-3"
+                className="focus-ring grid grid-cols-[6rem_1fr_auto] items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-3"
               >
-                <span className={activeRegion === sub ? "text-accent" : "text-ink-muted"}>{sub}</span>
-                <span className="tnum text-ink">
-                  {subVisited(expanded, sub)} <span className="text-ink-faint">/ {TOTAL_BY_SUBREGION.get(sub) ?? 0}</span>
+                <span className={`truncate text-left text-caption ${activeRegion === sub ? "text-accent" : "text-ink-muted"}`}>{sub}</span>
+                <span className="h-2 rounded-full bg-surface-3">
+                  <span className="block h-full rounded-full" style={{ width: `${p}%`, backgroundColor: CONT_COLOR[expanded] }} />
+                </span>
+                <span className="tnum whitespace-nowrap text-caption text-ink-muted">
+                  {vis}/{total} · <span className="text-ink">{p}%</span>
                 </span>
               </button>
             ))}
           </div>
         )}
 
-        <Segmented
-          aria-label="Metric"
-          size="sm"
-          className="w-[220px]"
-          value={metric}
-          onChange={(v) => setMetric(v)}
-          options={[
-            { value: "countries", label: "Countries" },
-            { value: "visits", label: "Visits" },
-          ]}
-        />
+        <div className="flex items-center gap-2">
+          <Segmented
+            aria-label="Metric"
+            size="sm"
+            value={metric}
+            onChange={(v) => setMetric(v)}
+            options={[
+              { value: "countries", label: "Countries" },
+              { value: "visits", label: "Visits" },
+            ]}
+          />
+          <Segmented
+            aria-label="Display"
+            size="sm"
+            value={display}
+            onChange={(v) => setDisplay(v)}
+            options={[
+              { value: "percent", label: "%" },
+              { value: "number", label: "Number" },
+            ]}
+          />
+        </div>
         <div>
           <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">
-            {metric === "countries" ? "Countries visited per continent" : "Visits per continent · by top country"}
+            {metric === "countries"
+              ? isPct ? "% of continent's countries visited" : "Countries visited per continent"
+              : isPct ? "Share of total visits per continent" : "Visits per continent · by top country"}
           </div>
           <BarsV
             rows={rows1}
             series={series1}
             colorByRow={colorByRow1}
             activeId={activeCont}
-            unit={metric === "countries" ? "countries" : "visits"}
+            unit={unit1}
             onPick={(id) => {
               const c = CONTINENTS.find((x) => x.code === id);
               if (c) toggleCrossFilter(continentFilter(c.code, c.name));
-            }}
-          />
-        </div>
-        <div>
-          <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">% of region's countries visited</div>
-          <BarsH
-            rows={rows2}
-            series={[{ key: "pct", name: "% visited", color: color.accent }]}
-            colorByRow={(r) => rowColor.get(r.id)}
-            activeId={activeRegionRow}
-            unit="%"
-            cap={rows2.length}
-            rowPx={17}
-            barSize={9}
-            onPick={(id) => {
-              if (id.startsWith("__gap")) return;
-              toggleCrossFilter(regionFilter(id.split(":")[1]));
             }}
           />
         </div>
