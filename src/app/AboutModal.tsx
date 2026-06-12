@@ -45,7 +45,7 @@ export function AboutModal() {
             <Feature title="Cross-filtering" desc="Click almost anything (a bar, a slice, a row, an airport) to filter every chart and the map at once, and drill into any year." />
             <Feature title="Cost & points" desc="Cash and award spend tracked per booking and converted to any display currency at the historical rate on the day you flew." />
             <Feature title="Punctuality" desc="Departure and arrival delays, on-time rates, and your most and least delayed flights." />
-            <Feature title="Hands-off email import" desc="The standout feature: AI reads your booking and check-in emails and adds flights automatically, no forwarding or data entry, then enriches each one with airline, aircraft, and route detail. You can still add or import flights by hand whenever you like." />
+            <Feature title="Hands-off email import" desc="AI reads your booking and check-in emails and adds flights automatically, no forwarding or data entry, then enriches each one with airline, aircraft, and route detail. You can still add or import flights by hand whenever you like." />
           </ul>
         </div>
       </div>
