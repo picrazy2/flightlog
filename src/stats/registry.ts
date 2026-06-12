@@ -3,6 +3,7 @@ import { overall } from "./modules/overall";
 import { airports } from "./modules/airports";
 import { airlines, cities, aircraft } from "./modules/simple";
 import { countries } from "./modules/countries";
+import { continents } from "./modules/continents";
 import { routes } from "./modules/routes";
 import { domesticIntl } from "./modules/domesticIntl";
 import { delays } from "./modules/delays";
@@ -17,6 +18,7 @@ export const REGISTRY: StatModule[] = [
   airlines,
   cities,
   countries,
+  continents,
   routes,
   domesticIntl,
   delays,
