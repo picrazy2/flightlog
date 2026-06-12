@@ -2,41 +2,35 @@ import { useState } from "react";
 import {
   Bar,
   CartesianGrid,
+  Cell,
   ComposedChart,
-  Line,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { StatModule } from "../types";
-import type { CabinClass, Flight } from "@/lib/types";
+import type { Flight } from "@/lib/types";
 import { totalCash, totalPoints } from "@/lib/aggregate";
 import { formatMoney, formatPoints, compact, flightDistanceMi, flightMinutes } from "@/lib/format";
 import { toUSD, fromUSD, currencySymbol } from "@/lib/fx";
 import { Segmented } from "@/components/ui/Segmented";
-import { Switch } from "@/components/ui/Switch";
-import { OptionsButton } from "@/components/ui/OptionsButton";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { BarsH } from "@/components/charts/BarsH";
 import { ChartLegend } from "@/components/charts/ChartLegend";
 import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import { CHART, axisTick } from "@/components/charts/chartTheme";
 import { useStore, ALL_TIME } from "@/state/store";
-import { classFilter, yearRange, yearOfRange } from "../filters";
+import { yearRange, yearOfRange } from "../filters";
 import { color } from "@/lib/palette";
 
-type Metric = "cash" | "points";
-type Group = "year" | "class";
+type Metric = "flights" | "spend";
 type Basis = "total" | "flight" | "km" | "hour";
 
-const CLASS_ORDER: CabinClass[] = ["economy", "premium_economy", "lie_flat_business", "recliner_first", "international_first"];
-const CLASS_LABELS: Record<CabinClass, string> = {
-  economy: "Economy",
-  premium_economy: "Prem. economy",
-  lie_flat_business: "Business",
-  recliner_first: "First (recliner)",
-  international_first: "First",
-};
+const CASH_COLOR = color.accent;
+const POINTS_COLOR = "#A78BFA";
 
 // historical USD (converted at the flight date) when available; else static present-day rate
 const cashUSD = (f: Flight) => f.cost_cash_segment_usd ?? (f.cost_cash_segment ?? 0) * toUSD((f.cost_currency ?? "USD").toUpperCase());
@@ -57,222 +51,177 @@ export const cost: StatModule = {
     };
   },
   Panel: ({ ctx }) => {
-    const [metric, setMetric] = useState<Metric>("cash");
-    const [group, setGroup] = useState<Group>("year");
+    const [metric, setMetric] = useState<Metric>("spend");
+    const [chartType, setChartType] = useState<"bar" | "pie">("bar");
     const [basis, setBasis] = useState<Basis>("total");
-    const [percent, setPercent] = useState(false);
-    const { settings, toggleCrossFilter, crossFilters, range, setRange } = useStore();
-
+    const { settings, range, setRange } = useStore();
     const km = settings.units === "km";
+    const cur = settings.currency;
+    const sym = currencySymbol(cur).trim() || cur;
     const distOf = (f: Flight) => flightDistanceMi(f) * (km ? 1.60934 : 1);
     const hoursOf = (f: Flight) => flightMinutes(f) / 60;
-
-    // priced flights for the active metric:
-    //  cash  → has a cash segment, EXCLUDING award-tax legs (<$50 cash + points)
-    //  points → booked with points
-    const priced = (f: Flight) =>
-      metric === "cash" ? f.cost_cash_segment != null && !(cashUSD(f) < 50 && hasPoints(f)) : hasPoints(f);
-    const value = (f: Flight) => (metric === "cash" ? cashUSD(f) : f.cost_points_segment ?? 0);
-
-    // when grouping by class, exclude the class facet so all classes stay visible (multi-select)
-    const sourceFlights = group === "class" ? ctx.facetFlights("class") : ctx.flights;
-    const buckets = new Map<string, { label: string; dom: number; intl: number; flights: number; dist: number; hours: number; sort: number }>();
-    for (const f of sourceFlights) {
-      if (!priced(f)) continue;
-      let key: string, label: string, sort: number;
-      if (group === "year") {
-        key = f.flight_date.slice(0, 4);
-        label = key;
-        sort = Number(key);
-      } else {
-        key = f.cabin_class ?? "unknown";
-        label = CLASS_LABELS[key as CabinClass] ?? "Unknown";
-        sort = CLASS_ORDER.indexOf(key as CabinClass);
-      }
-      const b = buckets.get(key) ?? { label, dom: 0, intl: 0, flights: 0, dist: 0, hours: 0, sort };
-      const v = value(f);
-      if (f.trip_type === "international") b.intl += v;
-      else b.dom += v;
-      b.flights += 1;
-      b.dist += distOf(f);
-      b.hours += hoursOf(f);
-      buckets.set(key, b);
-    }
-    // all flights per bucket (priced or not) → "priced / total" in the hover
-    const totalByKey = new Map<string, number>();
-    for (const f of sourceFlights) {
-      const key = group === "year" ? f.flight_date.slice(0, 4) : f.cabin_class ?? "unknown";
-      totalByKey.set(key, (totalByKey.get(key) ?? 0) + 1);
-    }
-    const denom = (b: { flights: number; dist: number; hours: number }) =>
-      basis === "total" ? 1 : basis === "flight" ? b.flights || 1 : basis === "km" ? b.dist || 1 : b.hours || 1;
     const r2 = (n: number) => Math.round(n * 100) / 100;
-    // cash buckets are summed in USD (cashUSD); render them in the chosen display currency
-    const cur = settings.currency;
-    const conv = (v: number) => (metric === "cash" ? fromUSD(v, cur) : v);
-    // dom/intl breakdown only makes sense for absolute totals — a per-flight/km/hour RATE
-    // can't be split and summed, so those bases show a single combined bar.
-    const split = basis === "total";
-    const pct = percent && split;
-    let rows = [...buckets.entries()]
-      .map(([id, b]) => ({
-        id,
-        label: b.label,
-        domestic: r2(conv(b.dom / denom(b))),
-        international: r2(conv(b.intl / denom(b))),
-        combined: r2(conv((b.dom + b.intl) / denom(b))),
-        flights: b.flights,
-        flightsTotal: totalByKey.get(id) ?? b.flights,
-      }))
-      .sort((a, b) => (buckets.get(a.id)!.sort - buckets.get(b.id)!.sort));
-    if (pct) {
-      rows = rows.map((r) => {
-        const t = r.domestic + r.international || 1;
-        return { ...r, domestic: r2((r.domestic / t) * 100), international: r2((r.international / t) * 100) };
-      });
-    }
 
-    const unit = metric === "cash" ? currencySymbol(cur).trim() || cur : "pts";
-    const activeId: string | string[] | null =
-      group === "year"
-        ? yearOfRange(range)
-        : crossFilters.filter((c) => c.id.startsWith("class:")).map((c) => c.id.slice("class:".length));
-    const onPick = (id: string) => {
-      if (group === "year") setRange(yearOfRange(range) === id ? ALL_TIME : yearRange(id));
-      else toggleCrossFilter(classFilter(id, CLASS_LABELS[id as CabinClass] ?? id));
-    };
-
-    const series = split
-      ? [
-          { key: "domestic", name: "Domestic", color: color.accent },
-          { key: "international", name: "International", color: color.secondary },
-          { key: "flights", name: "Priced flights", color: "#A78BFA" },
-        ]
-      : [
-          { key: "combined", name: metric === "cash" ? "Cost" : "Points", color: color.accent },
-          { key: "flights", name: "Priced flights", color: "#A78BFA" },
-        ];
-
-    // booking-method mix per class (always shown)
-    const methods = new Map<string, { label: string; cashOnly: number; pointsOnly: number; pointsCash: number; sort: number }>();
+    type Agg = { cashSpend: number; pointsSpend: number; cashFlights: number; pointsFlights: number; cashDist: number; pointsDist: number; cashHours: number; pointsHours: number };
+    const blank = (): Agg => ({ cashSpend: 0, pointsSpend: 0, cashFlights: 0, pointsFlights: 0, cashDist: 0, pointsDist: 0, cashHours: 0, pointsHours: 0 });
+    const byYear = new Map<string, Agg>();
+    const t = blank();
+    const byCurrency = new Map<string, { flights: number; spend: number }>();
     for (const f of ctx.flights) {
-      if (!f.cabin_class) continue;
-      const c = cashUSD(f);
-      const p = hasPoints(f);
-      let kind: "cashOnly" | "pointsOnly" | "pointsCash" | null = null;
-      if (p && c < 30) kind = "pointsOnly";
-      else if (p) kind = "pointsCash";
-      else if (f.cost_cash_segment != null && c > 0) kind = "cashOnly";
-      if (!kind) continue;
-      const key = f.cabin_class;
-      const m = methods.get(key) ?? { label: CLASS_LABELS[key], cashOnly: 0, pointsOnly: 0, pointsCash: 0, sort: CLASS_ORDER.indexOf(key) };
-      m[kind] += 1;
-      methods.set(key, m);
+      const hasCash = f.cost_cash_segment != null;
+      const pts = hasPoints(f);
+      if (!hasCash && !pts) continue;
+      const a = byYear.get(f.flight_date.slice(0, 4)) ?? blank();
+      byYear.set(f.flight_date.slice(0, 4), a);
+      const cashDisp = fromUSD(cashUSD(f), cur);
+      if (pts) {
+        a.pointsFlights++; t.pointsFlights++;
+        a.pointsSpend += f.cost_points_segment ?? 0; t.pointsSpend += f.cost_points_segment ?? 0;
+        a.pointsDist += distOf(f); t.pointsDist += distOf(f);
+        a.pointsHours += hoursOf(f); t.pointsHours += hoursOf(f);
+      } else if (hasCash && cashUSD(f) > 0) {
+        a.cashFlights++; t.cashFlights++;
+        a.cashDist += distOf(f); t.cashDist += distOf(f);
+        a.cashHours += hoursOf(f); t.cashHours += hoursOf(f);
+      }
+      // cash spend (incl. the cash portion of award tickets) + per-currency tally
+      if (hasCash) {
+        a.cashSpend += cashDisp; t.cashSpend += cashDisp;
+        if (f.cost_currency) {
+          const c = f.cost_currency.toUpperCase();
+          const e = byCurrency.get(c) ?? { flights: 0, spend: 0 };
+          e.flights++; e.spend += cashDisp;
+          byCurrency.set(c, e);
+        }
+      }
     }
-    const methodRows = [...methods.entries()]
-      .map(([id, m]) => ({ id, label: m.label, cashOnly: m.cashOnly, pointsOnly: m.pointsOnly, pointsCash: m.pointsCash }))
-      .sort((a, b) => methods.get(a.id)!.sort - methods.get(b.id)!.sort);
+    const spendBasis = (spend: number, flights: number, dist: number, hours: number) =>
+      basis === "total" ? spend : basis === "flight" ? (flights ? spend / flights : 0) : basis === "km" ? (dist ? spend / dist : 0) : hours ? spend / hours : 0;
+
+    // grouped cash + points per year
+    const rows = [...byYear.keys()].sort().map((y) => {
+      const a = byYear.get(y)!;
+      return {
+        id: y,
+        label: y,
+        cash: metric === "flights" ? a.cashFlights : r2(spendBasis(a.cashSpend, a.cashFlights, a.cashDist, a.cashHours)),
+        points: metric === "flights" ? a.pointsFlights : Math.round(spendBasis(a.pointsSpend, a.pointsFlights, a.pointsDist, a.pointsHours)),
+      };
+    });
+    const yearActive = yearOfRange(range);
+    const onYear = (id: string) => setRange(yearActive === id ? ALL_TIME : yearRange(id));
+
+    const cashName = metric === "flights" ? "Cash flights" : "Cash spend";
+    const pointsName = metric === "flights" ? "Points flights" : "Points";
+    const legend = [
+      { key: "cash", name: cashName, color: CASH_COLOR },
+      { key: "points", name: pointsName, color: POINTS_COLOR },
+    ];
+    const tipUnits = metric === "flights" ? { cash: "flights", points: "flights" } : { cash: cur, points: "pts" };
+
+    // pie: cash vs points collapsed across years — sized by flight share (one common unit),
+    // labelled with the active metric (counts, or cash $ / points pts).
+    const pieLabel = (kind: "cash" | "points") =>
+      metric === "flights"
+        ? `${kind === "cash" ? t.cashFlights : t.pointsFlights}`
+        : kind === "cash"
+        ? `${sym}${compact(t.cashSpend)}`
+        : `${compact(t.pointsSpend)} pts`;
+    const pieData = [
+      { id: "cash", name: cashName, value: t.cashFlights, color: CASH_COLOR },
+      { id: "points", name: pointsName, value: t.pointsFlights, color: POINTS_COLOR },
+    ].filter((s) => s.value > 0);
+
+    // top currencies, following the flights/spend toggle
+    const curRows = [...byCurrency.entries()]
+      .map(([c, e]) => ({ id: c, label: c, value: metric === "flights" ? e.flights : r2(e.spend) }))
+      .sort((a, b) => b.value - a.value);
+
+    const title =
+      metric === "flights"
+        ? "Flights booked with cash vs points, by year"
+        : `Spend — cash (${sym}) vs points, by year${basis !== "total" ? ` · per ${basis === "km" ? (km ? "km" : "mi") : basis}` : ""}`;
 
     return (
       <>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Segmented
-            aria-label="Cost metric"
+            aria-label="Metric"
             size="sm"
             value={metric}
             onChange={setMetric}
             options={[
-              { value: "cash", label: "Cash" },
-              { value: "points", label: "Points" },
+              { value: "spend", label: "Total spend" },
+              { value: "flights", label: "Flights" },
             ]}
           />
           <div className="flex items-center gap-2">
+            {metric === "spend" && (
+              <Dropdown
+                aria-label="Basis"
+                size="sm"
+                value={basis}
+                onChange={setBasis}
+                options={[
+                  { value: "total", label: "Total" },
+                  { value: "flight", label: "Per flight" },
+                  { value: "km", label: km ? "Per km" : "Per mi" },
+                  { value: "hour", label: "Per hour" },
+                ]}
+              />
+            )}
             <Segmented
-              aria-label="Group by"
+              aria-label="Chart"
               size="sm"
-              value={group}
-              onChange={setGroup}
+              value={chartType}
+              onChange={setChartType}
               options={[
-                { value: "year", label: "By year" },
-                { value: "class", label: "By class" },
+                { value: "bar", label: "Bar" },
+                { value: "pie", label: "Pie" },
               ]}
             />
-            <OptionsButton>
-              {basis === "total" && (
-                <div className="flex items-center justify-between">
-                  <span className="text-label text-ink-muted">100% stacked</span>
-                  <Switch checked={percent} onChange={setPercent} />
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-label text-ink-muted">Basis</span>
-                {/* native select avoids a portal-in-popover outside-click conflict */}
-                <select
-                  aria-label="Basis"
-                  value={basis}
-                  onChange={(e) => setBasis(e.target.value as Basis)}
-                  className="focus-ring rounded-md border border-border bg-surface-2 px-2 py-1 text-caption text-ink"
-                >
-                  <option value="total">Total</option>
-                  <option value="flight">Per flight</option>
-                  <option value="km">{km ? "Per km" : "Per mi"}</option>
-                  <option value="hour">Per hour</option>
-                </select>
-              </div>
-            </OptionsButton>
           </div>
         </div>
 
-        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
-          {metric === "cash" ? "Cash spend" : "Points spent"} by {group === "year" ? "year" : "cabin class"}
-          {basis !== "total" ? ` · per ${basis === "km" ? (km ? "km" : "mi") : basis}` : ""}, with priced-flight count
-        </div>
-        <ChartLegend series={series} />
+        <div className="text-eyebrow tracking-[0.01em] text-ink-faint">{chartType === "pie" ? title.replace(", by year", " — all time") : title}</div>
+        <ChartLegend series={legend} />
         <div style={{ height: 210 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={rows} margin={{ left: -12, right: -10, top: 6, bottom: 2 }}>
-              <CartesianGrid stroke={CHART.grid} vertical={false} />
-              <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={16} />
-              <YAxis
-                yAxisId="cost"
-                tick={axisTick}
-                axisLine={false}
-                tickLine={false}
-                domain={pct ? [0, 100] : undefined}
-                tickFormatter={pct ? (v) => `${v}%` : (v) => compact(Number(v))}
-              />
-              <YAxis yAxisId="count" orientation="right" tick={axisTick} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ fill: CHART.cursor }} />
-              {split ? (
-                <>
-                  <Bar yAxisId="cost" dataKey="domestic" name="Domestic" stackId="a" fill={color.accent} isAnimationActive={false}
-                    cursor="pointer" onClick={(_: unknown, i: number) => onPick(rows[i].id)} />
-                  <Bar yAxisId="cost" dataKey="international" name="International" stackId="a" fill={color.secondary} radius={[3, 3, 0, 0]} isAnimationActive={false}
-                    cursor="pointer" onClick={(_: unknown, i: number) => onPick(rows[i].id)} />
-                </>
-              ) : (
-                <Bar yAxisId="cost" dataKey="combined" name={metric === "cash" ? "Cost" : "Points"} fill={color.accent} radius={[3, 3, 0, 0]} isAnimationActive={false}
-                  cursor="pointer" onClick={(_: unknown, i: number) => onPick(rows[i].id)} />
-              )}
-              <Line yAxisId="count" type="monotone" dataKey="flights" name="Priced flights" stroke="#A78BFA" strokeWidth={2} dot={false} />
-            </ComposedChart>
+            {chartType === "bar" ? (
+              <ComposedChart data={rows} margin={{ left: -10, right: metric === "spend" ? -10 : 8, top: 6, bottom: 2 }}>
+                <CartesianGrid stroke={CHART.grid} vertical={false} />
+                <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={16} />
+                <YAxis yAxisId="cash" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => compact(Number(v))} />
+                {metric === "spend" && (
+                  <YAxis yAxisId="points" orientation="right" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => compact(Number(v))} />
+                )}
+                <Tooltip content={<ChartTooltip units={tipUnits} />} cursor={{ fill: CHART.cursor }} />
+                <Bar yAxisId="cash" dataKey="cash" name={cashName} fill={CASH_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false}
+                  cursor="pointer" onClick={(_: unknown, i: number) => onYear(rows[i].id)} />
+                <Bar yAxisId={metric === "spend" ? "points" : "cash"} dataKey="points" name={pointsName} fill={POINTS_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false}
+                  cursor="pointer" onClick={(_: unknown, i: number) => onYear(rows[i].id)} />
+              </ComposedChart>
+            ) : (
+              <PieChart>
+                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}
+                  label={(e: { index?: number }) => pieLabel(pieData[e.index ?? 0].id as "cash" | "points")} labelLine={false} isAnimationActive={false}>
+                  {pieData.map((s) => <Cell key={s.id} fill={s.color} />)}
+                </Pie>
+              </PieChart>
+            )}
           </ResponsiveContainer>
         </div>
-        {(Array.isArray(activeId) ? activeId.length > 0 : activeId) && (
-          <p className="text-caption text-ink-faint">Filtering: {Array.isArray(activeId) ? activeId.join(", ") : activeId}</p>
-        )}
 
-        {methodRows.length > 0 && (
+        {curRows.length > 0 && (
           <div>
-            <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">Booking method by class · flights</div>
+            <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">
+              Top currencies · {metric === "flights" ? "flights" : `spend (${sym})`}
+            </div>
             <BarsH
-              rows={methodRows}
-              series={[
-                { key: "cashOnly", name: "Cash only", color: color.accent },
-                { key: "pointsCash", name: "Points + cash", color: "#A78BFA" },
-                { key: "pointsOnly", name: "Points only", color: color.secondary },
-              ]}
-              unit="flights"
+              rows={curRows.map((r) => ({ id: r.id, label: r.label, value: r.value }))}
+              series={[{ key: "value", name: metric === "flights" ? "flights" : sym, color: color.accent }]}
+              unit={metric === "flights" ? "flights" : cur}
+              cap={6}
             />
           </div>
         )}
