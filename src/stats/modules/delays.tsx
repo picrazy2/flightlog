@@ -81,12 +81,13 @@ export const delays: StatModule = {
     const airlineOpts = [{ value: "all", label: "All airlines" }, ...[...alCounts.entries()].sort((a, b) => b[1].n - a[1].n).map(([k, v]) => ({ value: k, label: v.label }))];
     const airportOpts = [{ value: "all", label: "All airports" }, ...[...apCounts.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => ({ value: k, label: k }))];
     const yearOpts = [{ value: "all", label: "All years" }, ...[...new Set(ctx.flights.map((f) => f.flight_date.slice(0, 4)))].sort().reverse().map((y) => ({ value: y, label: y }))];
-    const flights = ctx.flights.filter(
-      (f) =>
-        (fAirline === "all" || airlineKey(f.airline_iata) === fAirline) &&
-        (fAirport === "all" || f.dep_iata === fAirport || f.arr_iata === fAirport) &&
-        (fYear === "all" || f.flight_date.slice(0, 4) === fYear),
-    );
+    // the local filters scope only the most/least-delayed list in the modal, not the
+    // panel's charts/cards (which always reflect the full set)
+    const passLocal = (f: Flight) =>
+      (fAirline === "all" || airlineKey(f.airline_iata) === fAirline) &&
+      (fAirport === "all" || f.dep_iata === fAirport || f.arr_iata === fAirport) &&
+      (fYear === "all" || f.flight_date.slice(0, 4) === fYear);
+    const flights = ctx.flights;
 
     // average departure vs arrival delay (min) by year over all timed flights
     const depD = (f: Flight) => departureDelayMin(f);
@@ -164,8 +165,9 @@ export const delays: StatModule = {
       { label: netMin >= 0 ? "Net time lost" : "Net time saved", value: `${netMin >= 0 ? "+" : "−"}${netDur}`, color: netMin >= 0 ? RED : GREEN },
     ];
 
-    // most/least-delayed modal: delayed flights on one side, early/on-time on the other
-    const ranked = timed.map((f) => ({ f, d: delayMin(f) ?? 0 }));
+    // most/least-delayed modal: delayed flights on one side, early/on-time on the other,
+    // narrowed by the modal's local airline/airport/year filters
+    const ranked = timed.filter(passLocal).map((f) => ({ f, d: delayMin(f) ?? 0 }));
     const mostDelayed = ranked.filter((x) => x.d > 0).sort((a, b) => b.d - a.d);
     const mostEarly = ranked.filter((x) => x.d <= 0).sort((a, b) => a.d - b.d);
 
@@ -180,9 +182,8 @@ export const delays: StatModule = {
     if (rows.length === 0) {
       return (
         <>
-          {filterRow}
           <MiniStats items={cards} cols={3} />
-          <p className="text-label text-ink-muted">No actual-time data for this selection.</p>
+          <p className="text-label text-ink-muted">No actual-time data in this range.</p>
         </>
       );
     }
@@ -198,7 +199,6 @@ export const delays: StatModule = {
     const axisMin = Math.min(0, ...minVals);
     return (
       <>
-        {filterRow}
         <MiniStats items={cards} cols={3} />
         <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Average departure &amp; arrival delay (min) and % of flights delayed, by year</div>
         <ChartLegend series={lineSeries} />
@@ -263,6 +263,9 @@ export const delays: StatModule = {
         </PanelFooter>
         {showList && (
           <Modal title="Most & least delayed flights" onClose={() => setShowList(false)} className="w-[min(720px,95vw)]">
+            {(airlineOpts.length > 2 || airportOpts.length > 2 || yearOpts.length > 2) && (
+              <div className="border-b border-border px-5 py-3">{filterRow}</div>
+            )}
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 p-5 sm:grid-cols-2">
               <DelayColumn title={`Delayed (${mostDelayed.length})`} rows={mostDelayed} settings={ctx.settings} />
               <DelayColumn title={`Early / on-time (${mostEarly.length})`} rows={mostEarly} settings={ctx.settings} />
