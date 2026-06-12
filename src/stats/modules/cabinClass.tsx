@@ -2,12 +2,13 @@ import { useState } from "react";
 import type { StatModule } from "../types";
 import type { CabinClass } from "@/lib/types";
 import { formatPct, flightMinutes } from "@/lib/format";
-import { BarsH } from "@/components/charts/BarsH";
+import { BarsH, type BarRowData } from "@/components/charts/BarsH";
+import { BarsV } from "@/components/charts/BarsV";
 import { MiniStats } from "@/components/ui/MiniStat";
 import { Switch } from "@/components/ui/Switch";
 import { OptionsButton } from "@/components/ui/OptionsButton";
-import { useStore } from "@/state/store";
-import { classFilter } from "../filters";
+import { useStore, ALL_TIME } from "@/state/store";
+import { classFilter, yearRange, yearOfRange } from "../filters";
 import { color } from "@/lib/palette";
 import { useMetricToggle, metricValue, metricName } from "../useMetric";
 
@@ -42,7 +43,7 @@ export const cabinClass: StatModule = {
   Panel: ({ ctx }) => {
     const { metric, control } = useMetricToggle();
     const [percent, setPercent] = useState(false);
-    const { toggleCrossFilter, crossFilters } = useStore();
+    const { toggleCrossFilter, crossFilters, range, setRange } = useStore();
 
     // Headline cabin metrics (over flights whose cabin is known).
     const withCabin = ctx.flights.filter((f) => f.cabin_class);
@@ -73,6 +74,28 @@ export const cabinClass: StatModule = {
       international: Math.round(agg.get(c)!.international),
     }));
     const activeId = crossFilters.filter((c) => c.id.startsWith("class:")).map((c) => c.id.slice("class:".length));
+
+    // second chart: class breakdown per year (one bar per year, stacked by cabin).
+    // Uses the same metric + 100%-toggle as the first chart; click a year to filter the range.
+    const byYear = new Map<string, Record<string, number>>();
+    for (const f of ctx.facetFlights("class")) {
+      if (!f.cabin_class) continue;
+      const y = f.flight_date.slice(0, 4);
+      const row = byYear.get(y) ?? {};
+      row[f.cabin_class] = (row[f.cabin_class] ?? 0) + metricValue(f, metric);
+      byYear.set(y, row);
+    }
+    const presentClasses = ORDER.filter((c) => [...byYear.values()].some((r) => (r[c] ?? 0) > 0));
+    const yearRows = [...byYear.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([y, r]): BarRowData => {
+        const out: BarRowData = { id: y, label: y };
+        for (const c of presentClasses) out[c] = Math.round(r[c] ?? 0);
+        return out;
+      });
+    const yearSeries = presentClasses.map((c) => ({ key: c, name: LABELS[c], color: CLASS_COLORS[c] }));
+    const activeYear = yearOfRange(range);
+
     return (
       <>
         <MiniStats items={cards} />
@@ -97,6 +120,20 @@ export const cabinClass: StatModule = {
           unit={metricName[metric]}
           onPick={(id) => toggleCrossFilter(classFilter(id, LABELS[id as CabinClass] ?? id))}
         />
+
+        {yearRows.length > 0 && (
+          <>
+            <div className="text-eyebrow tracking-[0.01em] text-ink-faint">Cabin by {metricName[metric]} per year</div>
+            <BarsV
+              rows={yearRows}
+              series={yearSeries}
+              percent={percent}
+              unit={metricName[metric]}
+              activeId={activeYear}
+              onPick={(id) => setRange(activeYear === id ? ALL_TIME : yearRange(id))}
+            />
+          </>
+        )}
       </>
     );
   },
