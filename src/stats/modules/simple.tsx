@@ -4,7 +4,9 @@ import { color, CATEGORICAL } from "@/lib/palette";
 import { airlineFilter, cityFilter, aircraftFilter, bodyFilter } from "../filters";
 import { uniqueCount } from "@/lib/aggregate";
 import { BarsH } from "@/components/charts/BarsH";
+import { BarsV } from "@/components/charts/BarsV";
 import { EntityChart } from "../EntityChart";
+import { yearStack } from "../yearStack";
 import { EntityVisitsPanel } from "../EntityVisitsPanel";
 import { useChartType } from "../useChartType";
 import { Switch } from "@/components/ui/Switch";
@@ -65,6 +67,7 @@ export const airlines: StatModule = {
       .map(([id, x]) => ({ id, label: x.label, domestic: Math.round(x.domestic), international: Math.round(x.international), total: x.domestic + x.international }))
       .sort((a, b) => b.total - a.total);
     const activeId = crossFilters.filter((c) => c.id.startsWith("airline:")).map((c) => c.id.slice("airline:".length));
+    const alColors = airlineColors(ctx);
 
     return (
       <>
@@ -92,6 +95,23 @@ export const airlines: StatModule = {
             toggleCrossFilter(airlineFilter(id, r?.label ?? id));
           }}
         />
+        {(() => {
+          const yc = yearStack({
+            flights: ctx.facetFlights("airline"),
+            entities: (f) => [f.airline_iata],
+            value: (f) => metricValue(f, metric),
+            label: (id) => acc.get(id)?.label ?? id,
+            color: (id, i) => alColors.get(id)?.color ?? CATEGORICAL[i % CATEGORICAL.length],
+            mode: "sum",
+            topN: 7,
+          });
+          return yc.rows.length > 1 ? (
+            <>
+              <div className="text-eyebrow tracking-[0.01em] text-ink-faint">{metricName[metric]} per year, by top airline</div>
+              <BarsV rows={yc.rows} series={yc.series} unit={metricName[metric]} />
+            </>
+          ) : null;
+        })()}
       </>
     );
   },

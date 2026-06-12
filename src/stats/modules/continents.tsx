@@ -9,6 +9,9 @@ import { Collapse } from "@/components/ui/Collapse";
 import { categoricalFor, color } from "@/lib/palette";
 import { useStore, type CrossFilter } from "@/state/store";
 import { continentFilter, regionFilter } from "../filters";
+import { yearStack } from "../yearStack";
+
+const CONT_NAME: Record<string, string> = Object.fromEntries(CONTINENTS.map((c) => [c.code, c.name]));
 
 // Six distinct hues; none is the amber reserved for inter-continental (color.secondary).
 export const CONT_COLOR: Record<ContinentCode, string> = {
@@ -281,6 +284,26 @@ export const continents: StatModule = {
             }}
           />
         </div>
+        {(() => {
+          const uniqueMode = metric === "countries";
+          const yc = yearStack({
+            flights: ctx.facetFlights("continent"),
+            entities: (f) => [contOf(f.dep_country), contOf(f.arr_country)],
+            value: () => 1,
+            label: (id) => CONT_NAME[id] ?? id,
+            color: (id) => CONT_COLOR[id as ContinentCode] ?? color.secondary,
+            mode: uniqueMode ? "unique" : "sum",
+            topN: 6,
+          });
+          return yc.rows.length > 1 ? (
+            <div>
+              <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">
+                {uniqueMode ? "Continents visited" : "Visits"} per year, by continent
+              </div>
+              <BarsV rows={yc.rows} series={yc.series} unit={uniqueMode ? "continents" : "visits"} />
+            </div>
+          ) : null;
+        })()}
       </>
     );
   },

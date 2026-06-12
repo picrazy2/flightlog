@@ -3,12 +3,25 @@ import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
 import { OptionsButton } from "@/components/ui/OptionsButton";
 import { EntityChart } from "./EntityChart";
+import { BarsV } from "@/components/charts/BarsV";
 import { useChartType } from "./useChartType";
 import { useStore } from "@/state/store";
 import type { CrossFilter } from "@/state/store";
 import type { StatContext } from "./types";
 import { airportsFrom } from "@/lib/aggregate";
 import { buildStack, buildCount, buildTypeStack, buildVisitTypeStack, buildVisits, type EntityLevel } from "./entityBreakdown";
+import { yearStack } from "./yearStack";
+import { sovereignOf } from "@/lib/continents";
+import { categoricalFor } from "@/lib/palette";
+
+const REGION_NAMER = new Intl.DisplayNames(["en"], { type: "region" });
+const countryNm = (iso: string) => {
+  try {
+    return REGION_NAMER.of(iso) ?? iso;
+  } catch {
+    return iso;
+  }
+};
 
 export type Breakdown = "airport" | "city" | "type" | "visitType";
 
@@ -120,6 +133,31 @@ export function EntityVisitsPanel({ ctx, level, facet, breakdowns, filterFor, no
         unit={unit}
         onPick={(id) => toggleCrossFilter(filterFor(id, built.names.get(id) ?? id))}
       />
+      {(() => {
+        const isCity = level === "city";
+        const uniqueMode = countMode; // visits vs unique entities
+        const yc = yearStack({
+          flights: facetFlights,
+          entities: (f) =>
+            isCity
+              ? [f.dep_city, f.arr_city]
+              : [sovereignOf(f.dep_country), sovereignOf(f.arr_country)],
+          value: () => 1,
+          label: (id) => (isCity ? id : `${countryNm(id)}`),
+          color: (id, i) => categoricalFor(id, i),
+          mode: uniqueMode ? "unique" : "sum",
+          topN: 6,
+        });
+        const yUnit = uniqueMode ? noun : "visits";
+        return yc.rows.length > 1 ? (
+          <>
+            <div className="text-eyebrow tracking-[0.01em] text-ink-faint">
+              {uniqueMode ? `Unique ${noun}` : "Visits"} per year, by top {noun}
+            </div>
+            <BarsV rows={yc.rows} series={yc.series} unit={yUnit} />
+          </>
+        ) : null;
+      })()}
     </>
   );
 }

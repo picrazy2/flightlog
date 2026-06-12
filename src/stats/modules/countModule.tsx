@@ -63,7 +63,7 @@ export function countModule(opts: {
             series={[{ key: "count", name: metricName[metric], color: color.accent }]}
             activeId={activeId}
             unit={metricName[metric]}
-            cap={12}
+            cap={8}
             tickIcon={opts.tickIcon ? (row) => opts.tickIcon!(row.id) : undefined}
             onPick={(id) => {
               const row = ranked.find((r) => r.id === id);

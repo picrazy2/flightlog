@@ -21,7 +21,7 @@ interface Props {
 
 // Shared entity visual: horizontal stacked bars OR a top-N + "Other" donut.
 // The pie value for each row is the sum of all bar series (i.e. its total).
-export function EntityChart({ rows, series, chartType, onPick, activeId, unit, percent, tickIcon, topPie = 9, cap = 12 }: Props) {
+export function EntityChart({ rows, series, chartType, onPick, activeId, unit, percent, tickIcon, topPie = 9, cap = 8 }: Props) {
   if (chartType === "pie") {
     const totals = rows
       .map((r) => ({ id: r.id, label: r.label, value: series.reduce((s, k) => s + (Number(r[k.key]) || 0), 0) }))
