@@ -40,7 +40,7 @@ export function Legend({ model, fluid }: { model: LegendModel; fluid?: boolean }
   };
 
   return (
-    <div className={fluid ? "w-full" : "glass w-[200px] rounded-xl p-3"}>
+    <div className={fluid ? "w-full" : "glass w-fit max-w-[200px] rounded-xl p-3"}>
       <div className="mb-2 flex items-center justify-between">
         <span className="text-eyebrow tracking-[0.01em] text-ink-faint">{model.title}</span>
         {anyActive && (
