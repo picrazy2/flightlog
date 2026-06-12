@@ -3,11 +3,12 @@ import type { StatModule, StatContext } from "../types";
 import { CONTINENTS, COUNTRY_GEO, type ContinentCode } from "@/lib/continents";
 import { BarsV } from "@/components/charts/BarsV";
 import { BarsH, type BarRowData } from "@/components/charts/BarsH";
-import { MiniStats } from "@/components/ui/MiniStat";
 import { Segmented } from "@/components/ui/Segmented";
-import { categoricalFor } from "@/lib/palette";
+import { Chevron } from "@/components/ui/Icon";
+import { categoricalFor, color } from "@/lib/palette";
+import { useStore } from "@/state/store";
+import { continentFilter, regionFilter } from "../filters";
 
-// Six inhabited continents (Antarctica is excluded from COUNTRY_GEO).
 const CONT_COLOR: Record<ContinentCode, string> = {
   AF: "#FFC061",
   AS: "#FB7185",
@@ -16,22 +17,20 @@ const CONT_COLOR: Record<ContinentCode, string> = {
   OC: "#A78BFA",
   SA: "#F59E0B",
 };
+const INTERCONT = color.secondary; // inter-continental flights
 
-// World totals derived once from the country reference.
+// World totals from the country reference.
 const TOTAL_BY_CONT = new Map<ContinentCode, number>();
 const TOTAL_BY_SUBREGION = new Map<string, number>();
-const SUBREGIONS_OF = new Map<ContinentCode, string[]>(); // continent → its subregions, ordered
+const SUBREGIONS_OF = new Map<ContinentCode, string[]>();
 for (const { continent, subregion } of Object.values(COUNTRY_GEO)) {
   TOTAL_BY_CONT.set(continent, (TOTAL_BY_CONT.get(continent) ?? 0) + 1);
   TOTAL_BY_SUBREGION.set(subregion, (TOTAL_BY_SUBREGION.get(subregion) ?? 0) + 1);
 }
 for (const c of CONTINENTS) {
-  const subs = [...new Set(Object.values(COUNTRY_GEO).filter((g) => g.continent === c.code).map((g) => g.subregion))].sort();
-  SUBREGIONS_OF.set(c.code, subs);
+  SUBREGIONS_OF.set(c.code, [...new Set(Object.values(COUNTRY_GEO).filter((g) => g.continent === c.code).map((g) => g.subregion))].sort());
 }
-const subregionColor = (sub: string) => categoricalFor(sub, [...TOTAL_BY_SUBREGION.keys()].sort().indexOf(sub));
 
-// Visited countries (iso2 → visits + name) from the aggregated airports.
 function visitedCountries(ctx: StatContext) {
   const m = new Map<string, { visits: number; name: string }>();
   for (const a of ctx.airports.values()) {
@@ -42,67 +41,52 @@ function visitedCountries(ctx: StatContext) {
   }
   return m;
 }
-const continentsVisited = (ctx: StatContext) =>
-  new Set([...visitedCountries(ctx).keys()].map((iso) => COUNTRY_GEO[iso].continent));
+const contOf = (iso: string | null) => (iso ? COUNTRY_GEO[iso]?.continent ?? null : null);
 
 export const continents: StatModule = {
   id: "continents",
   order: 5.25, // right after Countries (5), before Airlines (5.5)
   card: (ctx) => {
-    const n = continentsVisited(ctx).size;
+    const n = new Set([...visitedCountries(ctx).keys()].map((iso) => COUNTRY_GEO[iso].continent)).size;
     const prev = ctx.compareFlights
-      ? new Set(
-          ctx.compareFlights
-            .flatMap((f) => [f.dep_country, f.arr_country])
-            .filter((c): c is string => !!c && !!COUNTRY_GEO[c])
-            .map((c) => COUNTRY_GEO[c].continent),
-        ).size
+      ? new Set(ctx.compareFlights.flatMap((f) => [contOf(f.dep_country), contOf(f.arr_country)]).filter(Boolean)).size
       : null;
     return {
       eyebrow: "Continents",
-      headline: `${n} of 6`,
+      headline: `${n} / 6`,
       stats: [{ value: n, compareValue: ctx.compareFlights ? prev : null }],
     };
   },
   Panel: ({ ctx }) => {
+    const { toggleCrossFilter, crossFilters } = useStore();
     const [metric, setMetric] = useState<"countries" | "visits">("countries");
-    const visited = visitedCountries(ctx);
+    const [expanded, setExpanded] = useState<ContinentCode | null>(null);
+    const activeCont = crossFilters.find((c) => c.id.startsWith("continent:"))?.id.split(":")[1] ?? null;
+    const activeRegion = crossFilters.find((c) => c.id.startsWith("region:"))?.id.split(":")[1] ?? null;
 
-    // visited iso2 set per continent
+    const visited = visitedCountries(ctx);
     const visitedByCont = new Map<ContinentCode, Set<string>>();
     for (const iso of visited.keys()) {
       const c = COUNTRY_GEO[iso].continent;
-      const s = visitedByCont.get(c) ?? new Set<string>();
-      s.add(iso);
-      visitedByCont.set(c, s);
+      (visitedByCont.get(c) ?? visitedByCont.set(c, new Set()).get(c)!).add(iso);
     }
+    const subVisited = (cont: ContinentCode, sub: string) =>
+      [...(visitedByCont.get(cont) ?? [])].filter((iso) => COUNTRY_GEO[iso].subregion === sub).length;
 
-    // 6 metric cards: countries visited / total, per continent
-    const cards = CONTINENTS.map((c) => ({
-      label: c.name,
-      value: `${visitedByCont.get(c.code)?.size ?? 0}/${TOTAL_BY_CONT.get(c.code) ?? 0}`,
-      color: CONT_COLOR[c.code],
-    }));
-
-    // Chart 1 — vertical bars per continent, broken down by region (countries) or by
-    // top country (visits).
+    // Chart 1 — vertical bars per continent. Countries: single bar (coloured by
+    // continent). Visits: stacked by top country.
     let rows1: BarRowData[];
     let series1: { key: string; name: string; color: string }[];
+    let colorByRow1: ((r: BarRowData) => string | undefined) | undefined;
     if (metric === "countries") {
-      const presentSubs = [...new Set([...visited.keys()].map((iso) => COUNTRY_GEO[iso].subregion))].sort();
-      series1 = presentSubs.map((s) => ({ key: s, name: s, color: subregionColor(s) }));
-      rows1 = CONTINENTS.map((c) => {
-        const row: BarRowData = { id: c.code, label: c.name };
-        for (const s of presentSubs) row[s] = 0;
-        for (const iso of visitedByCont.get(c.code) ?? []) row[COUNTRY_GEO[iso].subregion] = (Number(row[COUNTRY_GEO[iso].subregion]) || 0) + 1;
-        return row;
-      });
+      series1 = [{ key: "countries", name: "countries", color: color.accent }];
+      colorByRow1 = (r) => CONT_COLOR[r.id as ContinentCode];
+      rows1 = CONTINENTS.map((c) => ({ id: c.code, label: c.name, countries: visitedByCont.get(c.code)?.size ?? 0 }));
     } else {
-      // visits: stack each continent by its top countries (top 8 globally) + Other
-      const topCountries = [...visited.entries()].sort((a, b) => b[1].visits - a[1].visits).slice(0, 8).map(([iso]) => iso);
-      const topSet = new Set(topCountries);
+      const top = [...visited.entries()].sort((a, b) => b[1].visits - a[1].visits).slice(0, 8).map(([iso]) => iso);
+      const topSet = new Set(top);
       series1 = [
-        ...topCountries.map((iso, i) => ({ key: iso, name: visited.get(iso)!.name, color: categoricalFor(iso, i) })),
+        ...top.map((iso, i) => ({ key: iso, name: visited.get(iso)!.name, color: categoricalFor(iso, i) })),
         { key: "__other", name: "Other", color: "#475569" },
       ];
       rows1 = CONTINENTS.map((c) => {
@@ -116,23 +100,70 @@ export const continents: StatModule = {
       });
     }
 
-    // Chart 2 — % of each region's countries visited, one bar per region, coloured by
-    // continent (so bars read as grouped per continent).
+    // Chart 2 — % of each region's countries visited; bars grouped by continent
+    // (a spacer row separates continents), skinnier than the default.
     const rows2: BarRowData[] = [];
-    const colorByRow = new Map<string, string>();
-    for (const c of CONTINENTS) {
+    const rowColor = new Map<string, string>();
+    CONTINENTS.forEach((c, ci) => {
       for (const sub of SUBREGIONS_OF.get(c.code) ?? []) {
         const total = TOTAL_BY_SUBREGION.get(sub) ?? 0;
-        const vis = [...(visitedByCont.get(c.code) ?? [])].filter((iso) => COUNTRY_GEO[iso].subregion === sub).length;
         const id = `${c.code}:${sub}`;
-        rows2.push({ id, label: sub, pct: total ? Math.round((vis / total) * 100) : 0 });
-        colorByRow.set(id, CONT_COLOR[c.code]);
+        rows2.push({ id, label: sub, pct: total ? Math.round((subVisited(c.code, sub) / total) * 100) : 0 });
+        rowColor.set(id, CONT_COLOR[c.code]);
       }
-    }
+      if (ci < CONTINENTS.length - 1) rows2.push({ id: `__gap${ci}`, label: "", pct: 0 });
+    });
+    const activeRegionRow = activeRegion ? rows2.find((r) => r.label === activeRegion)?.id ?? null : null;
+
+    const cards = CONTINENTS.map((c) => ({
+      label: c.name,
+      value: `${visitedByCont.get(c.code)?.size ?? 0}/${TOTAL_BY_CONT.get(c.code) ?? 0}`,
+      color: CONT_COLOR[c.code],
+    }));
 
     return (
       <>
-        <MiniStats items={cards} />
+        {/* 6 metric cards (3 per row); click to expand a continent's per-region breakdown */}
+        <div className="grid grid-cols-3 gap-1.5">
+          {CONTINENTS.map((c) => {
+            const open = expanded === c.code;
+            return (
+              <button
+                key={c.code}
+                onClick={() => setExpanded(open ? null : c.code)}
+                className="focus-ring flex flex-col gap-1 rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-left hover:bg-surface-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="tnum font-display text-[1.1rem] font-bold leading-none text-ink">
+                    {cards.find((x) => x.label === c.name)!.value}
+                  </span>
+                  <Chevron dir={open ? "up" : "down"} size={9} color="var(--ink-faint)" />
+                </div>
+                <span className="flex items-center gap-1.5 text-caption text-ink-muted">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: CONT_COLOR[c.code] }} />
+                  {c.name}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {expanded && (
+          <div className="rounded-lg border border-border bg-surface-2/40 p-1">
+            {(SUBREGIONS_OF.get(expanded) ?? []).map((sub) => (
+              <button
+                key={sub}
+                onClick={() => toggleCrossFilter(regionFilter(sub))}
+                className="focus-ring flex w-full items-center justify-between rounded-md px-2 py-1 text-label hover:bg-surface-3"
+              >
+                <span className={activeRegion === sub ? "text-accent" : "text-ink-muted"}>{sub}</span>
+                <span className="tnum text-ink">
+                  {subVisited(expanded, sub)} <span className="text-ink-faint">/ {TOTAL_BY_SUBREGION.get(sub) ?? 0}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <Segmented
           aria-label="Metric"
           size="sm"
@@ -146,21 +177,67 @@ export const continents: StatModule = {
         />
         <div>
           <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">
-            {metric === "countries" ? "Countries visited per continent · by region" : "Visits per continent · by top country"}
+            {metric === "countries" ? "Countries visited per continent" : "Visits per continent · by top country"}
           </div>
-          <BarsV rows={rows1} series={series1} unit={metric === "countries" ? "countries" : "visits"} />
+          <BarsV
+            rows={rows1}
+            series={series1}
+            colorByRow={colorByRow1}
+            activeId={activeCont}
+            unit={metric === "countries" ? "countries" : "visits"}
+            onPick={(id) => {
+              const c = CONTINENTS.find((x) => x.code === id);
+              if (c) toggleCrossFilter(continentFilter(c.code, c.name));
+            }}
+          />
         </div>
         <div>
           <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">% of region's countries visited</div>
           <BarsH
             rows={rows2}
-            series={[{ key: "pct", name: "% visited", color: "#5B9DFF" }]}
-            colorByRow={(r) => colorByRow.get(r.id)}
+            series={[{ key: "pct", name: "% visited", color: color.accent }]}
+            colorByRow={(r) => rowColor.get(r.id)}
+            activeId={activeRegionRow}
             unit="%"
             cap={rows2.length}
+            rowPx={17}
+            barSize={9}
+            onPick={(id) => {
+              if (id.startsWith("__gap")) return;
+              toggleCrossFilter(regionFilter(id.split(":")[1]));
+            }}
           />
         </div>
       </>
     );
+  },
+  // Map: intra-continent flights take the continent colour; inter-continental flights
+  // take the international colour. Airports/countries are tinted by continent.
+  map: {
+    layers: ["choropleth"],
+    colorAirport: (a) => {
+      const c = a.country ? contOf(a.country) : null;
+      return c ? CONT_COLOR[c] : null;
+    },
+    colorFlight: (f) => {
+      const d = contOf(f.dep_country);
+      const a = contOf(f.arr_country);
+      return d && a && d === a ? CONT_COLOR[d] : INTERCONT;
+    },
+    airportLegendId: (a) => (a.country ? contOf(a.country) ?? "??" : "??"),
+    flightLegendId: (f) => {
+      const d = contOf(f.dep_country);
+      const a = contOf(f.arr_country);
+      return d && a && d === a ? d : "intercont";
+    },
+    choropleth: () =>
+      Object.entries(COUNTRY_GEO).map(([iso, g]) => ({ iso, color: CONT_COLOR[g.continent] })),
+    legend: () => ({
+      title: "Continents",
+      items: [
+        ...CONTINENTS.map((c) => ({ id: c.code, label: c.name, color: CONT_COLOR[c.code], swatch: "line" as const, filter: continentFilter(c.code, c.name) })),
+        { id: "intercont", label: "Intercontinental", color: INTERCONT, swatch: "line" as const },
+      ],
+    }),
   },
 };

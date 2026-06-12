@@ -1,8 +1,11 @@
 import type { Flight, CabinClass } from "@/lib/types";
 import type { CrossFilter } from "@/state/store";
-import { airlineFilter, aircraftFilter, airportFilter, cityFilter, countryFilter, classFilter, tripTypeFilter, routeFilter } from "./filters";
+import { airlineFilter, aircraftFilter, airportFilter, cityFilter, countryFilter, classFilter, tripTypeFilter, routeFilter, continentFilter, regionFilter } from "./filters";
 import { CABIN_LABELS } from "@/lib/cabin";
 import { routeKeyUndirected } from "@/lib/geo";
+import { COUNTRY_GEO, CONTINENTS } from "@/lib/continents";
+
+const CONT_NAME: Record<string, string> = Object.fromEntries(CONTINENTS.map((c) => [c.code, c.name]));
 
 export interface FacetCand {
   id: string; // === filter.id
@@ -17,6 +20,8 @@ export const FACET_LABELS: Record<string, string> = {
   airport: "Airport",
   city: "City",
   country: "Country",
+  continent: "Continent",
+  region: "Region",
   class: "Class",
   trip: "Trip",
   route: "Route",
@@ -30,6 +35,8 @@ export function facetOptions(flights: Flight[]): Record<string, FacetCand[]> {
   const airport = new Map<string, { label: string; n: number }>();
   const city = new Map<string, number>();
   const country = new Map<string, { name: string; n: number }>();
+  const continent = new Map<string, number>();
+  const region = new Map<string, number>();
   const cls = new Map<string, number>();
   const trip = new Map<string, number>();
   const route = new Map<string, { dep: string; arr: string; n: number }>();
@@ -60,6 +67,17 @@ export function facetOptions(flights: Flight[]): Record<string, FacetCand[]> {
         country.set(iso, e);
       }
     }
+    const conts = new Set<string>();
+    const regs = new Set<string>();
+    for (const iso of [f.dep_country, f.arr_country]) {
+      const g = iso ? COUNTRY_GEO[iso] : undefined;
+      if (g) {
+        conts.add(g.continent);
+        regs.add(g.subregion);
+      }
+    }
+    for (const c of conts) continent.set(c, (continent.get(c) ?? 0) + 1);
+    for (const r of regs) region.set(r, (region.get(r) ?? 0) + 1);
     if (f.cabin_class) cls.set(f.cabin_class, (cls.get(f.cabin_class) ?? 0) + 1);
     if (f.trip_type) trip.set(f.trip_type, (trip.get(f.trip_type) ?? 0) + 1);
     const rk = routeKeyUndirected(f.dep_iata, f.arr_iata);
@@ -75,6 +93,8 @@ export function facetOptions(flights: Flight[]): Record<string, FacetCand[]> {
     airport: [...airport].map(([id, e]) => ({ id: `airport:${id}`, label: e.label, filter: airportFilter(id), weight: e.n })).sort(byWeight),
     city: [...city].map(([c, n]) => ({ id: `city:${c}`, label: c, filter: cityFilter(c), weight: n })).sort(byWeight),
     country: [...country].map(([iso, e]) => ({ id: `country:${iso}`, label: e.name, filter: countryFilter(iso, e.name), weight: e.n })).sort(byWeight),
+    continent: [...continent].map(([code, n]) => ({ id: `continent:${code}`, label: CONT_NAME[code] ?? code, filter: continentFilter(code, CONT_NAME[code] ?? code), weight: n })).sort(byWeight),
+    region: [...region].map(([r, n]) => ({ id: `region:${r}`, label: r, filter: regionFilter(r), weight: n })).sort(byWeight),
     class: [...cls].map(([c, n]) => ({ id: `class:${c}`, label: CABIN_LABELS[c as CabinClass] ?? c, filter: classFilter(c, CABIN_LABELS[c as CabinClass] ?? c), weight: n })).sort(byWeight),
     trip: [...trip].map(([t, n]) => ({ id: `trip:${t}`, label: t === "domestic" ? "Domestic" : "International", filter: tripTypeFilter(t as "domestic" | "international"), weight: n })).sort(byWeight),
     route: [...route].map(([, e]) => ({ id: `route:${routeKeyUndirected(e.dep, e.arr)}`, label: `${e.dep} · ${e.arr}`, filter: routeFilter(e.dep, e.arr), weight: e.n })).sort(byWeight),

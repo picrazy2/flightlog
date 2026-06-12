@@ -13,10 +13,13 @@ export function ChartTooltip({ active, payload, label, unit }: TooltipProps<numb
   const row = payload[0]?.payload as { sub?: string; label?: string } | undefined;
   const sub = row?.sub;
   const heading = row?.label ?? label;
+  // drop zero-value series so a stacked bar's hover only lists the parts it actually has
+  const shown = payload.filter((p) => (Number(p.value) || 0) !== 0);
+  if (!shown.length) return null;
   return (
     <div className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 shadow-3">
       <div className="mb-0.5 text-caption text-ink-muted">{heading}</div>
-      {payload.map((p) => (
+      {shown.map((p) => (
         <div key={String(p.dataKey)} className="flex items-center gap-2 text-label">
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
           <span className="text-ink-muted">{p.name}</span>
