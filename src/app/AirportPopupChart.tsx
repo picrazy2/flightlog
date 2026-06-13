@@ -3,7 +3,7 @@ import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import { CHART, axisTick } from "@/components/charts/chartTheme";
 import { Icon } from "@/components/ui/Icon";
 import { color } from "@/lib/palette";
-import { schedDep, schedArr } from "@/lib/format";
+import { schedDep, schedArr, schedDate } from "@/lib/format";
 import type { Flight } from "@/lib/types";
 import { PopupFlightTable } from "./PopupFlightTable";
 
@@ -64,7 +64,7 @@ export function AirportPopupChart({ flights, iata, name, city, visits, years, fl
   return (
     <div style={{ width: fluid ? "100%" : 264 }}>
       {!hideHeader && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, paddingRight: 38 }}>
           <Icon name="plane" size={13} color={color.accent} />
           <span>
             <b>{iata}</b> · {name}
@@ -86,7 +86,7 @@ export function AirportPopupChart({ flights, iata, name, city, visits, years, fl
               <CartesianGrid stroke={CHART.grid} vertical={false} />
               <XAxis dataKey="label" tick={{ ...axisTick, fontSize: 10 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
               <YAxis tick={{ ...axisTick, fontSize: 10 }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
-              <Tooltip content={<ChartTooltip />} />
+              <Tooltip content={<ChartTooltip total />} />
               {areas.map((a) => (
                 <Area key={a.key} type="monotone" dataKey={a.key} stackId="1" stroke={a.color} fill={a.color} fillOpacity={0.5} strokeWidth={1.5} />
               ))}
@@ -98,7 +98,7 @@ export function AirportPopupChart({ flights, iata, name, city, visits, years, fl
           rows={touching
             .slice()
             .sort((a, b) => schedDep(b).localeCompare(schedDep(a)))
-            .map((f) => ({ id: f.id, date: f.flight_date, code: `${f.airline_iata}${f.flight_number}`, route: `${f.dep_iata}→${f.arr_iata}` }))}
+            .map((f) => ({ id: f.id, date: schedDate(f), code: `${f.airline_iata}${f.flight_number}`, route: `${f.dep_iata}→${f.arr_iata}` }))}
         />
       )}
     </div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { color } from "@/lib/palette";
 import { restGet } from "@/lib/supabase";
-import { formatDistance, formatDuration, durationMin, schedDep, schedArr, departureDelayMin, arrivalDelayMin } from "@/lib/format";
+import { formatDistance, formatDuration, durationMin, schedDep, schedArr, schedDate, localDate, departureDelayMin, arrivalDelayMin } from "@/lib/format";
 import { cabinLabel, segmentCost, bookingCost, isMultiLeg, gmailLink } from "@/lib/cabin";
 import type { Flight, Settings } from "@/lib/types";
 
@@ -51,10 +51,17 @@ function useCoTravelers(f: Flight): string[] {
 const GREEN = "#34D399";
 const RED = "#FB7185";
 
-function clock(iso: string | null, tz: string | null): string {
+// clock time in `tz`; when `baseDate` is given, append a day-rollover suffix (+1 / −1)
+// for times that fall on a different local date than the departure (overnight flights).
+function clock(iso: string | null, tz: string | null, baseDate?: string): string {
   if (!iso) return "—";
   try {
-    return new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: tz ?? "UTC" }).format(new Date(iso));
+    const t = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: tz ?? "UTC" }).format(new Date(iso));
+    if (baseDate) {
+      const diff = Math.round((Date.parse(localDate(iso, tz)) - Date.parse(baseDate)) / 86400000);
+      if (diff !== 0) return `${t}${diff > 0 ? `+${diff}` : diff}`;
+    }
+    return t;
   } catch {
     return "—";
   }
@@ -76,12 +83,12 @@ const Strike = ({ children }: { children: React.ReactNode }) => (
 );
 
 // [struck scheduled] actual [delay]
-function TimeRow({ label, sched, actual, tz, delay }: { label: string; sched: string | null; actual: string | null; tz: string | null; delay?: number | null }) {
-  if (!actual) return <Row label={label}>{sched ? clock(sched, tz) : "—"}</Row>;
+function TimeRow({ label, sched, actual, tz, delay, base }: { label: string; sched: string | null; actual: string | null; tz: string | null; delay?: number | null; base?: string }) {
+  if (!actual) return <Row label={label}>{sched ? clock(sched, tz, base) : "—"}</Row>;
   return (
     <Row label={label}>
-      {sched && <Strike>{clock(sched, tz)}</Strike>}
-      {clock(actual, tz)}
+      {sched && <Strike>{clock(sched, tz, base)}</Strike>}
+      {clock(actual, tz, base)}
       {delay != null && <span style={{ color: delayColor(delay), marginLeft: 5 }}>{delay >= 0 ? "+" : ""}{delay}m</span>}
     </Row>
   );
@@ -113,6 +120,7 @@ function TaxiRow({ label, sched, actual }: { label: string; sched: number | null
 
 export function FlightPopup({ flight, settings, fluid, hideHeader }: { flight: Flight; settings: Settings; fluid?: boolean; hideHeader?: boolean }) {
   const f = flight;
+  const depDate = schedDate(f); // provider-preferred departure local date; base for +1 rollovers
   const coTravelers = useCoTravelers(f);
   const rich = f.actual_dep != null || f.actual_arr != null; // AeroAPI gate data
   const depActual = f.actual_dep ?? f.actual_takeoff;
@@ -148,7 +156,7 @@ export function FlightPopup({ flight, settings, fluid, hideHeader }: { flight: F
   return (
     <div style={{ width: fluid ? "100%" : 250 }}>
       {!hideHeader && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, paddingRight: 38 }}>
           <Icon name="route" size={13} color={color.secondary} />
           <span><b>{f.dep_iata} → {f.arr_iata}</b></span>
           {f.diverted && <span style={{ color: RED, fontSize: 11 }}>· diverted</span>}
@@ -163,7 +171,7 @@ export function FlightPopup({ flight, settings, fluid, hideHeader }: { flight: F
           onError={(e) => (e.currentTarget.style.display = "none")}
         />
         <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.35, fontSize: 12, color: "var(--ink-muted)" }}>
-          <span>{f.airline_iata}{f.flight_number} · {f.flight_date}</span>
+          <span>{f.airline_iata}{f.flight_number} · {depDate}</span>
           {f.aircraft_type_name && <span>{f.aircraft_type_name}</span>}
         </div>
       </div>
@@ -178,19 +186,19 @@ export function FlightPopup({ flight, settings, fluid, hideHeader }: { flight: F
       {rich ? (
         <>
           <Section title="Departure" />
-          <TimeRow label="Gate out" sched={schedDep(f)} actual={f.actual_dep} tz={f.dep_timezone} delay={departureDelayMin(f)} />
-          <TimeRow label="Wheels up" sched={f.provider_sched_takeoff} actual={f.actual_takeoff} tz={f.dep_timezone} delay={mins(f.provider_sched_takeoff, f.actual_takeoff)} />
+          <TimeRow label="Gate out" sched={schedDep(f)} actual={f.actual_dep} tz={f.dep_timezone} delay={departureDelayMin(f)} base={depDate} />
+          <TimeRow label="Wheels up" sched={f.provider_sched_takeoff} actual={f.actual_takeoff} tz={f.dep_timezone} delay={mins(f.provider_sched_takeoff, f.actual_takeoff)} base={depDate} />
           <TaxiRow label="Taxi out" sched={mins(f.provider_sched_dep, f.provider_sched_takeoff)} actual={mins(f.actual_dep, f.actual_takeoff)} />
           <Section title="Arrival" />
-          <TimeRow label="Wheels down" sched={f.provider_sched_landing} actual={f.actual_landing} tz={f.arr_timezone} delay={mins(f.provider_sched_landing, f.actual_landing)} />
-          <TimeRow label="Gate in" sched={schedArr(f)} actual={f.actual_arr} tz={f.arr_timezone} delay={arrivalDelayMin(f)} />
+          <TimeRow label="Wheels down" sched={f.provider_sched_landing} actual={f.actual_landing} tz={f.arr_timezone} delay={mins(f.provider_sched_landing, f.actual_landing)} base={depDate} />
+          <TimeRow label="Gate in" sched={schedArr(f)} actual={f.actual_arr} tz={f.arr_timezone} delay={arrivalDelayMin(f)} base={depDate} />
           <TaxiRow label="Taxi in" sched={mins(f.provider_sched_landing, f.provider_sched_arr)} actual={mins(f.actual_landing, f.actual_arr)} />
           <Section title="Trip" />
         </>
       ) : (
         <div style={{ marginTop: 4 }}>
-          <TimeRow label="Departed" sched={schedDep(f)} actual={depActual} tz={f.dep_timezone} delay={departureDelayMin(f)} />
-          <TimeRow label="Arrived" sched={schedArr(f)} actual={arrActual} tz={f.arr_timezone} delay={arrivalDelayMin(f)} />
+          <TimeRow label="Departed" sched={schedDep(f)} actual={depActual} tz={f.dep_timezone} delay={departureDelayMin(f)} base={depDate} />
+          <TimeRow label="Arrived" sched={schedArr(f)} actual={arrActual} tz={f.arr_timezone} delay={arrivalDelayMin(f)} base={depDate} />
         </div>
       )}
 

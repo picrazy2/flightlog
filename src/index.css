@@ -142,8 +142,9 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   box-shadow: var(--shadow-3);
-  /* extra right padding so text doesn't butt against the close/minimize buttons */
-  padding: 11px 48px 12px 13px;
+  /* symmetric padding; only the header line clears the close/minimize buttons (the
+     popup components add right padding to their header) so the body uses full width */
+  padding: 11px 14px 12px 13px;
   font-family: "Geist", sans-serif;
 }
 .maplibregl-popup-close-button,

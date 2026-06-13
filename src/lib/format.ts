@@ -11,6 +11,19 @@ export const actualArr = (f: Flight): string | null => f.actual_landing ?? f.act
 export const schedDep = (f: Flight): string => f.provider_sched_dep ?? f.sched_dep;
 export const schedArr = (f: Flight): string => f.provider_sched_arr ?? f.sched_arr;
 
+// Local calendar date (YYYY-MM-DD) of a UTC ISO timestamp, in the given timezone.
+export const localDate = (iso: string, tz: string | null): string =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: tz ?? "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+// Display date for a flight = the departure local date from the provider-preferred
+// schedule (falls back to the stored flight_date if anything is off).
+export const schedDate = (f: Flight): string => {
+  try {
+    return localDate(schedDep(f), f.dep_timezone ?? null);
+  } catch {
+    return f.flight_date;
+  }
+};
+
 // Delay = gate actual vs gate schedule (airline convention) when available, else
 // wheels actual vs user schedule. Returns minutes (null if no actual time).
 export const departureDelayMin = (f: Flight): number | null => {
