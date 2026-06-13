@@ -169,10 +169,11 @@ export const delays: StatModule = {
 
     // distribution of arrival punctuality across timed flights
     const timed = flights.filter((f) => actualArr(f));
-    let early = 0, onTime = 0, delayed = 0, veryLate = 0, netMin = 0;
+    let early = 0, onTime = 0, delayed = 0, veryLate = 0, netMin = 0, lateMin = 0;
     for (const f of timed) {
       const d = delayMin(f) ?? 0;
       netMin += d; // net of early arrivals (signed)
+      if (d > 0) lateMin += d; // gross total lateness (early arrivals not subtracted)
       if (d < 0) early++;
       else if (d <= LATE_MIN) onTime++;
       else if (d <= VERY_MIN) delayed++;
@@ -181,14 +182,12 @@ export const delays: StatModule = {
     const totTimed = timed.length || 1;
     const pct = (n: number) => `${Math.round((n / totTimed) * 100)}%`;
     const netDur = formatDuration(Math.abs(netMin)).value;
-    const delayVals = timed.map((f) => delayMin(f) ?? 0);
-    const maxDelay = delayVals.length ? Math.max(...delayVals) : 0;
     const cards = [
       { label: "Early", value: pct(early), color: GREEN },
       { label: "On time", value: pct(onTime), color: ONTIME },
       { label: "Delayed (15m–1h)", value: pct(delayed), color: color.secondary },
       { label: "Very delayed", value: pct(veryLate), color: RED },
-      { label: "Most delayed", value: maxDelay > 0 ? `+${formatDuration(maxDelay).value}` : "—", color: RED },
+      { label: "Total delay", value: lateMin > 0 ? `+${formatDuration(lateMin).value}` : "—", color: RED },
       { label: netMin >= 0 ? "Net time lost" : "Net time saved", value: `${netMin >= 0 ? "+" : "−"}${netDur}`, color: netMin >= 0 ? RED : GREEN },
     ];
 
@@ -366,7 +365,7 @@ function DelayColumn({ title, rows, settings }: { title: string; rows: { f: Flig
                   </div>
                   <div className="text-caption text-ink-faint">{f.flight_date}{approx ? " · approx" : ""}</div>
                 </div>
-                <div className="tnum shrink-0 text-label font-semibold" style={{ color: d > 0 ? RED : GREEN }}>
+                <div className="tnum shrink-0 text-label font-semibold" style={{ color: delayColor(d) }}>
                   {fmtDelay(d)}
                 </div>
                 <span className={`shrink-0 text-ink-faint transition-transform ${isOpen ? "rotate-90" : ""}`}>›</span>
@@ -399,4 +398,12 @@ function delayBucket(f: Flight): DelayBucket {
   if (d <= LATE_MIN) return "ontime";
   if (d <= VERY_MIN) return "delayed";
   return "very";
+}
+
+// Colour a signed delay (min) by its punctuality bucket — matches the metric cards.
+function delayColor(d: number): string {
+  if (d < 0) return DELAY_COLORS.early;
+  if (d <= LATE_MIN) return DELAY_COLORS.ontime;
+  if (d <= VERY_MIN) return DELAY_COLORS.delayed;
+  return DELAY_COLORS.very;
 }
