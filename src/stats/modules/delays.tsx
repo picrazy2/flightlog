@@ -185,6 +185,11 @@ export const delays: StatModule = {
       .sort((a, b) => b.value - a.value);
     const groupRows = delayGroup === "airlines" ? worst : worstAirports;
     const metricUnit = airlineMetric === "pct" ? "%" : "min";
+    const metricName =
+      airlineMetric === "net" ? "Avg net delay"
+      : airlineMetric === "gross" ? "Avg gross delay"
+      : airlineMetric === "median" ? "Median delay"
+      : "% delayed";
     const dlyWord = delayGroup === "airlines" ? "arrival delay" : "departure delay";
     const grpScope = delayGroup === "airlines" ? "by airline (≥8 flights)" : "by airport (≥8 deps)";
     const chart2Title =
@@ -317,7 +322,7 @@ export const delays: StatModule = {
             </div>
             <BarsH
               rows={groupRows}
-              series={[{ key: "value", name: metricUnit, color: color.routeIntl }]}
+              series={[{ key: "value", name: metricName, color: color.routeIntl }]}
               activeId={delayGroup === "airlines" ? airlineActive : airportActive}
               unit={metricUnit}
               colorByRow={airlineMetric === "pct" ? undefined : (r) => delayColor(Number(r.value))}
