@@ -156,7 +156,7 @@ export const continents: StatModule = {
         return row;
       });
     } else {
-      series1 = [{ key: "v", name: unit1, color: color.accent }];
+      series1 = [{ key: "v", name: unit1 === "%" ? "% of total" : unit1 === "countries" ? "Countries" : "Visits", color: color.accent }];
       colorByRow1 = (r) => CONT_COLOR[r.id as ContinentCode];
       rows1 = CONTINENTS.map((c) => {
         const v = metric === "countries"

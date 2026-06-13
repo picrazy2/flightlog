@@ -359,7 +359,7 @@ export const routes: StatModule = {
         </div>
         <BarsV
           rows={histRows}
-          series={[{ key: "value", name: "flights", color: color.secondary }]}
+          series={[{ key: "value", name: "Flights", color: color.secondary }]}
           unit="flights"
           height={170}
           onPick={(id) => {
@@ -457,6 +457,9 @@ export const routes: StatModule = {
                   series={rankSeries}
                   unit={rankUnit}
                   colorByRow={(row) => rankColorByRow.get(row.id)}
+                  labelWidth={176}
+                  tickFontSize={10}
+                  rowPx={28}
                   topAxis
                 />
               </div>

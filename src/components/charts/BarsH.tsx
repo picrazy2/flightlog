@@ -32,13 +32,15 @@ interface Props {
   cap?: number; // show only the first `cap` rows, with a "see all" button that opens a modal
   barSize?: number; // fixed bar thickness (px); default lets recharts size it
   rowPx?: number; // vertical space per row (px); default 26 — smaller = skinnier/tighter
+  labelWidth?: number; // override the category-label column width (px)
+  tickFontSize?: number; // override the category-label font size (px)
   topAxis?: boolean; // put the value axis at the top (visible above a tall scrolling list)
   autoPie?: boolean; // when a stacked breakdown collapses to one series, draw a donut of the rows
   title?: string; // header for the "see all" modal
 }
 
 // Horizontal, optionally stacked / 100%-stacked, interactive bar chart.
-export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit, cap, barSize, rowPx, topAxis, autoPie, title }: Props) {
+export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit, cap, barSize, rowPx, labelWidth, tickFontSize, topAxis, autoPie, title }: Props) {
   // on touch (mobile/tablet) a tap is the only way to see a value, so don't let it filter
   const pick = useIsMobile(1024) ? undefined : onPick;
   const [showAll, setShowAll] = useState(false); // opens the "see all" modal
@@ -119,7 +121,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
             tickLine={false}
             axisLine={false}
             interval={0}
-            width={tickIcon ? 76 : 92}
+            width={labelWidth ?? (tickIcon ? 76 : 92)}
             tick={
               tickBadge
                 ? (props: { x: number; y: number; payload: { index: number } }) => {
@@ -151,7 +153,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
                       </g>
                     );
                   }
-                : axisTick
+                : (tickFontSize ? { ...axisTick, fontSize: tickFontSize } : axisTick)
             }
           />
           <Tooltip content={<ChartTooltip unit={unit} total noSwatch={perRowColored} />} cursor={{ fill: CHART.cursor }} />
