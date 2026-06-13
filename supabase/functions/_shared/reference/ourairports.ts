@@ -128,7 +128,11 @@ export async function refreshAirports(
     const latitude = parseNumber(row.latitude_deg);
     const longitude = parseNumber(row.longitude_deg);
     const icao = cleanString(row.icao_code) ?? cleanString(row.ident);
-    const timezone = deriveTimezone(latitude, longitude);
+    // China officially uses Beijing time everywhere (incl. Xinjiang); tz-lookup returns
+    // Asia/Urumqi (UTC+6) for the far west, but flights are scheduled/logged in Beijing
+    // time, so normalize Chinese airports to Asia/Shanghai for display.
+    let timezone = deriveTimezone(latitude, longitude);
+    if (timezone === "Asia/Urumqi" && country === "CN") timezone = "Asia/Shanghai";
 
     if (
       !country || !continent || !name || !city || !isoRegion ||
