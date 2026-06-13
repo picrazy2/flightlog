@@ -228,7 +228,7 @@ export const airports: StatModule = {
             onChange={setMetric}
             options={[
               { value: "visits", label: "Visits" },
-              { value: "destinations", label: "Destinations" },
+              { value: "destinations", label: "Dests" },
             ]}
           />
           <div className="flex items-center gap-2">

@@ -85,9 +85,12 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
     return <PieSlices slices={slices} unit={unit} activeId={activeId} onPick={onPick ? (id) => id !== "__other" && onPick(id) : undefined} />;
   }
 
+  // bars coloured per-row (colorByRow) → the series-based legend + tooltip swatch would
+  // show the wrong colour, so suppress them (callers supply their own legend if needed)
+  const perRowColored = Boolean(colorByRow);
   return (
     <div>
-      <ChartLegend series={series} />
+      {!perRowColored && <ChartLegend series={series} />}
       <div className="transition-[height] duration-300 ease-out" style={{ height: h, cursor: pick ? "pointer" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
@@ -151,7 +154,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
                 : axisTick
             }
           />
-          <Tooltip content={<ChartTooltip unit={unit} total />} cursor={{ fill: CHART.cursor }} />
+          <Tooltip content={<ChartTooltip unit={unit} total noSwatch={perRowColored} />} cursor={{ fill: CHART.cursor }} />
           {series.map((s) => (
             <Bar
               key={s.key}
