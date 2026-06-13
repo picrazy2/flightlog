@@ -30,14 +30,6 @@ const regionOf = (iso?: string | null) => {
   const s = sovereignOf(iso);
   return s ? COUNTRY_GEO[s]?.subregion ?? null : null;
 };
-// sort by value (longest desc / shortest asc); null values ("n/a") always sort to the end
-function sortRank<T extends { value: number | null }>(rows: T[], dir: "longest" | "shortest"): T[] {
-  return [...rows].sort((a, b) => {
-    if (a.value == null) return b.value == null ? 0 : 1;
-    if (b.value == null) return -1;
-    return dir === "longest" ? b.value - a.value : a.value - b.value;
-  });
-}
 const OTHER = "#5C6575";
 // rankings colouring: international is one colour; domestic is split by country
 const INTL_COLOR = "#FFC061";
@@ -112,7 +104,7 @@ export const routes: StatModule = {
     const [directed, setDirected] = useState<"undirected" | "directed">("undirected");
     const [metric, setMetric] = useState<Metric>("flights");
     const [histMetric, setHistMetric] = useState<"distance" | "time">("distance");
-    const [rankDir, setRankDir] = useState<"longest" | "shortest">("longest");
+    const [rankSort, setRankSort] = useState<"longest" | "shortest" | "detourPct" | "detourMi">("longest");
     const [rankMetric, setRankMetric] = useState<RankMetric>("distance");
     const [rankTrip, setRankTrip] = useState<"all" | "domestic" | "international">("all");
     const [rankBreakdown, setRankBreakdown] = useState<Breakdown>("country");
@@ -158,6 +150,7 @@ export const routes: StatModule = {
       depC: string;
       arrC: string;
       gc: number;
+      flown: number;
       value: number | null;
     };
     const speedOf = (distMi: number, minutes: number) => (minutes > 0 ? Math.round((distMi * 60) / minutes) : null);
@@ -175,48 +168,57 @@ export const routes: StatModule = {
         depC: r.sampleFlight.dep_country ?? "",
         arrC: r.sampleFlight.arr_country ?? "",
         gc: Math.round(distance),
+        flown: Math.round(r.sampleFlight.flown_distance_mi ?? distance),
         value:
           rankMetric === "distance" ? Math.round(distance) : rankMetric === "time" ? Math.round(time) : speedOf(distance, time),
       };
     });
-    const rankRows: RankRow[] = sortRank(
-      undirected.filter((r) => rankTrip === "all" || r.tripType === rankTrip),
-      rankDir,
-    );
+    const rankRows: RankRow[] = undirected.filter((r) => rankTrip === "all" || r.tripType === rankTrip);
 
     // per-flight rankings (no route dedup) — only meaningful with tracks (flown distance).
     // For speed, fully-GC flights (no real track) don't count → value null ("n/a").
-    const flightRankRows: RankRow[] = sortRank(
-      ctx.flights
-        .filter((f) => rankTrip === "all" || f.trip_type === rankTrip)
-        .map((f) => {
-          const flown = flightDistanceMi(f);
-          const minutes = flightMinutes(f);
-          const hasTrack = f.flown_distance_mi != null;
-          return {
-            id: f.id,
-            label: `${f.dep_iata} → ${f.arr_iata} · ${f.flight_date}`,
-            dep: f.dep_iata,
-            arr: f.arr_iata,
-            tripType: f.trip_type ?? "",
-            country: f.trip_type === "domestic" ? f.dep_country_name ?? f.dep_country ?? "" : "",
-            depC: f.dep_country ?? "",
-            arrC: f.arr_country ?? "",
-            gc: Math.round(f.distance_mi ?? 0),
-            value:
-              rankMetric === "distance"
-                ? Math.round(flown)
-                : rankMetric === "time"
-                ? Math.round(minutes)
-                : hasTrack
-                ? speedOf(flown, minutes)
-                : null,
-          };
-        }),
-      rankDir,
-    );
+    const flightRankRows: RankRow[] = ctx.flights
+      .filter((f) => rankTrip === "all" || f.trip_type === rankTrip)
+      .map((f) => {
+        const flown = flightDistanceMi(f);
+        const minutes = flightMinutes(f);
+        const hasTrack = f.flown_distance_mi != null;
+        return {
+          id: f.id,
+          label: `${f.dep_iata} → ${f.arr_iata} · ${f.flight_date}`,
+          dep: f.dep_iata,
+          arr: f.arr_iata,
+          tripType: f.trip_type ?? "",
+          country: f.trip_type === "domestic" ? f.dep_country_name ?? f.dep_country ?? "" : "",
+          depC: f.dep_country ?? "",
+          arrC: f.arr_country ?? "",
+          gc: Math.round(f.distance_mi ?? 0),
+          flown: Math.round(flown),
+          value:
+            rankMetric === "distance"
+              ? Math.round(flown)
+              : rankMetric === "time"
+              ? Math.round(minutes)
+              : hasTrack
+              ? speedOf(flown, minutes)
+              : null,
+        };
+      });
 
-    const rankingRows = rankScope === "flights" ? flightRankRows : rankRows;
+    // detour = how much the flown path exceeds the great-circle (per-row); only meaningful
+    // with real tracks (else flown falls back to GC → 0). "Biggest detour" sorts override
+    // the metric value with the detour amount (% or absolute miles).
+    const detourMi = (r: RankRow) => Math.max(0, r.flown - r.gc);
+    const detourPct = (r: RankRow) => (r.gc > 0 ? Math.round((r.flown / r.gc - 1) * 100) : 0);
+    const isDetour = rankSort === "detourMi" || rankSort === "detourPct";
+    const rowVal = (r: RankRow): number | null =>
+      rankSort === "detourMi" ? detourMi(r) : rankSort === "detourPct" ? detourPct(r) : r.value;
+    const rankingRows = [...(rankScope === "flights" ? flightRankRows : rankRows)].sort((a, b) => {
+      const va = rowVal(a), vb = rowVal(b);
+      if (va == null) return vb == null ? 0 : 1; // n/a sorts to the end
+      if (vb == null) return -1;
+      return rankSort === "shortest" ? va - vb : vb - va; // shortest asc; longest/detour desc
+    });
 
     // colour bars by the chosen breakdown; cross-group (intl / inter-region / intercont) → INTL_COLOR
     const groupKey = (r: RankRow) => {
@@ -274,20 +276,21 @@ export const routes: StatModule = {
       ...(hasInter ? [{ label: groupLabel("__inter"), color: INTL_COLOR }] : []),
     ];
 
-    const rankUnit = rankMetric === "distance" ? ctx.settings.units : rankMetric === "time" ? "min" : "mph";
+    const rankUnit = isDetour ? (rankSort === "detourPct" ? "%" : "mi") : rankMetric === "distance" ? ctx.settings.units : rankMetric === "time" ? "min" : "mph";
     // flights-by-distance: stack great-circle + the extra flown over it (lighter shade)
-    const splitGc = rankScope === "flights" && rankMetric === "distance";
+    const splitGc = !isDetour && rankScope === "flights" && rankMetric === "distance";
     const rankSeries: Series[] = splitGc
       ? [
           { key: "gc", name: "Great-circle", color: color.accent },
           { key: "extra", name: "Extra vs GC", color: color.accent, opacity: 0.4 },
         ]
-      : [{ key: "value", name: rankMetric, color: color.accent }];
+      : [{ key: "value", name: isDetour ? (rankSort === "detourPct" ? "detour" : "extra") : rankMetric, color: color.accent }];
     const rankColorByRow = new Map(rankingRows.map((r) => [r.id, colorOf(r)]));
     const rankModalRows: BarRowData[] = rankingRows.map((r, i): BarRowData => {
-      const na = r.value == null;
+      const v = rowVal(r);
+      const na = v == null;
       const label = `${i + 1}. ${r.label}${na ? " · n/a" : ""}`; // rank prefix shows on the axis + hover
-      const value = r.value ?? 0;
+      const value = v ?? 0;
       return splitGc
         ? { id: r.id, label, gc: r.gc, extra: Math.max(0, value - r.gc) }
         : { id: r.id, label, value };
@@ -389,16 +392,6 @@ export const routes: StatModule = {
           <Modal title={rankScope === "flights" ? "Flight rankings" : "Route rankings"} onClose={() => setShowRankings(false)} className="w-[min(720px,95vw)]">
             <div className="flex flex-col gap-3 p-5">
               <div className="flex flex-wrap items-center gap-2">
-                <Segmented
-                  aria-label="Ranking"
-                  size="sm"
-                  value={rankDir}
-                  onChange={setRankDir}
-                  options={[
-                    { value: "longest", label: "Longest" },
-                    { value: "shortest", label: "Shortest" },
-                  ]}
-                />
                 <Dropdown
                   aria-label="Ranking metric"
                   size="sm"
@@ -432,6 +425,21 @@ export const routes: StatModule = {
                     { value: "continent", label: "By continent" },
                   ]}
                 />
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="text-caption text-ink-faint">Sort by</span>
+                  <Dropdown
+                    aria-label="Sort by"
+                    size="sm"
+                    value={rankSort}
+                    onChange={setRankSort}
+                    options={[
+                      { value: "longest", label: "Longest" },
+                      { value: "shortest", label: "Shortest" },
+                      { value: "detourPct", label: "Biggest detour (%)" },
+                      { value: "detourMi", label: "Biggest detour (mi)" },
+                    ]}
+                  />
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-ink-muted">
                 {legendItems.map((it) => (
