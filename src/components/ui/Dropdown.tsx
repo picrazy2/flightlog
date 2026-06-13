@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 export interface DropdownOption<T extends string> {
   value: T;
   label: string;
+  disabled?: boolean;
 }
 
 interface Props<T extends string> {
@@ -47,13 +48,19 @@ export function Dropdown<T extends string>({ value, options, onChange, size = "s
           {options.map((o) => (
             <button
               key={o.value}
+              disabled={o.disabled}
               onClick={() => {
+                if (o.disabled) return;
                 onChange(o.value);
                 close();
               }}
               className={cn(
-                "focus-ring block w-full rounded-md px-2.5 py-1.5 text-left text-label hover:bg-surface-2",
-                o.value === value ? "text-accent" : "text-ink",
+                "focus-ring block w-full rounded-md px-2.5 py-1.5 text-left text-label",
+                o.disabled
+                  ? "cursor-not-allowed text-ink-faint opacity-50"
+                  : o.value === value
+                  ? "text-accent hover:bg-surface-2"
+                  : "text-ink hover:bg-surface-2",
               )}
             >
               {o.label}

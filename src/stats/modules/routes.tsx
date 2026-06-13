@@ -210,11 +210,12 @@ export const routes: StatModule = {
     // the metric value with the detour amount (% or absolute miles).
     const detourMi = (r: RankRow) => Math.max(0, r.flown - r.gc);
     const detourPct = (r: RankRow) => (r.gc > 0 ? Math.round((r.flown / r.gc - 1) * 100) : 0);
-    const isDetour = rankSort === "detourMi" || rankSort === "detourPct";
-    const rowVal = (r: RankRow): number | null =>
-      rankSort === "detourMi" ? detourMi(r) : rankSort === "detourPct" ? detourPct(r) : r.value;
+    // detour is a SORT ORDER only — bars keep the metric value; valid for distance only
+    const detourActive = rankMetric === "distance" && (rankSort === "detourMi" || rankSort === "detourPct");
+    const sortKey = (r: RankRow): number | null =>
+      detourActive ? (rankSort === "detourMi" ? detourMi(r) : detourPct(r)) : r.value;
     const rankingRows = [...(rankScope === "flights" ? flightRankRows : rankRows)].sort((a, b) => {
-      const va = rowVal(a), vb = rowVal(b);
+      const va = sortKey(a), vb = sortKey(b);
       if (va == null) return vb == null ? 0 : 1; // n/a sorts to the end
       if (vb == null) return -1;
       return rankSort === "shortest" ? va - vb : vb - va; // shortest asc; longest/detour desc
@@ -276,21 +277,20 @@ export const routes: StatModule = {
       ...(hasInter ? [{ label: groupLabel("__inter"), color: INTL_COLOR }] : []),
     ];
 
-    const rankUnit = isDetour ? (rankSort === "detourPct" ? "%" : "mi") : rankMetric === "distance" ? ctx.settings.units : rankMetric === "time" ? "min" : "mph";
+    const rankUnit = rankMetric === "distance" ? ctx.settings.units : rankMetric === "time" ? "min" : "mph";
     // flights-by-distance: stack great-circle + the extra flown over it (lighter shade)
-    const splitGc = !isDetour && rankScope === "flights" && rankMetric === "distance";
+    const splitGc = rankScope === "flights" && rankMetric === "distance";
     const rankSeries: Series[] = splitGc
       ? [
           { key: "gc", name: "Great-circle", color: color.accent },
           { key: "extra", name: "Extra vs GC", color: color.accent, opacity: 0.4 },
         ]
-      : [{ key: "value", name: isDetour ? (rankSort === "detourPct" ? "detour" : "extra") : rankMetric, color: color.accent }];
+      : [{ key: "value", name: rankMetric, color: color.accent }];
     const rankColorByRow = new Map(rankingRows.map((r) => [r.id, colorOf(r)]));
     const rankModalRows: BarRowData[] = rankingRows.map((r, i): BarRowData => {
-      const v = rowVal(r);
-      const na = v == null;
+      const na = r.value == null;
       const label = `${i + 1}. ${r.label}${na ? " · n/a" : ""}`; // rank prefix shows on the axis + hover
-      const value = v ?? 0;
+      const value = r.value ?? 0;
       return splitGc
         ? { id: r.id, label, gc: r.gc, extra: Math.max(0, value - r.gc) }
         : { id: r.id, label, value };
@@ -396,7 +396,11 @@ export const routes: StatModule = {
                   aria-label="Ranking metric"
                   size="sm"
                   value={rankMetric}
-                  onChange={setRankMetric}
+                  onChange={(m) => {
+                    setRankMetric(m);
+                    // detour only applies to distance — revert the sort if leaving it
+                    if (m !== "distance" && (rankSort === "detourMi" || rankSort === "detourPct")) setRankSort("longest");
+                  }}
                   options={[
                     { value: "distance", label: "Distance" },
                     { value: "time", label: "Time" },
@@ -435,8 +439,8 @@ export const routes: StatModule = {
                     options={[
                       { value: "longest", label: "Longest" },
                       { value: "shortest", label: "Shortest" },
-                      { value: "detourPct", label: "Biggest detour (%)" },
-                      { value: "detourMi", label: "Biggest detour (mi)" },
+                      { value: "detourPct", label: "Biggest detour (%)", disabled: rankMetric !== "distance" },
+                      { value: "detourMi", label: "Biggest detour (mi)", disabled: rankMetric !== "distance" },
                     ]}
                   />
                 </div>
