@@ -461,6 +461,16 @@ export const routes: StatModule = {
                   tickFontSize={10}
                   rowPx={28}
                   topAxis
+                  onPick={(id) => {
+                    setShowRankings(false);
+                    if (rankScope === "flights") {
+                      // highlight + popup the flight on the map
+                      window.dispatchEvent(new CustomEvent("journia:showflight", { detail: { flightId: id } }));
+                    } else {
+                      const r = rankingRows.find((x) => x.id === id);
+                      if (r) toggleCrossFilter(routeFilter(r.dep, r.arr));
+                    }
+                  }}
                 />
               </div>
             </div>
