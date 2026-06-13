@@ -32,13 +32,33 @@ import { airlineKey, airlineLabel } from "@/lib/airlines";
 
 const LATE_MIN = 15; // > 15 min late = "delayed" (industry on-time standard)
 const VERY_MIN = 60; // > 1h late = "very delayed"
-const GREEN = "#34D399";
-const ONTIME = "#10B981";
+const GREEN = "#10B981"; // early — darker green
+const ONTIME = "#6EE7B7"; // on time — lighter green
 const RED = "#FB7185";
 // A flight is "delayed" only when it arrives more than LATE_MIN late; within 15 min
 // (including early) counts as on-time, matching industry punctuality reporting. The
 // ~6-min wheels-vs-gate taxi gap on wheels-only flights sits well inside this band.
 const delayMin = (f: Flight): number | null => arrivalDelayMin(f);
+
+export type DelayMetric = "net" | "gross" | "median" | "pct";
+const median = (xs: number[]): number => {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+// Reduce a group's signed delays (min) to the selected chart-2 metric.
+//  net    = mean signed delay (early arrivals pull it down)
+//  gross  = mean lateness, early arrivals clamped to 0 (delay burden)
+//  median = median signed delay (robust to monster outliers)
+//  pct    = share of flights > 15 min late
+const metricOf = (ds: number[], late: number, metric: DelayMetric): number => {
+  const n = ds.length || 1;
+  if (metric === "pct") return Math.round((late / n) * 100);
+  if (metric === "median") return Math.round(median(ds));
+  if (metric === "gross") return Math.round(ds.reduce((s, x) => s + Math.max(x, 0), 0) / n);
+  return Math.round(ds.reduce((s, x) => s + x, 0) / n);
+};
 
 export const delays: StatModule = {
   id: "delays",
@@ -59,7 +79,7 @@ export const delays: StatModule = {
   },
   Panel: ({ ctx }) => {
     // second chart metric: avg minutes late vs % of flights delayed, per airline
-    const [airlineMetric, setAirlineMetric] = useState<"mins" | "pct">("mins");
+    const [airlineMetric, setAirlineMetric] = useState<DelayMetric>("net");
     // chart 2 grouping: arrival delay by airline, or departure delay by airport
     const [delayGroup, setDelayGroup] = useState<"airlines" | "airports">("airlines");
     const [showList, setShowList] = useState(false);
@@ -124,48 +144,54 @@ export const delays: StatModule = {
         "Arrival delay": v.arrN ? Math.round(v.arr / v.arrN) : 0,
         "% delayed": v.arrN ? Math.round((v.late / v.arrN) * 100) : 0,
       }));
-    // per-airline arrival performance — airlines with >= 10 timed flights
-    const byAirline = new Map<string, { label: string; sum: number; n: number; late: number }>();
+    // per-airline arrival performance — airlines with >= 8 timed flights
+    const byAirline = new Map<string, { label: string; ds: number[]; late: number }>();
     for (const f of flights) {
       const d = delayMin(f);
       if (d == null) continue;
       const k = airlineKey(f.airline_iata);
-      const cur = byAirline.get(k) ?? { label: airlineLabel(f.airline_iata, f.airline_name), sum: 0, n: 0, late: 0 };
-      cur.n += 1;
-      cur.sum += d;
+      const cur = byAirline.get(k) ?? { label: airlineLabel(f.airline_iata, f.airline_name), ds: [], late: 0 };
+      cur.ds.push(d);
       if (d > LATE_MIN) cur.late += 1;
       byAirline.set(k, cur);
     }
     const worst = [...byAirline.entries()]
-      .filter(([, a]) => a.n >= 8)
+      .filter(([, a]) => a.ds.length >= 8)
       .map(([iata, a]) => ({
         id: iata,
         label: a.label,
-        value: airlineMetric === "mins" ? Math.round(a.sum / a.n) : Math.round((a.late / a.n) * 100),
-        sub: `${a.late} of ${a.n} flights delayed`,
+        value: metricOf(a.ds, a.late, airlineMetric),
+        sub: `${a.late} of ${a.ds.length} flights delayed`,
       }))
       .sort((a, b) => b.value - a.value);
     // per departure-airport DEPARTURE-delay performance — airports with >= 8 timed deps
-    const byAirport = new Map<string, { sum: number; n: number; late: number }>();
+    const byAirport = new Map<string, { ds: number[]; late: number }>();
     for (const f of flights) {
       const d = departureDelayMin(f);
       if (d == null) continue;
-      const cur = byAirport.get(f.dep_iata) ?? { sum: 0, n: 0, late: 0 };
-      cur.n += 1;
-      cur.sum += d;
+      const cur = byAirport.get(f.dep_iata) ?? { ds: [], late: 0 };
+      cur.ds.push(d);
       if (d > LATE_MIN) cur.late += 1;
       byAirport.set(f.dep_iata, cur);
     }
     const worstAirports = [...byAirport.entries()]
-      .filter(([, a]) => a.n >= 8)
+      .filter(([, a]) => a.ds.length >= 8)
       .map(([iata, a]) => ({
         id: iata,
         label: iata,
-        value: airlineMetric === "mins" ? Math.round(a.sum / a.n) : Math.round((a.late / a.n) * 100),
-        sub: `${a.late} of ${a.n} deps delayed`,
+        value: metricOf(a.ds, a.late, airlineMetric),
+        sub: `${a.late} of ${a.ds.length} deps delayed`,
       }))
       .sort((a, b) => b.value - a.value);
     const groupRows = delayGroup === "airlines" ? worst : worstAirports;
+    const metricUnit = airlineMetric === "pct" ? "%" : "min";
+    const dlyWord = delayGroup === "airlines" ? "arrival delay" : "departure delay";
+    const grpScope = delayGroup === "airlines" ? "by airline (≥8 flights)" : "by airport (≥8 deps)";
+    const chart2Title =
+      airlineMetric === "pct" ? `% of ${delayGroup === "airlines" ? "flights" : "departures"} >15m late ${grpScope}`
+      : airlineMetric === "net" ? `Average net ${dlyWord} ${grpScope}`
+      : airlineMetric === "gross" ? `Average gross ${dlyWord} ${grpScope}`
+      : `Median ${dlyWord} ${grpScope}`;
 
     // distribution of arrival punctuality across timed flights
     const timed = flights.filter((f) => actualArr(f));
@@ -218,11 +244,17 @@ export const delays: StatModule = {
       { key: "Arrival delay", name: "Arrival delay (min)", color: color.routeIntl },
       { key: "% delayed", name: "% delayed", color: "#A78BFA" },
     ];
-    // delay (min) axis extent → tint above 0 red (late = bad), below 0 green (early);
-    // tight domain (no fudge) so the baseline sits at 0
+    // delay (min) axis extent — tight domain (no fudge) so the baseline sits at 0
     const minVals = rows.flatMap((r) => [r["Departure delay"], r["Arrival delay"]]);
     const axisMax = Math.max(1, ...minVals);
     const axisMin = Math.min(0, ...minVals);
+    // background bands by punctuality (early → very-delayed) along the delay axis
+    const delayBands = [
+      { y1: axisMin, y2: 0, fill: GREEN },
+      { y1: 0, y2: Math.min(LATE_MIN, axisMax), fill: ONTIME },
+      { y1: LATE_MIN, y2: Math.min(VERY_MIN, axisMax), fill: color.secondary },
+      { y1: VERY_MIN, y2: axisMax, fill: RED },
+    ].filter((b) => b.y2 > b.y1);
     return (
       <>
         <MiniStats items={cards} cols={3} />
@@ -232,8 +264,9 @@ export const delays: StatModule = {
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={rows} margin={{ left: -16, right: -8, top: 6, bottom: 2 }}>
               <CartesianGrid stroke={CHART.grid} vertical={false} />
-              <ReferenceArea yAxisId="min" y1={0} y2={axisMax} fill="#FB7185" fillOpacity={0.07} stroke="none" />
-              <ReferenceArea yAxisId="min" y1={axisMin} y2={0} fill="#34D399" fillOpacity={0.07} stroke="none" />
+              {delayBands.map((b, i) => (
+                <ReferenceArea key={i} yAxisId="min" y1={b.y1} y2={b.y2} fill={b.fill} fillOpacity={0.1} stroke="none" />
+              ))}
               <ReferenceLine yAxisId="min" y={0} stroke={CHART.axis} strokeDasharray="2 2" />
               <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} />
               <YAxis yAxisId="min" domain={[axisMin, axisMax]} tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}m`} />
@@ -266,26 +299,28 @@ export const delays: StatModule = {
                   { value: "airports", label: "Airports" },
                 ]}
               />
-              <Segmented
+              <Dropdown
                 aria-label="Delay metric"
                 size="sm"
-                className="w-[128px] shrink-0"
                 value={airlineMetric}
                 onChange={setAirlineMetric}
                 options={[
-                  { value: "mins", label: "Avg" },
-                  { value: "pct", label: "%" },
+                  { value: "net", label: "Avg net" },
+                  { value: "gross", label: "Avg gross" },
+                  { value: "median", label: "Median" },
+                  { value: "pct", label: "% delayed" },
                 ]}
               />
             </div>
             <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">
-              {delayGroup === "airlines" ? "Arrival delay by airline (≥8 flights)" : "Departure delay by airport (≥8 deps)"}
+              {chart2Title}
             </div>
             <BarsH
               rows={groupRows}
-              series={[{ key: "value", name: airlineMetric === "mins" ? "min" : "%", color: color.routeIntl }]}
+              series={[{ key: "value", name: metricUnit, color: color.routeIntl }]}
               activeId={delayGroup === "airlines" ? airlineActive : airportActive}
-              unit={airlineMetric === "mins" ? "min" : "%"}
+              unit={metricUnit}
+              colorByRow={airlineMetric === "pct" ? undefined : (r) => delayColor(Number(r.value))}
               title={delayGroup === "airlines" ? "Delays by airline" : "Departure delays by airport"}
               cap={10}
               onPick={(id) => {
