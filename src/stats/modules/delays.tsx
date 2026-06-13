@@ -27,7 +27,7 @@ import { ChartLegend } from "@/components/charts/ChartLegend";
 import { CHART, axisTick } from "@/components/charts/chartTheme";
 import { color } from "@/lib/palette";
 import { useStore } from "@/state/store";
-import { airlineFilter } from "../filters";
+import { airlineFilter, airportFilter } from "../filters";
 import { airlineKey, airlineLabel } from "@/lib/airlines";
 
 const LATE_MIN = 15; // > 15 min late = "delayed" (industry on-time standard)
@@ -60,9 +60,12 @@ export const delays: StatModule = {
   Panel: ({ ctx }) => {
     // second chart metric: avg minutes late vs % of flights delayed, per airline
     const [airlineMetric, setAirlineMetric] = useState<"mins" | "pct">("mins");
+    // chart 2 grouping: arrival delay by airline, or departure delay by airport
+    const [delayGroup, setDelayGroup] = useState<"airlines" | "airports">("airlines");
     const [showList, setShowList] = useState(false);
     const { toggleCrossFilter, crossFilters } = useStore();
     const airlineActive = crossFilters.filter((c) => c.id.startsWith("airline:")).map((c) => c.id.slice("airline:".length));
+    const airportActive = crossFilters.filter((c) => c.id.startsWith("airport:")).map((c) => c.id.slice("airport:".length));
 
     // panel-local filters (do not touch the global cross-filters) — narrow this panel by
     // airline / airport / year. Options are built from the full panel set so they're stable.
@@ -142,6 +145,27 @@ export const delays: StatModule = {
         sub: `${a.late} of ${a.n} flights delayed`,
       }))
       .sort((a, b) => b.value - a.value);
+    // per departure-airport DEPARTURE-delay performance — airports with >= 8 timed deps
+    const byAirport = new Map<string, { sum: number; n: number; late: number }>();
+    for (const f of flights) {
+      const d = departureDelayMin(f);
+      if (d == null) continue;
+      const cur = byAirport.get(f.dep_iata) ?? { sum: 0, n: 0, late: 0 };
+      cur.n += 1;
+      cur.sum += d;
+      if (d > LATE_MIN) cur.late += 1;
+      byAirport.set(f.dep_iata, cur);
+    }
+    const worstAirports = [...byAirport.entries()]
+      .filter(([, a]) => a.n >= 8)
+      .map(([iata, a]) => ({
+        id: iata,
+        label: iata,
+        value: airlineMetric === "mins" ? Math.round(a.sum / a.n) : Math.round((a.late / a.n) * 100),
+        sub: `${a.late} of ${a.n} deps delayed`,
+      }))
+      .sort((a, b) => b.value - a.value);
+    const groupRows = delayGroup === "airlines" ? worst : worstAirports;
 
     // distribution of arrival punctuality across timed flights
     const timed = flights.filter((f) => actualArr(f));
@@ -229,32 +253,49 @@ export const delays: StatModule = {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-        {worst.length > 0 && (
+        {(worst.length > 0 || worstAirports.length > 0) && (
           <div>
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-eyebrow tracking-[0.01em] text-ink-faint">By airline (≥8)</span>
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <Segmented
-                aria-label="Airline metric"
+                aria-label="Group delays by"
                 size="sm"
-                className="w-[210px] shrink-0"
+                className="w-[188px] shrink-0"
+                value={delayGroup}
+                onChange={setDelayGroup}
+                options={[
+                  { value: "airlines", label: "Airlines" },
+                  { value: "airports", label: "Airports" },
+                ]}
+              />
+              <Segmented
+                aria-label="Delay metric"
+                size="sm"
+                className="w-[128px] shrink-0"
                 value={airlineMetric}
                 onChange={setAirlineMetric}
                 options={[
-                  { value: "mins", label: "Avg mins" },
-                  { value: "pct", label: "% delayed" },
+                  { value: "mins", label: "Avg" },
+                  { value: "pct", label: "%" },
                 ]}
               />
             </div>
+            <div className="mb-1.5 text-eyebrow tracking-[0.01em] text-ink-faint">
+              {delayGroup === "airlines" ? "Arrival delay by airline (≥8 flights)" : "Departure delay by airport (≥8 deps)"}
+            </div>
             <BarsH
-              rows={worst}
+              rows={groupRows}
               series={[{ key: "value", name: airlineMetric === "mins" ? "min" : "%", color: color.routeIntl }]}
-              activeId={airlineActive}
+              activeId={delayGroup === "airlines" ? airlineActive : airportActive}
               unit={airlineMetric === "mins" ? "min" : "%"}
-              title="Delays by airline"
+              title={delayGroup === "airlines" ? "Delays by airline" : "Departure delays by airport"}
               cap={10}
               onPick={(id) => {
-                const a = worst.find((x) => x.id === id);
-                if (a) toggleCrossFilter(airlineFilter(id, a.label));
+                if (delayGroup === "airlines") {
+                  const a = worst.find((x) => x.id === id);
+                  if (a) toggleCrossFilter(airlineFilter(id, a.label));
+                } else {
+                  toggleCrossFilter(airportFilter(id));
+                }
               }}
             />
           </div>
