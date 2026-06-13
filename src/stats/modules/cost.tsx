@@ -107,7 +107,7 @@ export const cost: StatModule = {
       }
     }
     const spendBasis = (spend: number, flights: number, dist: number, hours: number) =>
-      basis === "total" ? spend : basis === "flight" ? (flights ? spend / flights : 0) : basis === "km" ? (dist ? spend / dist : 0) : hours ? spend / hours : 0;
+      basis === "total" ? spend : basis === "flight" ? (flights ? spend / flights : 0) : basis === "km" ? (dist ? (spend / dist) * 100 : 0) : hours ? spend / hours : 0;
 
     // grouped cash + points per year
     const rows = [...byYear.keys()].sort().map((y) => {
@@ -165,7 +165,7 @@ export const cost: StatModule = {
     const title =
       metric === "flights"
         ? "Flights booked with cash vs points, by year"
-        : `Spend — cash (${sym}) vs points, by year${basis !== "total" ? ` · per ${basis === "km" ? (km ? "km" : "mi") : basis}` : ""}`;
+        : `Spend — cash (${sym}) vs points, by year${basis !== "total" ? ` · per ${basis === "km" ? (km ? "100km" : "100mi") : basis}` : ""}`;
 
     return (
       <>
@@ -190,7 +190,7 @@ export const cost: StatModule = {
                 options={[
                   { value: "total", label: "Total" },
                   { value: "flight", label: "Per flight" },
-                  { value: "km", label: km ? "Per km" : "Per mi" },
+                  { value: "km", label: km ? "Per 100km" : "Per 100mi" },
                   { value: "hour", label: "Per hour" },
                 ]}
               />
