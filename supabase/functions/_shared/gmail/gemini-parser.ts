@@ -10,6 +10,9 @@ export type GeminiParsedFlight = {
   dep_time_local: string;
   arr_time_local: string;
   cabin_class: string | null;
+  // On a schedule change that renumbered the flight, the PRIOR flight number (suffix
+  // only) when the email shows both old and new; else null.
+  previous_flight_number?: string | null;
 };
 
 export type GeminiOwner = {
@@ -73,6 +76,7 @@ const RESPONSE_SCHEMA = {
           dep_time_local: { type: "string", description: "HH:MM (24-hour)" },
           arr_time_local: { type: "string", description: "HH:MM (24-hour)" },
           cabin_class: { type: "string", nullable: true },
+          previous_flight_number: { type: "string", nullable: true },
         },
       },
     },
@@ -121,6 +125,7 @@ Field rules:
 - dep_iata / arr_iata: 3-character IATA airport codes
 - dep_time_local / arr_time_local: HH:MM 24-hour local time at the departure/arrival airport
 - cabin_class: "economy", "premium_economy", "lie_flat_business", "recliner_first", "international_first", or null
+- previous_flight_number: ONLY on a schedule change where the airline assigned a NEW flight number — the PRIOR flight number (numeric/alphanumeric suffix only, no airline prefix) if the email shows both the old and new numbers (e.g. "flight HU7215 is now CN7215", "原 HO1860 → 现 HO1870" → "7215" / "1860"); otherwise null.
 - booking_refs_airline: each item has airline_iata (2-char) and pnr (airline confirmation code)
 - booking_platform: "direct", "expedia", "google_flights", "chase_travel", or lowercase platform name, or null
 - cost_cash: numeric amount (no currency symbol), or null. PER PERSON for the account owner only: if the booking covers multiple passengers and only a combined total is shown, divide by the passenger count. Prefer an explicit "per person" / "total per passenger" figure when present. (e.g. a 4-passenger eTicket Total of 23,903.60 USD → cost_cash = 5975.90.)

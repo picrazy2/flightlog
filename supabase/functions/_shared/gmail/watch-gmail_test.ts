@@ -435,6 +435,42 @@ Deno.test("watchGmail updates an existing flight on a schedule change", async ()
   assert(supabase.db.flights[0].sched_dep !== origDep); // schedule updated
 });
 
+Deno.test("watchGmail renumbers a flight in place on a schedule change (no duplicate)", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+  const BOOKING: GeminiParsedBookingEmail = {
+    is_flight_booking: true,
+    flights: [{
+      airline_iata: "BA", flight_number: "117", flight_date: "2026-07-01",
+      dep_iata: "LHR", arr_iata: "JFK", dep_time_local: "10:00", arr_time_local: "13:00", cabin_class: "economy",
+    }],
+    booking_refs_airline: [{ airline_iata: "BA", pnr: "REN789" }],
+    booking_ref_platform: null, booking_platform: "direct",
+    cost_cash: 500, cost_currency: "GBP", cost_points: null, points_program: null,
+  };
+  await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages([{ id: "m1", subject: "BA booking", from: "ba@ba.com", date: "x", body: "" }], "1"),
+    parseEmail: mockParseEmail(BOOKING),
+  });
+  assertEquals(supabase.db.flights.length, 1);
+  assertEquals(supabase.db.flights[0].flight_number, "117");
+
+  // airline reissued the leg as BA118 — same PNR + route + date, no previous_flight_number
+  // given, so it must reconcile via the booking PNR (not an exact number match).
+  const CHANGE: GeminiParsedBookingEmail = {
+    ...BOOKING,
+    is_schedule_change: true,
+    flights: [{ ...BOOKING.flights[0], flight_number: "118" }],
+  };
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages([{ id: "m2", subject: "Flight number changed", from: "ba@ba.com", date: "x", body: "" }], "2"),
+    parseEmail: mockParseEmail(CHANGE),
+  });
+  assertEquals(result.imported, 0); // not created as a new flight
+  assertEquals(result.updated, 1); // updated in place
+  assertEquals(supabase.db.flights.length, 1); // no duplicate
+  assertEquals(supabase.db.flights[0].flight_number, "118"); // renumbered
+});
+
 Deno.test("watchGmail creates a flight from a boarding pass with no booking payload", async () => {
   const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
 

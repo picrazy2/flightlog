@@ -327,6 +327,8 @@ async function processMessage(
       input: FlightInput;
       normalized: NormalizedFlightInput;
       existing: ExistingFlight | null;
+      prevNum: string | null; // prior flight number from a renumbering schedule change
+      renumber: boolean;      // existing matched as a superseded leg → apply the new number
     };
     const plans: LegPlan[] = [];
     // Dedupe legs within a single email: Gemini occasionally emits the same
@@ -353,13 +355,37 @@ async function processMessage(
         const input = buildFlightInput(parsedFlight, airports, userId);
         const normalized = normalizeFlightInput(input);
         const existing = await findExistingFlight(supabase, normalized, userId);
-        plans.push({ input, normalized, existing });
+        const prevNum = normalizeFlightNumberLoose(parsedFlight.previous_flight_number ?? "", parsedFlight.airline_iata ?? "") || null;
+        plans.push({ input, normalized, existing, prevNum, renumber: false });
       } catch (error) {
         warnings.push(
           `${parsedFlight.airline_iata}${parsedFlight.flight_number}: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
+      }
+    }
+
+    // Schedule change that renumbered a flight: a leg with no exact match may be an
+    // existing flight whose number changed. Reconcile by the prior number (when the email
+    // gives one) or by the booking PNR + same date/route, and update it in place instead
+    // of creating a duplicate.
+    if (parsed.is_schedule_change === true) {
+      const changeBookingIds = await bookingIdsForParsedPnrs(supabase, parsed);
+      for (const plan of plans) {
+        if (plan.existing) continue;
+        let sup: ExistingFlight | null = null;
+        if (plan.prevNum && plan.prevNum !== plan.normalized.flight_number) {
+          sup = await findExistingFlight(supabase, { ...plan.normalized, flight_number: plan.prevNum }, userId);
+        }
+        if (!sup && changeBookingIds.length > 0) {
+          sup = await findSupersededLeg(supabase, changeBookingIds, plan.normalized, userId);
+        }
+        if (sup) {
+          plan.existing = sup;
+          plan.renumber = true;
+          warnings.push(`${plan.input.airline_iata}${plan.input.flight_number}: matched a renumbered flight (was ${plan.prevNum ?? "a different number"}) — updated in place`);
+        }
       }
     }
 
@@ -430,6 +456,12 @@ async function processMessage(
       ) {
         changes.sched_dep = plan.normalized.sched_dep;
         changes.sched_arr = plan.normalized.sched_arr;
+        const bid = ex.booking_id ?? bookingId;
+        if (bid) scheduleChangedBookingIds.add(bid);
+      }
+      if (plan.renumber) {
+        changes.flight_number = plan.normalized.flight_number;
+        changes.provider_status = null; // re-enrich under the new number on the next refresh
         const bid = ex.booking_id ?? bookingId;
         if (bid) scheduleChangedBookingIds.add(bid);
       }
@@ -872,6 +904,52 @@ async function findExistingFlight(
 
   const rows = (data ?? []) as ExistingFlight[];
   return rows[0] ?? null;
+}
+
+// Among flights on the given bookings, find one matching this leg's date + route but a
+// DIFFERENT flight number (a renumbered/superseded leg). Returns null unless exactly one
+// such flight exists, to avoid ambiguous over-matching.
+async function findSupersededLeg(
+  supabase: SupabaseClient,
+  bookingIds: string[],
+  flight: NormalizedFlightInput,
+  userId: string | null,
+): Promise<ExistingFlight | null> {
+  const query = supabase
+    .from("flights")
+    .select("id, booking_id, sched_dep, sched_arr")
+    .in("booking_id", bookingIds)
+    .eq("flight_date", flight.flight_date)
+    .eq("dep_iata", flight.dep_iata)
+    .eq("arr_iata", flight.arr_iata)
+    .neq("flight_number", flight.flight_number);
+  const { data, error } = await (userId === null
+    ? query.is("user_id", null)
+    : query.eq("user_id", userId));
+  if (error) {
+    throw new HttpError(500, `Superseded-leg lookup failed: ${error.message}`);
+  }
+  const rows = (data ?? []) as ExistingFlight[];
+  return rows.length === 1 ? rows[0] : null;
+}
+
+// Existing booking ids whose airline PNRs match those in this email — used to reconcile a
+// renumbered schedule-change leg back to its original booking.
+async function bookingIdsForParsedPnrs(
+  supabase: SupabaseClient,
+  parsed: GeminiParsedBookingEmail,
+): Promise<string[]> {
+  const pnrs = new Set<string>();
+  for (const r of (parsed.booking_refs_airline ?? []) as Array<{ pnr?: string }>) {
+    const p = (r?.pnr ?? "").toUpperCase().trim();
+    if (/^[A-Z0-9]{5,7}$/.test(p)) pnrs.add(p);
+  }
+  const ids = new Set<string>();
+  for (const pnr of pnrs) {
+    const { data } = await supabase.from("bookings").select("id").contains("booking_refs_airline", [{ pnr }]);
+    for (const b of (data ?? []) as Array<{ id: string }>) ids.add(b.id);
+  }
+  return [...ids];
 }
 
 // Gemini occasionally returns a 3-letter ICAO airline code; map it to the
