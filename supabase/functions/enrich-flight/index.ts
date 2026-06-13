@@ -74,6 +74,8 @@ function buildProviders() {
   const aeroApiKey = Deno.env.get("AEROAPI_KEY");
   const fr24ApiKey = Deno.env.get("FR24_API_KEY");
   return {
+    // manual diagnostic lookups can target old flights — allow the AeroAPI historical path
+    aeroapiStandardBackfillActive: true,
     aeroapi: aeroApiKey ? createAeroApiProvider(aeroApiKey) : undefined,
     fr24api: fr24ApiKey ? createFR24Provider(fr24ApiKey) : undefined,
   };

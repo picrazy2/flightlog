@@ -13,6 +13,20 @@ verify_jwt = false
 [functions.refresh-reference-data]
 verify_jwt = false
 
+# enrich-flight / requery-flight / watch-gmail / backfill-by-flight authenticate with
+# the EDGE_FUNCTION_SECRET bearer (not a Supabase JWT), so keep the gateway check off.
+[functions.enrich-flight]
+verify_jwt = false
+
+[functions.requery-flight]
+verify_jwt = false
+
+[functions.watch-gmail]
+verify_jwt = false
+
+[functions.backfill-by-flight]
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.
