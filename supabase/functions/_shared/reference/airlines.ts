@@ -11,6 +11,7 @@ const UPSERT_BATCH_SIZE = 1_000;
 // breaks AeroAPI enrichment — see W9 → WUK). Add a row here whenever you fix one by hand.
 const AIRLINE_OVERRIDES: Record<string, { name: string; icao: string }> = {
   A6: { name: "Air Travel Co. Ltd", icao: "OTC" }, // OpenFlights: Air Alps Aviation
+  CN: { name: "Grand China Air", icao: "WWD" }, // OpenFlights: Westward Airways (IATA reassigned)
   W4: { name: "Wizz Air Malta", icao: "WMT" }, // OpenFlights: Aero Services Executive
   W9: { name: "Wizz Air UK", icao: "WUK" }, // OpenFlights: Abelag Aviation
   XW: { name: "NokScoot", icao: "NCT" }, // OpenFlights: Sky Express
