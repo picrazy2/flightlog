@@ -50,7 +50,8 @@ export const airportFilter = (iata: string): CrossFilter => ({
 export const countryFilter = (iso: string, name: string): CrossFilter => ({
   id: `country:${iso}`,
   label: name,
-  test: (f) => f.dep_country === iso || f.arr_country === iso,
+  // iso is a sovereign; a territory (e.g. Bermuda → GB) matches its parent country
+  test: (f) => sovereignOf(f.dep_country) === iso || sovereignOf(f.arr_country) === iso,
 });
 
 // Continent / subregion of a flight = the continent/subregion of either endpoint

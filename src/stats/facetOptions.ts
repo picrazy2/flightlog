@@ -4,6 +4,9 @@ import { airlineFilter, aircraftFilter, airportFilter, cityFilter, countryFilter
 import { CABIN_LABELS } from "@/lib/cabin";
 import { routeKeyUndirected } from "@/lib/geo";
 import { COUNTRY_GEO, CONTINENTS, sovereignOf } from "@/lib/continents";
+
+const REGION_DN = new Intl.DisplayNames(["en"], { type: "region" });
+const regionName = (iso: string): string | null => { try { return REGION_DN.of(iso) ?? null; } catch { return null; } };
 import { bodyClassOf, BODY_LABELS, type BodyClass } from "@/lib/aircraft";
 import { airlineKey, airlineLabel } from "@/lib/airlines";
 
@@ -69,9 +72,10 @@ export function facetOptions(flights: Flight[]): Record<string, FacetCand[]> {
     for (const c of [f.dep_city, f.arr_city]) if (c) city.set(c, (city.get(c) ?? 0) + 1);
     for (const [iso, name] of [[f.dep_country, f.dep_country_name], [f.arr_country, f.arr_country_name]] as const) {
       if (iso) {
-        const e = country.get(iso) ?? { name: name ?? iso, n: 0 };
+        const sov = sovereignOf(iso) ?? iso; // territory counts toward its parent sovereign
+        const e = country.get(sov) ?? { name: (sov !== iso ? regionName(sov) : name) ?? name ?? sov, n: 0 };
         e.n++;
-        country.set(iso, e);
+        country.set(sov, e);
       }
     }
     const conts = new Set<string>();

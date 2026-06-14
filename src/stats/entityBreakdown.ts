@@ -186,8 +186,11 @@ export function buildTypeStack(flights: Flight[], level: EntityLevel): Built {
   const byAirport = visitClassByAirport(flights);
   const m = new Map<string, { name: string; domestic: number; international: number }>();
   for (const a of byAirport.values()) {
-    const id = level === "country" ? a.country ?? "??" : a.city ?? "??";
-    const name = level === "country" ? a.countryName ?? id : a.city ?? id;
+    const rawC = a.country ?? "??";
+    const id = level === "country" ? sovereignOf(rawC) ?? rawC : a.city ?? "??";
+    const name = level === "country"
+      ? (id !== rawC ? regionName(id) ?? a.countryName ?? id : a.countryName ?? id)
+      : a.city ?? id;
     const x = m.get(id) ?? { name, domestic: 0, international: 0 };
     x.domestic += a.dom;
     x.international += a.intl;
