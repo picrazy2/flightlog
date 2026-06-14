@@ -82,7 +82,9 @@ function visitedCountries(ctx: StatContext) {
   for (const a of ctx.airports.values()) {
     const sov = sovereignOf(a.country); // a territory counts toward its parent
     if (!sov || !COUNTRY_GEO[sov]) continue;
-    const cur = m.get(sov) ?? { visits: 0, name: a.countryName ?? sov };
+    // label by the sovereign country, not the first airport's country — otherwise a
+    // territory flight (e.g. Bermuda → GB) stamps the whole group with the wrong name
+    const cur = m.get(sov) ?? { visits: 0, name: countryName(sov) };
     cur.visits += a.visits;
     m.set(sov, cur);
   }
