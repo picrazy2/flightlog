@@ -19,6 +19,13 @@ const LANDING_BUFFER_MS = 30 * 60 * 1000;
 // after it, stop — otherwise old trackless flights get re-queried (and re-billed)
 // on every run forever.
 const TRACK_RETRY_MS = 14 * 24 * 60 * 60 * 1000;
+// A flight queried while still airborne/taxiing comes back missing its arrival actuals
+// (actual_landing / actual_arr gate-in) — provider_status is e.g. "Landed / Taxiing".
+// Keep re-querying such an incompletely-enriched flight on each hourly run until this
+// many hours past scheduled arrival, then stop — otherwise a flight whose provider never
+// reports a gate-in time would be re-queried (and re-billed) every run forever. The
+// window is the cost bound: at most ~one query/hour up to this point per such flight.
+const COMPLETION_RETRY_MS = 12 * 60 * 60 * 1000;
 
 // Actual flown distance (mi) = haversine over [dep, ...track points, arr]; gap bridges
 // and gate stitches are great circles, and haversine between two points IS that arc.
@@ -220,10 +227,19 @@ export function isRefreshRecentEligible(
     return flight.provider_status !== "not_found";
   }
 
-  // Already enriched: only keep re-running to pick up a still-missing track while the
-  // flight is recent enough that the provider plausibly has one. Old enriched flights
-  // without a track are done (avoids an unbounded re-query/billing loop).
-  return !flight.has_track && now.getTime() - schedArrival <= TRACK_RETRY_MS;
+  // Already enriched: keep re-running only to fill in data the provider didn't have yet
+  // at first query, and only while the flight is recent enough that the provider
+  // plausibly will. Each branch is bounded by its own recency window so we never
+  // re-query — and re-bill — a flight forever when the provider simply has no track or
+  // never reports a gate-in time.
+  const age = now.getTime() - schedArrival;
+  //   (a) a position track, which providers only retain for a couple of weeks; or
+  const wantsTrack = !flight.has_track && age <= TRACK_RETRY_MS;
+  //   (b) the arrival actuals (wheels-on / gate-in), missing when the flight was still
+  //       airborne or taxiing at query time (provider_status e.g. "Landed / Taxiing").
+  const fullyEnriched = Boolean(flight.actual_landing) && Boolean(flight.actual_arr);
+  const wantsCompletion = !fullyEnriched && age <= COMPLETION_RETRY_MS;
+  return wantsTrack || wantsCompletion;
 }
 
 async function refreshRecentFlight(

@@ -158,6 +158,103 @@ Deno.test("refreshRecentFlights does NOT re-query old enriched flights still mis
   assertEquals(called, 0);
 });
 
+Deno.test("refreshRecentFlights re-queries an incompletely-enriched flight within the completion window", async () => {
+  // Enriched while still taxiing: has takeoff/landing AND a track, but no gate-in time
+  // (actual_arr). Inside the completion-retry window → must be re-queried to backfill it.
+  const id = "00000000-0000-4000-8000-000000000077";
+  const supabase = createMockSupabaseClient({
+    flights: [
+      baseFlight(id, {
+        actual_takeoff: "2026-03-20T10:20:00Z",
+        actual_landing: "2026-03-20T19:50:00Z",
+        actual_arr: null,
+        raw_provider: { provider: "aeroapi" },
+        status: "completed",
+      }),
+    ],
+    tracks: [
+      {
+        flight_id: id,
+        geojson: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+        source: "aeroapi",
+        recorded_at: "2026-03-20T19:50:00Z",
+      },
+    ],
+  });
+
+  let called = 0;
+  const result = await refreshRecentFlights(
+    supabase as never,
+    {},
+    {
+      now: new Date("2026-03-20T21:00:00Z"), // 1h after sched_arr → inside completion window
+      enrichFlight: async () => {
+        called += 1;
+        return {
+          found: true,
+          provider: "aeroapi",
+          flight: {
+            actual_arr: "2026-03-20T20:02:00Z",
+            source: "aeroapi",
+            raw_provider: { provider: "aeroapi" },
+          },
+          track: null,
+          warnings: [],
+        };
+      },
+    },
+  );
+
+  assertEquals(result.eligible, 1);
+  assertEquals(result.refreshed, 1);
+  assertEquals(called, 1);
+  assertEquals(
+    supabase.db.flights.find((f) => f.id === id)?.actual_arr,
+    "2026-03-20T20:02:00Z",
+  );
+});
+
+Deno.test("refreshRecentFlights does NOT re-query a tracked incompletely-enriched flight after the window", async () => {
+  // Same shape, but past the completion window AND it already has a track → ineligible.
+  // Bounds re-billing for flights whose provider never reports a gate-in time.
+  const id = "00000000-0000-4000-8000-000000000078";
+  const supabase = createMockSupabaseClient({
+    flights: [
+      baseFlight(id, {
+        actual_takeoff: "2026-03-20T10:20:00Z",
+        actual_landing: "2026-03-20T19:50:00Z",
+        actual_arr: null,
+        raw_provider: { provider: "aeroapi" },
+        status: "completed",
+      }),
+    ],
+    tracks: [
+      {
+        flight_id: id,
+        geojson: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+        source: "aeroapi",
+        recorded_at: "2026-03-20T19:50:00Z",
+      },
+    ],
+  });
+
+  let called = 0;
+  const result = await refreshRecentFlights(
+    supabase as never,
+    {},
+    {
+      now: new Date("2026-03-21T09:00:00Z"), // 13h after sched_arr → outside 12h window
+      enrichFlight: async () => {
+        called += 1;
+        return { found: false, provider: "aeroapi", flight: null, track: null, warnings: [] };
+      },
+    },
+  );
+
+  assertEquals(result.eligible, 0);
+  assertEquals(called, 0);
+});
+
 Deno.test("refreshRecentFlights overwrites provider-owned fields but preserves user schedule", async () => {
   const supabase = createMockSupabaseClient({
     flights: [
