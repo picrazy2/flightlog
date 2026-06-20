@@ -168,6 +168,7 @@ Deno.test("refreshRecentFlights re-queries an incompletely-enriched flight withi
         actual_takeoff: "2026-03-20T10:20:00Z",
         actual_landing: "2026-03-20T19:50:00Z",
         actual_arr: null,
+        provider_status: "Landed / Taxiing", // not yet at gate → still worth retrying
         raw_provider: { provider: "aeroapi" },
         status: "completed",
       }),
@@ -244,6 +245,49 @@ Deno.test("refreshRecentFlights does NOT re-query a tracked incompletely-enriche
     {},
     {
       now: new Date("2026-03-21T09:00:00Z"), // 13h after sched_arr → outside 12h window
+      enrichFlight: async () => {
+        called += 1;
+        return { found: false, provider: "aeroapi", flight: null, track: null, warnings: [] };
+      },
+    },
+  );
+
+  assertEquals(result.eligible, 0);
+  assertEquals(called, 0);
+});
+
+Deno.test("refreshRecentFlights stops re-querying once the flight has arrived at the gate, even with no gate-in time", async () => {
+  // Within the window and missing actual_arr, BUT the provider reports "Arrived / Gate
+  // Arrival" — a terminal state. The provider has no gate-in time for this airport
+  // (observed at IST/ALA); re-querying can't fill it, so it must be ineligible.
+  const id = "00000000-0000-4000-8000-000000000079";
+  const supabase = createMockSupabaseClient({
+    flights: [
+      baseFlight(id, {
+        actual_takeoff: "2026-03-20T10:20:00Z",
+        actual_landing: "2026-03-20T19:50:00Z",
+        actual_arr: null,
+        provider_status: "Arrived / Gate Arrival",
+        raw_provider: { provider: "aeroapi" },
+        status: "completed",
+      }),
+    ],
+    tracks: [
+      {
+        flight_id: id,
+        geojson: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+        source: "aeroapi",
+        recorded_at: "2026-03-20T19:50:00Z",
+      },
+    ],
+  });
+
+  let called = 0;
+  const result = await refreshRecentFlights(
+    supabase as never,
+    {},
+    {
+      now: new Date("2026-03-20T21:00:00Z"), // 1h after sched_arr → inside the window
       enrichFlight: async () => {
         called += 1;
         return { found: false, provider: "aeroapi", flight: null, track: null, warnings: [] };

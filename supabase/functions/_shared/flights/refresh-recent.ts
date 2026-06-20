@@ -237,9 +237,21 @@ export function isRefreshRecentEligible(
   const wantsTrack = !flight.has_track && age <= TRACK_RETRY_MS;
   //   (b) the arrival actuals (wheels-on / gate-in), missing when the flight was still
   //       airborne or taxiing at query time (provider_status e.g. "Landed / Taxiing").
+  //       Stop once the provider reports the flight has reached the gate ("Arrived /
+  //       …"): if actual_arr is still null then, the provider simply has no gate-in time
+  //       for this airport (observed at IST/ALA) and re-querying will never fill it.
   const fullyEnriched = Boolean(flight.actual_landing) && Boolean(flight.actual_arr);
-  const wantsCompletion = !fullyEnriched && age <= COMPLETION_RETRY_MS;
+  const wantsCompletion = !fullyEnriched && !hasArrivedAtGate(flight) &&
+    age <= COMPLETION_RETRY_MS;
   return wantsTrack || wantsCompletion;
+}
+
+// AeroAPI marks a flight "Arrived / Gate Arrival" once it reaches the gate — a terminal
+// state. (En-route/taxiing statuses like "Landed / Taxiing" are NOT arrived, so those
+// keep retrying.)
+function hasArrivedAtGate(flight: RefreshRecentCandidate) {
+  return typeof flight.provider_status === "string" &&
+    /^arrived\b/i.test(flight.provider_status.trim());
 }
 
 async function refreshRecentFlight(
