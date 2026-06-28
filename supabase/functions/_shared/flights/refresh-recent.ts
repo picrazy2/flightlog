@@ -178,19 +178,23 @@ async function copyTwinEnrichment(
     }
   }
 
-  // Clone the twin's track too, if it has one and this flight doesn't.
+  // Clone the twin's track(s) too — one per provider — if it has any and this flight
+  // doesn't. Prefer FR24's for the flown-distance calc.
   if (!flight.has_track) {
     const { data: tracks } = await supabase
       .from("tracks")
       .select("geojson, source, recorded_at")
-      .eq("flight_id", twin.id)
-      .limit(1);
-    const track = tracks?.[0] as { geojson: unknown; source: string; recorded_at: string } | undefined;
-    if (track) {
+      .eq("flight_id", twin.id);
+    const rows = (tracks ?? []) as { geojson: unknown; source: string; recorded_at: string }[];
+    if (rows.length) {
       await supabase
         .from("tracks")
-        .upsert({ flight_id: flight.id, geojson: track.geojson, source: track.source, recorded_at: track.recorded_at }, { onConflict: "flight_id" });
-      await setFlownDistance(supabase, flight, track.geojson);
+        .upsert(
+          rows.map((t) => ({ flight_id: flight.id, geojson: t.geojson, source: t.source, recorded_at: t.recorded_at })),
+          { onConflict: "flight_id,source" },
+        );
+      const preferred = rows.find((t) => t.source === "fr24api") ?? rows[0];
+      await setFlownDistance(supabase, flight, preferred.geojson);
     }
   }
 }
@@ -313,7 +317,12 @@ async function refreshRecentFlight(
     }
 
     const changes = buildRefreshRecentUpdateRow(flight, enrichment.flight);
-    const shouldUpsertTrack = Boolean(enrichment.track);
+    // One row per provider: `tracks` (e.g. AeroAPI + FR24) when the caller combined
+    // providers, otherwise the single preferred `track`.
+    const tracksToSave = enrichment.tracks?.length
+      ? enrichment.tracks
+      : (enrichment.track ? [enrichment.track] : []);
+    const shouldUpsertTrack = tracksToSave.length > 0;
     if (
       Object.keys(changes).length === 0 &&
       !shouldUpsertTrack
@@ -353,13 +362,13 @@ async function refreshRecentFlight(
       const { error } = await supabase
         .from("tracks")
         .upsert(
-          {
+          tracksToSave.map((trk) => ({
             flight_id: flight.id,
-            geojson: enrichment.track!.geojson,
-            source: enrichment.track!.source,
-            recorded_at: enrichment.track!.recorded_at,
-          },
-          { onConflict: "flight_id" },
+            geojson: trk.geojson,
+            source: trk.source,
+            recorded_at: trk.recorded_at,
+          })),
+          { onConflict: "flight_id,source" },
         );
 
       if (error) {
@@ -368,7 +377,9 @@ async function refreshRecentFlight(
           `Failed to save refreshed track for ${flight.id}: ${error.message}`,
         );
       }
-      await setFlownDistance(supabase, flight, enrichment.track!.geojson);
+      // Flown distance follows the preferred (displayed) track — FR24 when present.
+      const preferred = enrichment.track ?? tracksToSave[0];
+      await setFlownDistance(supabase, flight, preferred.geojson);
     }
 
     return {

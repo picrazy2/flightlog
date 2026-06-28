@@ -299,6 +299,38 @@ Deno.test("refreshRecentFlights stops re-querying once the flight has arrived at
   assertEquals(called, 0);
 });
 
+Deno.test("refreshRecentFlights persists BOTH provider tracks when the enrichment returns several", async () => {
+  const id = "00000000-0000-4000-8000-000000000080";
+  const supabase = createMockSupabaseClient({
+    flights: [baseFlight(id, { sched_arr: "2026-03-20T19:00:00Z", flight_number: "808" })],
+  });
+
+  const result = await refreshRecentFlights(
+    supabase as never,
+    {},
+    {
+      now: new Date("2026-03-20T20:00:00Z"),
+      enrichFlight: async () => ({
+        found: true,
+        provider: "aeroapi",
+        flight: { actual_landing: "2026-03-20T18:50:00Z", source: "aeroapi", raw_provider: { provider: "aeroapi" } },
+        // preferred track (FR24) + both tracks to persist
+        track: { geojson: { type: "LineString", coordinates: [[0, 0], [2, 2]] }, source: "fr24api", recorded_at: "2026-03-20T18:50:00Z" },
+        tracks: [
+          { geojson: { type: "LineString", coordinates: [[0, 0], [1, 1]] }, source: "aeroapi", recorded_at: "2026-03-20T18:50:00Z" },
+          { geojson: { type: "LineString", coordinates: [[0, 0], [2, 2]] }, source: "fr24api", recorded_at: "2026-03-20T18:50:00Z" },
+        ],
+        warnings: [],
+      }),
+    },
+  );
+
+  assertEquals(result.refreshed, 1);
+  const rows = supabase.db.tracks.filter((t: { flight_id: string }) => t.flight_id === id);
+  assertEquals(rows.length, 2);
+  assertEquals(rows.map((t: { source: string }) => t.source).sort(), ["aeroapi", "fr24api"]);
+});
+
 Deno.test("refreshRecentFlights overwrites provider-owned fields but preserves user schedule", async () => {
   const supabase = createMockSupabaseClient({
     flights: [

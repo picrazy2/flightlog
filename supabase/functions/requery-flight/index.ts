@@ -85,7 +85,7 @@ async function requeryOne(supabase: any, flightId: string, providers: ReturnType
       .from("tracks")
       .upsert(
         { flight_id: flightId, geojson: enrichment.track.geojson, source: enrichment.track.source, recorded_at: enrichment.track.recorded_at },
-        { onConflict: "flight_id" },
+        { onConflict: "flight_id,source" },
       );
     if (terr) throw new HttpError(400, `Track upsert failed for ${flightId}: ${terr.message}`);
     await setFlownDistance(supabase, flight, enrichment.track.geojson);

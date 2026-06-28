@@ -326,7 +326,7 @@ async function upsertTrack(
         source: track.source,
         recorded_at: track.recorded_at,
       },
-      { onConflict: "flight_id" },
+      { onConflict: "flight_id,source" },
     )
     .select("*")
     .single();

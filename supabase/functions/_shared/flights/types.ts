@@ -101,7 +101,11 @@ export type EnrichFlightResult = {
   found: boolean;
   provider: FlightSource | null;
   flight: FlightInput | null;
+  // `track` is the single preferred track (used for display/distance). `tracks`, when
+  // present, carries every provider track to persist (e.g. AeroAPI + FR24) keyed by
+  // source; callers that don't combine providers leave it unset and just use `track`.
   track: TrackInput | null;
+  tracks?: TrackInput[];
   warnings: string[];
 };
 

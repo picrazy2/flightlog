@@ -335,10 +335,10 @@ class MockQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
   }
 
   private upsertRow(row: Record<string, unknown>) {
-    const conflictColumn = this.onConflict ?? "id";
-    const matchValue = row[conflictColumn];
+    // Supports composite conflict targets, e.g. "flight_id,source".
+    const conflictColumns = (this.onConflict ?? "id").split(",").map((c) => c.trim());
     const existing = this.client.db[this.table].find((candidate) =>
-      candidate[conflictColumn] === matchValue
+      conflictColumns.every((col) => candidate[col] === row[col])
     );
 
     if (existing) {

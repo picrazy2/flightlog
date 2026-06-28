@@ -121,7 +121,10 @@ async function enrichWithFr24Track(
       sched_dep: flight.sched_dep,
     });
     if (fr.found && fr.track) {
-      return { ...primary, track: fr.track, warnings: [...primary.warnings, "track sourced from fr24api"] };
+      // Persist BOTH tracks (AeroAPI's too, if it had one); FR24 is the preferred `track`
+      // used for display/distance. Saved per-source by refresh-recent.
+      const tracks = [primary.track, fr.track].filter((t): t is NonNullable<typeof t> => Boolean(t));
+      return { ...primary, track: fr.track, tracks, warnings: [...primary.warnings, "track sourced from fr24api"] };
     }
   } catch (error) {
     console.warn("refresh-recent: FR24 track fetch failed, keeping AeroAPI track", error);
