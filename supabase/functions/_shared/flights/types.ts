@@ -183,6 +183,10 @@ export type RefreshRecentFlightResult = {
   // another user's), with no provider/API call — see findEnrichedTwin in refresh-recent.
   outcome: "refreshed" | "reused" | "not_found" | "skipped" | "failed";
   provider: FlightSource | null;
+  // human-readable flight label (e.g. "TK1243 IST→STN 2026-06-28") and a one-line summary
+  // of what was enriched — surfaced in the run summary email.
+  label?: string;
+  detail?: string;
   warnings: string[];
   error?: string;
 };

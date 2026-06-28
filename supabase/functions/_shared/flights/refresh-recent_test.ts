@@ -299,6 +299,41 @@ Deno.test("refreshRecentFlights stops re-querying once the flight has arrived at
   assertEquals(called, 0);
 });
 
+Deno.test("refreshRecentFlights retries a recent not_found but lets an old one stay tombstoned", async () => {
+  const supabase = createMockSupabaseClient({
+    flights: [
+      // recent miss → should be retried (provider may not have ingested it yet)
+      baseFlight("00000000-0000-4000-8000-000000000090", {
+        flight_number: "901",
+        sched_arr: "2026-03-20T20:00:00Z", // 2h before `now` → within retry window
+        provider_status: "not_found",
+      }),
+      // old miss → tombstone sticks (don't re-bill old/backfill flights forever)
+      baseFlight("00000000-0000-4000-8000-000000000091", {
+        flight_number: "902",
+        sched_arr: "2026-03-20T14:00:00Z", // 8h before `now` → past retry window
+        provider_status: "not_found",
+      }),
+    ],
+  });
+
+  const seen: string[] = [];
+  const result = await refreshRecentFlights(
+    supabase as never,
+    {},
+    {
+      now: new Date("2026-03-20T22:00:00Z"),
+      enrichFlight: async (f) => {
+        seen.push(String(f.flight_number));
+        return { found: false, provider: "aeroapi", flight: null, track: null, warnings: [] };
+      },
+    },
+  );
+
+  assertEquals(result.eligible, 1);
+  assertEquals(seen, ["901"]);
+});
+
 Deno.test("refreshRecentFlights persists BOTH provider tracks when the enrichment returns several", async () => {
   const id = "00000000-0000-4000-8000-000000000080";
   const supabase = createMockSupabaseClient({

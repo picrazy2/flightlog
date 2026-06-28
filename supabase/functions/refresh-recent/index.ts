@@ -75,7 +75,19 @@ async function notifyRun(result: RefreshRecentResult) {
   }
   try {
     const token = await refreshGmailAccessToken(clientId, clientSecret, refreshToken);
-    const lines = result.results.map((r) => `  • ${r.outcome}: ${r.flight_id}${r.error ? ` — ${r.error}` : ""}`).join("\n");
+    // Group flights by outcome and show each one's label + what was enriched.
+    const order = ["refreshed", "reused", "not_found", "skipped", "failed"] as const;
+    const section = (outcome: typeof order[number]) => {
+      const rows = result.results.filter((r) => r.outcome === outcome);
+      if (rows.length === 0) return null;
+      const lines = rows.map((r) => {
+        const id = r.label ?? r.flight_id;
+        const extra = r.detail ?? r.error ?? "";
+        return `  • ${id}${extra ? ` — ${extra}` : ""}`;
+      });
+      return [`${outcome} (${rows.length}):`, ...lines].join("\n");
+    };
+    const detailBlocks = order.map(section).filter(Boolean).join("\n\n");
     const subject = `Journia refresh-recent: ${queried} queried, ${result.refreshed} enriched${result.reused ? `, ${result.reused} reused` : ""}`;
     const body = [
       "refresh-recent ran and sent at least one flight-API query.",
@@ -89,7 +101,7 @@ async function notifyRun(result: RefreshRecentResult) {
       `skipped:              ${result.skipped}`,
       `failed:               ${result.failed}`,
       "",
-      lines,
+      detailBlocks,
     ].join("\n");
     await sendEmail(token, to, subject, body);
   } catch (error) {

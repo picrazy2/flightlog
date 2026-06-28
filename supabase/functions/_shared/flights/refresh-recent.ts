@@ -9,11 +9,16 @@ import {
   type RefreshRecentFlightResult,
   type RefreshRecentRequest,
   type RefreshRecentResult,
+  type TrackInput,
 } from "./types.ts";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
-const LANDING_BUFFER_MS = 30 * 60 * 1000;
+// A not-yet-enriched flight that the provider can't find yet is tombstoned 'not_found' so
+// the one-shot backfill of old imported flights never re-bills. But a JUST-landed flight
+// may simply not be in the provider's system yet, so retry a not_found miss on each hourly
+// run until this long past scheduled arrival, then let the tombstone stick.
+const NOT_FOUND_RETRY_MS = 6 * 60 * 60 * 1000;
 // Providers only retain position tracks for recent flights. Once a flight has been
 // provider-enriched, keep retrying ONLY for a still-missing track within this window;
 // after it, stop — otherwise old trackless flights get re-queried (and re-billed)
@@ -221,14 +226,25 @@ export function isRefreshRecentEligible(
     return false;
   }
 
-  if (schedArrival > now.getTime() - LANDING_BUFFER_MS) {
+  // Consider a flight from its scheduled arrival onward, so the next hourly run after it
+  // should have landed picks it up (no fixed post-arrival wait). If it's queried while
+  // still airborne/taxiing the result is incomplete, and the completion/track retries
+  // below carry it forward until it's fully enriched or "Arrived".
+  if (schedArrival > now.getTime()) {
     return false;
   }
 
-  // Not yet enriched → backfill once. A flight the provider has no record of is marked
-  // 'not_found' (see refreshRecentFlight) so we never re-query — and re-bill — it.
+  const age = now.getTime() - schedArrival;
+
+  // Not yet enriched → query it. A flight the provider has no record of is tombstoned
+  // 'not_found' (see refreshRecentFlight); retry that tombstone on each run for a short
+  // window past arrival (a just-landed flight may not be in the provider yet), then let it
+  // stick so old/backfill flights aren't re-queried — and re-billed — forever.
   if (!isProviderEnriched(flight)) {
-    return flight.provider_status !== "not_found";
+    if (flight.provider_status === "not_found") {
+      return age <= NOT_FOUND_RETRY_MS;
+    }
+    return true;
   }
 
   // Already enriched: keep re-running only to fill in data the provider didn't have yet
@@ -236,7 +252,6 @@ export function isRefreshRecentEligible(
   // plausibly will. Each branch is bounded by its own recency window so we never
   // re-query — and re-bill — a flight forever when the provider simply has no track or
   // never reports a gate-in time.
-  const age = now.getTime() - schedArrival;
   //   (a) a position track, which providers only retain for a couple of weeks; or
   const wantsTrack = !flight.has_track && age <= TRACK_RETRY_MS;
   //   (b) the arrival actuals (wheels-on / gate-in), missing when the flight was still
@@ -266,11 +281,13 @@ async function refreshRecentFlight(
   ) => Promise<EnrichFlightResult>,
   icaoByIata?: Map<string, string>,
 ): Promise<RefreshRecentFlightResult> {
+  const label = flightLabel(flight);
   if (!enrichFlight) {
     return {
       flight_id: flight.id,
       outcome: "failed",
       provider: null,
+      label,
       warnings: [],
       error: "refresh-recent enrichment provider is not configured",
     };
@@ -286,6 +303,8 @@ async function refreshRecentFlight(
         flight_id: flight.id,
         outcome: "reused",
         provider: null,
+        label,
+        detail: `copied from twin ${twin.id}`,
         warnings: [`Reused provider data from existing flight ${twin.id}`],
       };
     }
@@ -312,6 +331,8 @@ async function refreshRecentFlight(
         flight_id: flight.id,
         outcome: "not_found",
         provider: enrichment.provider,
+        label,
+        detail: "provider has no record (yet)",
         warnings: enrichment.warnings,
       };
     }
@@ -331,6 +352,8 @@ async function refreshRecentFlight(
         flight_id: flight.id,
         outcome: "skipped",
         provider: enrichment.provider,
+        label,
+        detail: "no new data from provider",
         warnings: enrichment.warnings,
       };
     }
@@ -386,6 +409,8 @@ async function refreshRecentFlight(
       flight_id: flight.id,
       outcome: "refreshed",
       provider: enrichment.provider,
+      label,
+      detail: summarizeEnrichment(enrichment.flight, tracksToSave),
       warnings: enrichment.warnings,
     };
   } catch (error) {
@@ -393,10 +418,35 @@ async function refreshRecentFlight(
       flight_id: flight.id,
       outcome: "failed",
       provider: null,
+      label,
       warnings: [],
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+// "TK1243 IST→STN 2026-06-28"
+function flightLabel(flight: RefreshRecentCandidate): string {
+  return `${flight.airline_iata ?? ""}${flight.flight_number} ${flight.dep_iata}→${flight.arr_iata} ${flight.flight_date}`;
+}
+
+// One-line summary of what the provider returned, for the run email — e.g.
+// "off 12:00 · on 15:18 · gate-in 15:25 · A21N TC-LPP · tracks fr24api+aeroapi".
+function summarizeEnrichment(enriched: FlightInput, tracks: TrackInput[]): string {
+  const hhmm = (iso?: string | null) => (iso ? `${iso.slice(11, 16)}Z` : null);
+  const parts: string[] = [];
+  const off = hhmm(enriched.actual_takeoff) ?? hhmm(enriched.actual_dep);
+  const on = hhmm(enriched.actual_landing);
+  const gateIn = hhmm(enriched.actual_arr);
+  if (off) parts.push(`off ${off}`);
+  if (on) parts.push(`on ${on}`);
+  parts.push(gateIn ? `gate-in ${gateIn}` : "gate-in —");
+  const ac = [enriched.aircraft_type_code, enriched.registration].filter(Boolean).join(" ");
+  if (ac) parts.push(ac);
+  if (enriched.provider_status) parts.push(String(enriched.provider_status));
+  const sources = tracks.map((t) => t.source).filter(Boolean);
+  parts.push(sources.length ? `tracks ${sources.join("+")}` : "no track");
+  return parts.join(" · ");
 }
 
 export function buildRefreshRecentUpdateRow(
