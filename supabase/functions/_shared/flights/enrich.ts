@@ -17,6 +17,7 @@ type NormalizedEnrichFlightRequest = {
   flight_number: string;
   dep_iata: string | null;
   arr_iata: string | null;
+  sched_dep: string | null;
   source_hint: string | null;
 };
 
@@ -78,6 +79,7 @@ function normalizeEnrichmentRequest(
     flight_number: flightNumber,
     dep_iata: normalizeCode(request.dep_iata, 3),
     arr_iata: normalizeCode(request.arr_iata, 3),
+    sched_dep: request.sched_dep ?? null,
     source_hint: "source_hint" in request ? request.source_hint ?? null : null,
   };
 }

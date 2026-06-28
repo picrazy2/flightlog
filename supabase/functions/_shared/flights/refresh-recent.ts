@@ -293,6 +293,8 @@ async function refreshRecentFlight(
       flight_number: flight.flight_number,
       dep_iata: flight.dep_iata,
       arr_iata: flight.arr_iata,
+      // scheduled gate-out anchors FR24's flight match (airline schedule preferred)
+      sched_dep: flight.provider_sched_dep ?? flight.sched_dep,
       source: flight.source,
     });
 

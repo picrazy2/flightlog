@@ -6,7 +6,7 @@ import { createAeroApiProvider } from "../_shared/flights/providers/aeroapi.ts";
 import { createFR24Provider } from "../_shared/flights/providers/fr24api.ts";
 import { refreshRecentFlights } from "../_shared/flights/refresh-recent.ts";
 import { refreshGmailAccessToken, sendEmail } from "../_shared/gmail/gmail-client.ts";
-import type { RefreshRecentRequest, RefreshRecentResult } from "../_shared/flights/types.ts";
+import type { EnrichFlightResult, FlightInput, RefreshRecentRequest, RefreshRecentResult } from "../_shared/flights/types.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,10 +30,10 @@ export async function handleRefreshRecentRequest(
     requireAuthorizedRequest(request);
     const body = await parseRequest(request);
     const supabase = dependencies?.supabase ?? createAdminClient();
+    const providers = buildProviders(dependencies?.now);
     const result = await refreshRecentFlights(supabase, body, {
       now: dependencies?.now,
-      enrichFlight: (flight) =>
-        enrichFlight(flight, buildProviders(dependencies?.now)),
+      enrichFlight: (flight) => enrichWithFr24Track(flight, providers),
     });
 
     // email the owner whenever the run actually sent ≥1 API query (eligible > 0)
@@ -95,6 +95,38 @@ async function notifyRun(result: RefreshRecentResult) {
   } catch (error) {
     console.error("refresh-recent: notify email failed", error);
   }
+}
+
+// Landing enrichment: take the rich fields from the primary provider (AeroAPI for recent
+// flights) but ALWAYS prefer FR24's track — its position coverage is denser and reaches
+// areas AeroAPI loses (e.g. Central Asia). Falls back to the primary's own track when FR24
+// has none, and leaves non-AeroAPI primaries (older flights already routed to FR24)
+// untouched. Any FR24 failure is swallowed so it can never block the AeroAPI enrichment.
+async function enrichWithFr24Track(
+  flight: FlightInput,
+  providers: ReturnType<typeof buildProviders>,
+): Promise<EnrichFlightResult> {
+  const primary = await enrichFlight(flight, providers);
+  if (!(primary.found && primary.provider === "aeroapi" && providers.fr24api)) {
+    return primary;
+  }
+  try {
+    const fr = await providers.fr24api({
+      flight_date: flight.flight_date,
+      airline_iata: flight.airline_iata,
+      airline_icao: flight.airline_icao,
+      flight_number: flight.flight_number,
+      dep_iata: flight.dep_iata,
+      arr_iata: flight.arr_iata,
+      sched_dep: flight.sched_dep,
+    });
+    if (fr.found && fr.track) {
+      return { ...primary, track: fr.track, warnings: [...primary.warnings, "track sourced from fr24api"] };
+    }
+  } catch (error) {
+    console.warn("refresh-recent: FR24 track fetch failed, keeping AeroAPI track", error);
+  }
+  return primary;
 }
 
 function buildProviders(now?: Date) {

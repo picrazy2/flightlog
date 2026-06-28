@@ -62,8 +62,15 @@ export function createFR24Provider(
       request.flight_number!,
     );
 
-    const start = `${flightDate}T00:00:00Z`;
-    const end = `${nextDay(flightDate)}T23:59:59Z`;
+    // Anchor on the scheduled departure (UTC) when known, else midday of the flight date.
+    // FR24's flight_datetime_from/to only behaves with DATE-ALIGNED bounds
+    // (00:00:00Z..23:59:59Z) — mid-day bounds return nothing — so query a date-aligned
+    // ±1-day window around the anchor. The ±1 day also covers overnight flights whose
+    // real departure lands on the calendar day before/after flight_date in UTC.
+    const parsedAnchor = request.sched_dep ? Date.parse(request.sched_dep) : NaN;
+    const anchor = Number.isNaN(parsedAnchor) ? Date.parse(`${flightDate}T12:00:00Z`) : parsedAnchor;
+    const start = `${addDays(anchor, -1)}T00:00:00Z`;
+    const end = `${addDays(anchor, 1)}T23:59:59Z`;
 
     const params = new URLSearchParams({
       flights: flightIdent,
@@ -96,6 +103,7 @@ export function createFR24Provider(
       summaries,
       request.dep_iata ?? null,
       request.arr_iata ?? null,
+      anchor,
     );
     if (!match) {
       return notFound();
@@ -169,12 +177,11 @@ function pickSummary(
   summaries: FR24FlightSummary[],
   depIata: string | null,
   arrIata: string | null,
+  anchorMs: number,
 ): FR24FlightSummary | null {
   if (summaries.length === 0) return null;
 
-  if (!depIata && !arrIata) return summaries[0];
-
-  const match = summaries.find((s) => {
+  const matches = summaries.filter((s) => {
     if (depIata && s.orig_iata !== depIata) return false;
     if (arrIata) {
       const dest = s.dest_iata_actual ?? s.dest_iata;
@@ -182,8 +189,20 @@ function pickSummary(
     }
     return true;
   });
+  // No dep/arr to match on → can't disambiguate; take the first.
+  const pool = depIata || arrIata ? matches : summaries;
+  if (pool.length === 0) return null;
 
-  return match ?? null;
+  // A ±1-day window on a daily route returns several operations; pick the one whose
+  // takeoff (or first_seen) is closest to the scheduled departure. This fixes overnight
+  // flights and daily-repeat ambiguity that a naive first-match got wrong.
+  return pool.reduce((best, s) => {
+    const t = Date.parse(s.datetime_takeoff ?? s.first_seen ?? "");
+    const bt = Date.parse(best.datetime_takeoff ?? best.first_seen ?? "");
+    if (Number.isNaN(t)) return best;
+    if (Number.isNaN(bt)) return s;
+    return Math.abs(t - anchorMs) < Math.abs(bt - anchorMs) ? s : best;
+  });
 }
 
 function buildFlightIdent(
@@ -205,9 +224,9 @@ function stripAirlinePrefix(flightNumber: string): string {
   return flightNumber.replace(/^[A-Z]{1,3}/, "");
 }
 
-function nextDay(date: string): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
+function addDays(ms: number, n: number): string {
+  const d = new Date(ms);
+  d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 

@@ -92,6 +92,8 @@ export type EnrichFlightRequest = {
   flight_number?: string;
   dep_iata?: string | null;
   arr_iata?: string | null;
+  // scheduled gate-out (UTC ISO); FR24 anchors its date-window/disambiguation on this
+  sched_dep?: string | null;
   source_hint?: string | null;
 };
 
