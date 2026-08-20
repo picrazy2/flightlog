@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import { HttpError, toHttpError } from "../_shared/flights/http.ts";
 import { requireAuthedUser } from "../_shared/auth.ts";
+import { rateToUsd } from "../_shared/flights/fx.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,26 +64,6 @@ async function manageBooking(supabase: SupabaseClient, body: ManageBookingReques
   if (bookingId) await setBookingUsd(supabase, bookingId);
 
   return { ok: true as const, id: bookingId };
-}
-
-const STATIC_USD: Record<string, number> = {
-  USD: 1, CNY: 0.14, EUR: 1.08, GBP: 1.27, HKD: 0.128, JPY: 0.0067, CAD: 0.74, SGD: 0.74,
-  AUD: 0.66, KRW: 0.00075, TWD: 0.031, ZAR: 0.054, MXN: 0.052, THB: 0.028, MYR: 0.22,
-  CHF: 1.1, NZD: 0.6, AED: 0.27, TRY: 0.029, VND: 0.00004, CZK: 0.043, MAD: 0.10, PEN: 0.27,
-};
-// Historical {currency}->USD rate at a date via the @fawazahmed0 CDN; static fallback.
-async function rateToUsd(currency: string, date: string): Promise<number> {
-  const cur = (currency || "USD").toUpperCase();
-  if (cur === "USD") return 1;
-  try {
-    const r = await fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${date}/v1/currencies/${cur.toLowerCase()}.min.json`);
-    if (r.ok) {
-      const d = await r.json();
-      const v = d?.[cur.toLowerCase()]?.usd;
-      if (typeof v === "number") return v;
-    }
-  } catch { /* fall through */ }
-  return STATIC_USD[cur] ?? 1;
 }
 
 async function setBookingUsd(supabase: SupabaseClient, bookingId: string) {
