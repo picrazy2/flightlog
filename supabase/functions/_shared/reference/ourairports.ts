@@ -12,6 +12,7 @@ const UPSERT_BATCH_SIZE = 1_000;
 const CONTINENT_CODES = new Set(["NA", "EU", "AS", "AF", "OC", "SA", "AN"]);
 const AIRPORT_CITY_OVERRIDES: Record<string, string> = {
   SEN: "London",
+  LTN: "London", // "Luton, Luton"; Luton is a London airport, not its own metro
   SFO: "San Francisco Bay",
   SJC: "San Francisco Bay",
   OAK: "San Francisco Bay",
@@ -20,11 +21,27 @@ const AIRPORT_CITY_OVERRIDES: Record<string, string> = {
   XIY: "Xi'an",
   XNN: "Xining",
   IAD: "Washington", // Dulles sits in Dulles/Sterling VA but serves Washington DC
+  EWR: "New York", // Newark serves the NYC metro; keeps EWR/JFK/LGA as one city
+  // municipalities written district-first ("Pendik, Istanbul"), where taking the
+  // part before the comma would yield the district instead of the metro
+  SAW: "Istanbul",
+  LYN: "Lyon",
+  DPS: "Denpasar", // "Kuta, Badung" — neither half names the metro
 };
 
-// OurAirports municipalities often carry a "(District)" suffix (e.g. "Shanghai
-// (Pudong)"), which splits multi-airport cities. Strip it so they aggregate as one.
-const cleanCity = (m: string | null): string | null => (m ? m.replace(/\s*\(.*\)\s*$/, "").trim() || m : m);
+// OurAirports municipalities carry two kinds of noise that split multi-airport cities:
+// a "(District)" suffix (e.g. "Shanghai (Pudong)") and a ", Region" suffix (e.g.
+// "London, Essex"). Strip both so they aggregate as one city.
+//
+// The comma form is overwhelmingly "Locality, Region", so the locality is the metro.
+// The handful written district-first are pinned in AIRPORT_CITY_OVERRIDES above, which
+// takes precedence over this function.
+const cleanCity = (m: string | null): string | null => {
+  if (!m) return m;
+  const noDistrict = m.replace(/\s*\(.*\)\s*$/, "").trim();
+  const noRegion = noDistrict.split(",")[0].trim();
+  return noRegion || noDistrict || m;
+};
 
 type CountryRow = {
   code: string;
