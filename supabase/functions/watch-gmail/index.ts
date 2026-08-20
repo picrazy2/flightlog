@@ -74,7 +74,29 @@ export async function handleWatchGmailRequest(
       { messages_scanned: 0, imported: 0, updated: 0, cancelled: 0, skipped: 0, not_flight: 0, failed: 0 },
     );
 
-    return jsonResponse({ ok: true, accounts: accounts.length, totals, per_user });
+    // Per-account errors are captured above so one bad mailbox can't abort the others,
+    // but a run where EVERY mailbox failed is a broken pipeline, not a quiet inbox.
+    // Reporting ok:true / 200 for that case hid a total outage for two months, so a
+    // wholesale failure is surfaced as an error the caller (cron, UI) can see.
+    const failed = per_user.filter((r) => r.error);
+    const allFailed = failed.length === per_user.length;
+
+    return jsonResponse(
+      {
+        ok: !allFailed,
+        accounts: accounts.length,
+        ...(allFailed
+          ? {
+            error: `All ${failed.length} Gmail account(s) failed: ${
+              failed.map((r) => `${r.user_id}: ${r.error}`).join("; ")
+            }`,
+          }
+          : {}),
+        totals,
+        per_user,
+      },
+      allFailed ? 500 : 200,
+    );
   } catch (error) {
     const httpError = toHttpError(error);
     return jsonResponse({ ok: false, error: httpError.message }, httpError.status);
