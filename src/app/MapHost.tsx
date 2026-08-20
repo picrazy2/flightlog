@@ -590,7 +590,12 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
     map.setLayoutProperty("choropleth", "visibility", "visible");
     const entries = geo.size > 0 ? [...geo].map(([iso, color]) => ({ iso, color })) : moduleChoro!(ctx);
     const fallback = geo.size > 0 ? "rgba(0,0,0,0)" : "rgba(255,255,255,0.04)"; // only highlight the filtered geography
-    const match: (string | string[])[] = ["match", ["get", "ISO_A2"]];
+    // Match on ISO_A2_EH, not ISO_A2. Natural Earth stores "-99" in ISO_A2 for countries
+    // whose sovereignty it treats as disputed or split — France and Norway among them —
+    // and "CN-TW" for Taiwan, so those polygons could never match a plain ISO code and
+    // stayed unlit however often you flew there. ISO_A2_EH ("EH" = e.g. Hague/de-facto)
+    // carries the real code and agrees with ISO_A2 everywhere else.
+    const match: (string | string[])[] = ["match", ["get", "ISO_A2_EH"]];
     for (const e of entries) match.push(e.iso, e.color);
     match.push(fallback);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
