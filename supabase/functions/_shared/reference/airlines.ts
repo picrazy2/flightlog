@@ -1,47 +1,67 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import Papa from "npm:papaparse@5.5.2";
 
-const OPENFLIGHTS_AIRLINES_URL =
-  "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airlines.dat";
+// Wikidata, not the OpenFlights dump: OpenFlights stopped being maintained around 2014,
+// so carriers that launched or rebranded since have no row under their code at all —
+// Spring, Beijing Capital, VietJet, ZIPAIR, LATAM were all missing or named as the dead
+// carrier that used to hold the code. Wikidata is current and already the source for the
+// alliance step next door.
+const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 const UPSERT_BATCH_SIZE = 1_000;
+
+// Paged deliberately. The unpaged query exceeds the endpoint's response cap and comes
+// back as truncated JSON under a 200, which parses as a silent half-dataset.
+const WIKIDATA_PAGE_SIZE = 500;
+const WIKIDATA_MAX_PAGES = 20;
+
+const AIRLINES_QUERY = (limit: number, offset: number) => `
+SELECT ?iata ?icao ?airlineLabel ?countryLabel ?dissolved ?links WHERE {
+  ?airline wdt:P31/wdt:P279* wd:Q46970 ;
+           wdt:P229 ?iata ;
+           wikibase:sitelinks ?links .
+  OPTIONAL { ?airline wdt:P230 ?icao }
+  OPTIONAL { ?airline wdt:P17 ?country }
+  OPTIONAL { ?airline wdt:P576 ?dissolved }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+ORDER BY ?iata ?airlineLabel
+LIMIT ${limit} OFFSET ${offset}`;
 
 // IATA codes OpenFlights has wrong — the code was reassigned to a newer carrier, or
 // the dataset never updated. These corrected name/ICAO values are applied after the
 // OpenFlights merge so a reference refresh can't revert them (a wrong ICAO silently
 // breaks AeroAPI enrichment — see W9 → WUK). Add a row here whenever you fix one by hand.
-// OpenFlights stopped being maintained around 2014, so carriers that launched or were
-// renamed since simply are not in it under their code — no amount of ranking finds them.
-// The `active` flag handles reassignments where both carriers are listed (D7, HO, PC);
-// everything below is a code OpenFlights has no current entry for, or where both rows
-// are flagged active and file order picked the dead one (VY).
+// Escape hatch for codes Wikidata's ranking can't resolve on its own: entities with no
+// English label (which would otherwise surface as a bare QID), airlines too new or too
+// thinly documented to out-rank a defunct predecessor, and codes whose current holder is
+// wrong for *these* flights because the leg predates the reassignment (MI, WW, XW).
 const AIRLINE_OVERRIDES: Record<string, { name: string; icao: string }> = {
-  A6: { name: "Air Travel Co. Ltd", icao: "OTC" }, // OpenFlights: Air Alps Aviation
-  CN: { name: "Grand China Air", icao: "GDC" }, // OpenFlights: Westward Airways (IATA reassigned)
-  W4: { name: "Wizz Air Malta", icao: "WMT" }, // OpenFlights: Aero Services Executive
-  W9: { name: "Wizz Air UK", icao: "WUK" }, // OpenFlights: Abelag Aviation
-  XW: { name: "NokScoot", icao: "NCT" }, // OpenFlights: Sky Express
-  "9C": { name: "Spring Airlines", icao: "CQH" }, // OpenFlights: China SSS (defunct)
-  JD: { name: "Beijing Capital Airlines", icao: "CBJ" }, // OpenFlights: Japan Air System (defunct 2004)
-  LA: { name: "LATAM Airlines", icao: "LAN" }, // OpenFlights: LAN Airlines (renamed 2016)
-  VJ: { name: "VietJet Air", icao: "VJC" }, // OpenFlights: Jatayu / Royal Air Cambodge (both defunct)
-  VY: { name: "Vueling Airlines", icao: "VLG" }, // OpenFlights also lists Formosa Airlines as active
-  WW: { name: "WOW air", icao: "WOW" }, // OpenFlights: bmibaby (defunct 2012)
-  ZG: { name: "ZIPAIR Tokyo", icao: "TZP" }, // OpenFlights: Viva Macau (defunct 2010)
+  A6: { name: "Air Travel Co. Ltd", icao: "OTC" }, // Wikidata label is the bare "Air Travel"
+  CN: { name: "Grand China Air", icao: "GDC" }, // Wikidata confirms GDC; code also held by Westward
+  W4: { name: "Wizz Air Malta", icao: "WMT" }, // too new / thin on Wikidata
+  W9: { name: "Wizz Air UK", icao: "WUK" }, // too new / thin on Wikidata
+  XW: { name: "NokScoot", icao: "NCT" }, // dissolved 2020; code since reused
+  "9C": { name: "Spring Airlines", icao: "CQH" }, // pinned; Wikidata agrees, kept as a guard
+  HO: { name: "Juneyao Airlines", icao: "DKH" }, // Wikidata entity has no English label (Q1713277)
+  MI: { name: "SilkAir", icao: "SLK" }, // code now Freebird Europe; flights predate the 2021 SQ merger
+  JD: { name: "Beijing Capital Airlines", icao: "CBJ" }, // code also held by Japan Air System (defunct 2006)
+  LA: { name: "LATAM Airlines", icao: "LAN" }, // LAN renamed 2016
+  VJ: { name: "VietJet Air", icao: "VJC" }, // code also held by Jatayu / Royal Air Cambodge
+  VY: { name: "Vueling Airlines", icao: "VLG" }, // Wikidata labels it plain "Vueling"
+  WW: { name: "WOW air", icao: "WOW" }, // dissolved 2019; flights predate it, code since reused
+  ZG: { name: "ZIPAIR Tokyo", icao: "TZP" }, // outranked by better-documented Grozny Avia
 };
 
 type AirlineRecord = {
-  airline_id?: string;
   name?: string;
-  alias?: string;
   iata?: string;
   icao?: string;
-  callsign?: string;
   country?: string;
-  active?: string;
+  dissolved?: string; // P576; absent means still trading
+  links?: number; // sitelink count, used as a notability tiebreak
 };
 
 export type AirlineRefreshStats = {
-  source: "openflights";
+  source: "wikidata";
   airlines_upserted: number;
   airlines_skipped_missing_iata: number;
   airline_iata?: string;
@@ -77,7 +97,8 @@ export async function refreshAirlines(
       icao: cleanCode(row.icao, 3),
       name,
       country: cleanString(row.country),
-      active: cleanString(row.active)?.toUpperCase() === "Y",
+      dissolved: cleanString(row.dissolved),
+      links: row.links ?? 0,
     };
 
     const existing = airlinesByIata.get(iata);
@@ -98,13 +119,14 @@ export async function refreshAirlines(
     });
   }
 
-  // `active` exists only to rank candidates; public.airlines has no such column.
-  const airlines = Array.from(airlinesByIata.values()).map(({ active: _active, ...row }) => row);
+  // dissolved/links exist only to rank candidates; public.airlines has neither column.
+  const airlines = Array.from(airlinesByIata.values())
+    .map(({ dissolved: _d, links: _l, ...row }) => row);
 
   await upsertInBatches(supabase, "airlines", airlines, "iata");
 
   return {
-    source: "openflights",
+    source: "wikidata",
     airlines_upserted: airlines.length,
     airlines_skipped_missing_iata: skippedMissingIata,
     airline_iata: targetAirline,
@@ -112,38 +134,78 @@ export async function refreshAirlines(
 }
 
 async function fetchAirlineRows(): Promise<AirlineRecord[]> {
-  const response = await fetch(OPENFLIGHTS_AIRLINES_URL, {
-    headers: {
-      "accept": "text/plain,text/csv;q=0.9,*/*;q=0.8",
-      "user-agent": "flightlog-reference-refresh/1.0",
-    },
-  });
+  const rows: AirlineRecord[] = [];
 
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch OpenFlights airlines.dat: ${response.status}`,
-    );
+  for (let page = 0; page < WIKIDATA_MAX_PAGES; page++) {
+    const query = AIRLINES_QUERY(WIKIDATA_PAGE_SIZE, page * WIKIDATA_PAGE_SIZE);
+    const bindings = await fetchSparqlPage(query, page);
+    for (const b of bindings) {
+      const name = b.airlineLabel?.value?.trim();
+      // An entity with no English label comes back as its bare QID ("Q1713277"), which
+      // must never reach the UI as an airline name. Dropping it hands the code to the
+      // next candidate — usually a defunct one — so anything that matters is pinned in
+      // AIRLINE_OVERRIDES.
+      if (!name || /^Q\d+$/.test(name)) continue;
+      rows.push({
+        name,
+        iata: b.iata?.value,
+        icao: b.icao?.value,
+        country: b.countryLabel?.value,
+        dissolved: b.dissolved?.value,
+        links: Number(b.links?.value ?? 0),
+      });
+    }
+    if (bindings.length < WIKIDATA_PAGE_SIZE) return rows;
   }
 
-  const raw = await response.text();
-  const withHeader =
-    "airline_id,name,alias,iata,icao,callsign,country,active\n" + raw;
+  throw new Error(
+    `Wikidata airlines paging exceeded ${WIKIDATA_MAX_PAGES} pages — the result set grew unexpectedly`,
+  );
+}
 
-  const parsed = Papa.parse<AirlineRecord>(withHeader, {
-    header: true,
-    skipEmptyLines: true,
-    transform: (value: string) => value.trim(),
-  });
+type AirlineBinding = {
+  iata?: { value: string };
+  icao?: { value: string };
+  airlineLabel?: { value: string };
+  countryLabel?: { value: string };
+  dissolved?: { value: string };
+  links?: { value: string };
+};
 
-  if (parsed.errors.length > 0) {
-    throw new Error(
-      `Failed to parse OpenFlights airlines.dat: ${
-        parsed.errors[0]?.message ?? "unknown error"
-      }`,
-    );
+// The endpoint 502s and times out under load often enough that one attempt isn't
+// reliable; a failed page would otherwise leave the refresh silently short.
+async function fetchSparqlPage(query: string, page: number): Promise<AirlineBinding[]> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 3_000 * attempt));
+    try {
+      const response = await fetch(
+        `${WIKIDATA_ENDPOINT}?format=json&query=${encodeURIComponent(query)}`,
+        {
+          headers: {
+            "accept": "application/sparql-results+json",
+            "user-agent": "flightlog-reference-refresh/1.0",
+          },
+        },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      // Truncated responses arrive as invalid JSON under a 200, so a parse failure here
+      // is a real (and loud) outcome rather than something to swallow.
+      const data = JSON.parse(await response.text()) as {
+        results?: { bindings?: AirlineBinding[] };
+      };
+      return data.results?.bindings ?? [];
+    } catch (error) {
+      lastError = error;
+    }
   }
 
-  return parsed.data;
+  throw new Error(
+    `Failed to fetch Wikidata airlines page ${page}: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
 }
 
 async function upsertInBatches(
@@ -193,14 +255,16 @@ function isBetterAirlineRecord(
   return scoreAirlineRecord(candidate) > scoreAirlineRecord(existing);
 }
 
-// Ranks rows that share an IATA code. `active` dominates: codes get reassigned when a
-// carrier folds, and OpenFlights keeps the dead one, so scoring on ICAO/country alone
-// left ties broken by file order — which is roughly oldest-first. That is how Pegasus
-// showed up as Air Fiji and AirAsia X as Dinar.
+// Ranks rows that share an IATA code — most do, because a code is reassigned when its
+// holder folds and Wikidata keeps every past holder.
+//
+// Still trading beats dissolved. Beyond that the tiebreak is sitelink count, i.e. how
+// many Wikipedias write about the airline: the carrier currently flying under a code is
+// essentially always the better-documented one. Ranking on recency instead picks Eastern
+// Australia Airlines over Qantas for QF, and "has an ICAO code" alone picks whichever
+// happened to be listed first.
 function scoreAirlineRecord(record: Record<string, unknown>): number {
-  let score = 0;
-  if (record.active) score += 4; // outranks any combination below
-  if (record.icao) score += 2;
-  if (record.country) score += 1;
-  return score;
+  const alive = record.dissolved ? 0 : 1;
+  const links = Math.min(Number(record.links ?? 0), 999);
+  return alive * 1_000_000 + links * 10 + (record.icao ? 1 : 0);
 }
