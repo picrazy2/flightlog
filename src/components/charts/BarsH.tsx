@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CHART, axisTick, type Series } from "./chartTheme";
 import { formatDuration } from "@/lib/format";
 import { ChartTooltip } from "./ChartTooltip";
@@ -35,10 +35,12 @@ interface Props {
   topAxis?: boolean; // put the value axis at the top (visible above a tall scrolling list)
   autoPie?: boolean; // when a stacked breakdown collapses to one series, draw a donut of the rows
   title?: string; // header for the "see all" modal
+  valueLabels?: boolean; // print each row's total at the end of its bar
+  stickyAxis?: boolean; // pin the value axis above the bars (for tall, scrolling lists)
 }
 
 // Horizontal, optionally stacked / 100%-stacked, interactive bar chart.
-export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit, cap, barSize, rowPx, labelWidth, tickFontSize, topAxis, autoPie, title }: Props) {
+export function BarsH({ rows, series, percent, onPick, activeId, height, tickIcon, tickBadge, colorByRow, unit, cap, barSize, rowPx, labelWidth, tickFontSize, topAxis, autoPie, title, valueLabels, stickyAxis }: Props) {
   // on touch (mobile/tablet) a tap is the only way to see a value, so don't let it filter
   const pick = useIsMobile(1024) ? undefined : onPick;
   const [showAll, setShowAll] = useState(false); // opens the "see all" modal
@@ -54,6 +56,20 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
     : shown;
 
   const h = height ?? Math.max(120, shown.length * (rowPx ?? 26) + 24);
+
+  // One formatter for the axis ticks and the end-of-bar labels, so they can't disagree.
+  const fmtValue = percent
+    ? (v: number) => `${Math.round(v)}%`
+    : unit === "min"
+      ? (v: number) => formatDuration(v).value
+      : (v: number) => v.toLocaleString();
+  const rowTotal = (r: BarRowData) => series.reduce((sum, k) => sum + (Number(r[k.key]) || 0), 0);
+  // A sticky axis renders in its own chart, so both charts need the same explicit domain —
+  // left to auto-scale they would "nice" their bounds separately and drift out of line.
+  const maxTotal = Math.max(0, ...data.map(rowTotal));
+  const axisDomain: [number, number] = percent ? [0, 100] : [0, maxTotal || 1];
+  const labelW = labelWidth ?? (tickIcon ? 76 : 92);
+  const chartMargin = { left: 4, right: valueLabels ? 52 : 8, top: 2, bottom: 2 };
 
   // a single bar with a breakdown reads better as a donut of its composition
   if (rows.length === 1 && series.length > 1 && !percent) {
@@ -88,15 +104,62 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
   // bars coloured per-row (colorByRow) → the series-based legend + tooltip swatch would
   // show the wrong colour, so suppress them (callers supply their own legend if needed)
   const perRowColored = Boolean(colorByRow);
+
+  // Printed past the end of the last stack segment, so for a stacked row it lands at the
+  // row total rather than at the final series' own value.
+  // recharts hands label content its geometry as string | number, so coerce before maths.
+  const ValueLabel = (props: {
+    x?: string | number;
+    y?: string | number;
+    width?: string | number;
+    height?: string | number;
+    index?: number;
+  }) => {
+    const row = data[props.index ?? -1];
+    if (!row) return null;
+    const x = Number(props.x ?? 0) + Number(props.width ?? 0) + 6;
+    const y = Number(props.y ?? 0) + Number(props.height ?? 0) / 2;
+    return (
+      <text x={x} y={y} dy={4} textAnchor="start" fill={axisTick.fill} fontSize={axisTick.fontSize}>
+        {fmtValue(rowTotal(row))}
+      </text>
+    );
+  };
+
   return (
     <div>
       {!perRowColored && <ChartLegend series={series} />}
+      {stickyAxis && (
+        // The value axis lives in its own chart pinned to the top of the scroll container:
+        // inside a tall list the real axis sits at the far end, so reading a bar means
+        // scrolling to the bottom and back. Shares axisDomain/labelW with the bars below
+        // so the two grids line up exactly.
+        <div className="sticky top-0 z-10 -mx-4 mb-1 border-b border-border bg-surface-1/95 px-4 pt-1 backdrop-blur-sm">
+          <div style={{ height: 26 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart layout="vertical" data={data} margin={chartMargin}>
+                <XAxis
+                  type="number"
+                  orientation="top"
+                  tick={axisTick}
+                  axisLine={false}
+                  tickLine={false}
+                  domain={axisDomain}
+                  allowDataOverflow
+                  tickFormatter={(v) => fmtValue(Number(v))}
+                />
+                <YAxis type="category" dataKey="label" width={labelW} tick={false} axisLine={false} tickLine={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
       <div className="transition-[height] duration-300 ease-out" style={{ height: h, cursor: pick ? "pointer" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           layout="vertical"
           data={data}
-          margin={{ left: 4, right: 8, top: 2, bottom: 2 }}
+          margin={chartMargin}
           barCategoryGap={6}
           onClick={pick ? (s: { activeTooltipIndex?: number | null } | null) => {
             const i = s?.activeTooltipIndex;
@@ -107,11 +170,13 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
           <XAxis
             type="number"
             orientation={topAxis ? "top" : "bottom"}
+            hide={stickyAxis}
             tick={axisTick}
             axisLine={false}
             tickLine={false}
-            domain={percent ? [0, 100] : undefined}
-            tickFormatter={percent ? (v) => `${v}%` : unit === "min" ? (v) => formatDuration(Number(v)).value : (v) => Number(v).toLocaleString()}
+            domain={axisDomain}
+            allowDataOverflow
+            tickFormatter={(v) => fmtValue(Number(v))}
           />
           <YAxis
             type="category"
@@ -119,7 +184,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
             tickLine={false}
             axisLine={false}
             interval={0}
-            width={labelWidth ?? (tickIcon ? 76 : 92)}
+            width={labelW}
             tick={
               tickBadge
                 ? (props: { x: number; y: number; payload: { index: number } }) => {
@@ -155,7 +220,7 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
             }
           />
           <Tooltip content={<ChartTooltip unit={unit} total noSwatch={perRowColored} />} cursor={{ fill: CHART.cursor }} />
-          {series.map((s) => (
+          {series.map((s, si) => (
             <Bar
               key={s.key}
               dataKey={s.key}
@@ -166,7 +231,9 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
               barSize={barSize}
               cursor={pick ? "pointer" : undefined}
               shape={makeBarShape({ keys: series.map((x) => x.key), thisKey: s.key, axis: "x", color: s.color, activeId, colorByRow, baseOpacity: s.opacity })}
-            />
+            >
+              {valueLabels && si === series.length - 1 && <LabelList content={ValueLabel} />}
+            </Bar>
           ))}
         </BarChart>
       </ResponsiveContainer>
@@ -194,7 +261,8 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
               unit={unit}
               barSize={barSize}
               rowPx={rowPx}
-              topAxis={topAxis}
+              valueLabels
+              stickyAxis
             />
           </div>
         </Modal>
