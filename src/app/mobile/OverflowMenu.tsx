@@ -1,6 +1,5 @@
 import { Popover } from "@/components/ui/Popover";
 import { Switch } from "@/components/ui/Switch";
-import { Icon } from "@/components/ui/Icon";
 import { LogoMark } from "@/components/ui/Logo";
 import { CurrencyInline } from "@/components/ui/CurrencyPicker";
 import { useStore } from "@/state/store";
@@ -19,7 +18,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 // Mobile overflow: map/display toggles (one per row), an Add action that opens the
 // database modal, and the user switcher.
 export function OverflowMenu() {
-  const { settings, setSettings, projection, toggleProjection, setDbOpen, setAboutOpen, userId, setUserId } = useStore();
+  const { settings, setSettings, projection, toggleProjection, setAboutOpen, userId, setUserId } = useStore();
   const { data: users = [] } = useUsers();
   const km = settings.units === "km";
 
@@ -58,16 +57,6 @@ export function OverflowMenu() {
           <CurrencyInline />
 
           <div className="my-2 h-px bg-border" />
-          <button
-            onClick={() => {
-              setDbOpen(true);
-              close();
-            }}
-            className="focus-ring flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left text-label text-ink hover:bg-surface-2"
-          >
-            <Icon name="add" size={16} color="var(--accent)" />
-            Add flights &amp; data
-          </button>
           <button
             onClick={() => {
               setAboutOpen(true);

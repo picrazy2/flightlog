@@ -1,5 +1,6 @@
 import { useStore } from "@/state/store";
 import { Wordmark } from "@/components/ui/Logo";
+import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
 import { StatCardsRow } from "../StatCardsRow";
 import { SearchBox } from "../SearchBox";
@@ -13,6 +14,7 @@ import type { StatContext, MapEncoding } from "@/stats/types";
 // Mobile chrome over the full-screen map: a solid header, floating stat cards, a
 // search icon + fullscreen button, and the bottom drawer stack.
 export function MobileShell({ ctx, encoding }: { ctx: StatContext; encoding: MapEncoding | undefined }) {
+  const setDbOpen = useStore((s) => s.setDbOpen);
   const immersive = useStore((s) => s.immersive);
   const toggleImmersive = useStore((s) => s.toggleImmersive);
 
@@ -43,7 +45,21 @@ export function MobileShell({ ctx, encoding }: { ctx: StatContext; encoding: Map
           style={{ paddingTop: "max(0.625rem, env(safe-area-inset-top))" }}
         >
           <Wordmark markSize={26} />
-          <OverflowMenu />
+          <div className="flex items-center gap-1">
+            {/* Promoted out of the overflow menu: reaching your flights was three taps
+                behind a gear, which is the wrong place for the app's main content. */}
+            <Button
+              variant="ghost"
+              size="md"
+              aria-label="Flights"
+              className="rounded-full bg-[rgba(91,157,255,0.14)] px-3 text-accent"
+              onClick={() => setDbOpen(true)}
+            >
+              <Icon name="plane" color="currentColor" size={16} />
+              Flights
+            </Button>
+            <OverflowMenu />
+          </div>
         </header>
         {/* full-bleed cards: they run to both edges (bleed right) to signal scroll */}
         <div className="pt-2">

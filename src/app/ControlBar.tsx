@@ -38,16 +38,18 @@ export function ControlBar({ ctx }: { ctx: StatContext }) {
           {/* only the Add button + the gear (settings) stay visible; everything else
               (map/display prefs, About) lives inside the gear menu */}
           <div className="flex shrink-0 items-center gap-1.5">
+            {/* Named, not a bare "+": this opens the whole flights/bookings database —
+                browsing and editing as much as adding — and a plus reads write-only. */}
             <Button
               variant="ghost"
               size="lg"
-              iconOnly
-              aria-label="Database"
-              title="Database (flights, bookings, import)"
+              aria-label="Flights"
+              title="Flights, bookings and import"
               className="rounded-full bg-[rgba(91,157,255,0.14)] text-accent hover:scale-105 hover:bg-[rgba(91,157,255,0.28)]"
               onClick={() => setDbOpen(true)}
             >
-              <Icon name="add" color="currentColor" size={20} />
+              <Icon name="plane" color="currentColor" size={18} />
+              Flights
             </Button>
             <SettingsMenu />
           </div>
