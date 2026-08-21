@@ -77,8 +77,33 @@ function FlightRow({
   onDelete: () => void;
   onBooking: (bookingId: string) => void;
 }) {
+  const hasBooking = Boolean(f.booking_id);
+  // Controls inside the row must not also trigger the row's own navigation.
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 hover:bg-surface-2/60 sm:flex-nowrap">
+    <li
+      // The row itself opens the booking, so the per-row "Booking ↗" link is gone —
+      // it repeated on almost every line to say what the row already points at.
+      // Rows with no booking stay inert rather than looking clickable and doing nothing.
+      {...(hasBooking
+        ? {
+          role: "button" as const,
+          tabIndex: 0,
+          title: "Show this flight's booking",
+          onClick: () => onBooking(f.booking_id!),
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onBooking(f.booking_id!);
+            }
+          },
+        }
+        : {})}
+      className={cn(
+        "flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:flex-nowrap",
+        hasBooking && "focus-ring cursor-pointer hover:bg-surface-2/60",
+      )}
+    >
       <AirlineLogo iata={f.airline_iata} name={f.airline_name} treatment={f.airline_logo_treatment} />
 
       <div className="min-w-0 flex-1 basis-[55%] sm:basis-auto">
@@ -103,6 +128,7 @@ function FlightRow({
               <select
                 value={f.cabin_class ?? ""}
                 disabled={saving}
+                onClick={stop}
                 onChange={(e) => onCabin(e.target.value || null)}
                 className="focus-ring -my-0.5 rounded border border-border bg-surface-2 px-1 py-0.5 text-caption text-ink-muted"
               >
@@ -121,18 +147,6 @@ function FlightRow({
           )}
           <span aria-hidden>·</span>
           <span className="tnum whitespace-nowrap">{costLabel(f)}</span>
-          {f.booking_id && (
-            <>
-              <span aria-hidden>·</span>
-              <button
-                onClick={() => onBooking(f.booking_id!)}
-                className="focus-ring rounded text-accent hover:underline"
-                title="Show this flight's booking"
-              >
-                Booking ↗
-              </button>
-            </>
-          )}
         </div>
       </div>
 
@@ -144,7 +158,7 @@ function FlightRow({
       {/* Signed out is read-only, so the controls are absent rather than present-and-
           greyed: a row of dead buttons on every line reads as broken, not as locked. */}
       {canWrite && (
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1" onClick={stop}>
           <Button variant="ghost" size="sm" onClick={onEdit}>
             Edit
           </Button>
