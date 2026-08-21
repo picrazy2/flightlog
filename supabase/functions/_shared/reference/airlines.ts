@@ -239,9 +239,12 @@ function cleanString(value: unknown): string | null {
   return trimmed;
 }
 
+// IATA/ICAO codes are ASCII alphanumerics. Length alone isn't enough: Wikidata carries
+// the odd native-script value in P229 — "АЯ" (Cyrillic) for Аэросервис — which passes a
+// length check, then fails every logo fetch and storage write forever after.
 function cleanCode(value: unknown, expectedLength: number): string | null {
   const cleaned = cleanString(value)?.toUpperCase();
-  if (!cleaned || cleaned === "\\N" || cleaned.length !== expectedLength) {
+  if (!cleaned || cleaned.length !== expectedLength || !/^[A-Z0-9]+$/.test(cleaned)) {
     return null;
   }
 
