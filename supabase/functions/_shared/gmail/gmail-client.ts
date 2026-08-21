@@ -3,8 +3,9 @@ import { HttpError } from "../flights/http.ts";
 const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
-export type PdfAttachment = {
+export type MessageAttachment = {
   filename: string;
+  mimeType: string; // passed through to Gemini as inline_data
   // base64 (standard, not url-safe) — ready for Gemini inline_data
   data: string;
 };
@@ -13,13 +14,23 @@ export type GmailMessage = {
   id: string;
   subject: string;
   from: string;
+  to?: string; // recipients, so the ingest address can be recognised
   date: string;
   body: string;
-  attachments?: PdfAttachment[];
+  attachments?: MessageAttachment[];
 };
 
-const MAX_PDFS_PER_MESSAGE = 1; // itinerary PDF; e-receipt is redundant & doubles memory
+// Forwarding anything here files it as a flight. Cloudflare Email Routing delivers the
+// address into the same mailbox, so it rides the existing scan rather than needing its
+// own inbound pipeline.
+export const INGEST_ADDRESS = Deno.env.get("INGEST_EMAIL_ADDRESS") ?? "journia@akguo.com";
+
+// Itinerary PDFs stay capped at one (a second is usually a redundant e-receipt and
+// doubles memory), but screenshots come in small and often in pairs, so a few are fine.
+const MAX_ATTACHMENTS_PER_MESSAGE = 3;
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const MAX_ATTACHMENT_BYTES_TOTAL = 8 * 1024 * 1024; // edge functions are memory-bound
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"];
 
 export type GmailScanResult = {
   messages: GmailMessage[];
@@ -95,6 +106,9 @@ function b64url(s: string): string {
 // Each clause is an independent Gmail search; results are unioned. Keeping them
 // separate is clearer (and avoids fragile precedence) than one mega-query.
 export const FLIGHT_SEARCH_QUERIES = [
+  // Anything forwarded to the ingest address, whatever the subject — forwarding it is
+  // itself the signal, so this clause deliberately carries no keyword filter.
+  `to:${INGEST_ADDRESS}`,
   // English: bookings / itineraries / tickets ("Ticket Details", e-ticket, etc.)
   'subject:(confirmation OR itinerary OR "e-ticket" OR ticket OR booking OR reservation) (flight OR airline)',
   // English: boarding passes & check-ins — flights actually flown
@@ -309,33 +323,60 @@ async function fetchMessage(
     id: raw.id,
     subject: extractHeader(raw.payload?.headers ?? [], "Subject") ?? "",
     from: extractHeader(raw.payload?.headers ?? [], "From") ?? "",
+    to: [
+      extractHeader(raw.payload?.headers ?? [], "To"),
+      extractHeader(raw.payload?.headers ?? [], "Cc"),
+      extractHeader(raw.payload?.headers ?? [], "Delivered-To"),
+      extractHeader(raw.payload?.headers ?? [], "X-Forwarded-To"),
+    ].filter(Boolean).join(", "),
     date: extractHeader(raw.payload?.headers ?? [], "Date") ?? "",
     body: extractBody(raw.payload),
-    attachments: await fetchPdfAttachments(accessToken, messageId, raw.payload),
+    attachments: await fetchAttachments(accessToken, messageId, raw.payload),
   };
 }
 
-// Itinerary emails (e.g. Trip.com) often put the real flight detail in a PDF.
-// We pull up to a few PDFs so Gemini can read them directly.
-async function fetchPdfAttachments(
+// Itinerary emails (e.g. Trip.com) often put the real flight detail in a PDF, and a
+// forwarded booking is just as often a screenshot. Both are pulled down and handed to
+// Gemini directly — it reads either.
+async function fetchAttachments(
   accessToken: string,
   messageId: string,
   payload: GmailPart | undefined,
-): Promise<PdfAttachment[]> {
+): Promise<MessageAttachment[]> {
   if (!payload) return [];
 
-  const pdfParts: GmailPart[] = [];
+  const typeOf = (part: GmailPart): string | null => {
+    const name = (part.filename ?? "").toLowerCase();
+    if (part.mimeType === "application/pdf" || name.endsWith(".pdf")) return "application/pdf";
+    if (IMAGE_TYPES.includes(part.mimeType)) return part.mimeType;
+    if (/\.(png|jpe?g|webp|heic|heif)$/.test(name)) {
+      return name.endsWith(".png")
+        ? "image/png"
+        : name.endsWith(".webp")
+        ? "image/webp"
+        : /\.hei[cf]$/.test(name)
+        ? "image/heic"
+        : "image/jpeg";
+    }
+    return null;
+  };
+
+  // PDFs first: when a message carries both, the itinerary PDF is the better source.
+  const candidates: Array<{ part: GmailPart; mimeType: string }> = [];
   const walk = (part: GmailPart) => {
-    const isPdf = part.mimeType === "application/pdf" ||
-      (part.filename ?? "").toLowerCase().endsWith(".pdf");
-    if (isPdf && part.body?.attachmentId) pdfParts.push(part);
+    const mimeType = typeOf(part);
+    if (mimeType && part.body?.attachmentId) candidates.push({ part, mimeType });
     for (const sub of part.parts ?? []) walk(sub);
   };
   walk(payload);
+  candidates.sort((a, b) => Number(b.mimeType === "application/pdf") - Number(a.mimeType === "application/pdf"));
 
-  const out: PdfAttachment[] = [];
-  for (const part of pdfParts.slice(0, MAX_PDFS_PER_MESSAGE)) {
-    if ((part.body?.size ?? 0) > MAX_PDF_BYTES) continue;
+  const out: MessageAttachment[] = [];
+  let budget = MAX_ATTACHMENT_BYTES_TOTAL;
+  for (const { part, mimeType } of candidates) {
+    if (out.length >= MAX_ATTACHMENTS_PER_MESSAGE) break;
+    const size = part.body?.size ?? 0;
+    if (size > MAX_PDF_BYTES || size > budget) continue;
     try {
       const res = await gmailFetch(
         accessToken,
@@ -343,8 +384,10 @@ async function fetchPdfAttachments(
       );
       const data = await res.json() as { data?: string };
       if (data.data) {
+        budget -= size;
         out.push({
-          filename: part.filename || "attachment.pdf",
+          filename: part.filename || (mimeType === "application/pdf" ? "attachment.pdf" : "attachment"),
+          mimeType,
           data: data.data.replace(/-/g, "+").replace(/_/g, "/"),
         });
       }

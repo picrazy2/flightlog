@@ -51,5 +51,24 @@ countries from OurAirports, airlines from OpenFlights, aircraft types from an op
 database, FX from the @fawazahmed0 currency API, and flight schedules / actual times /
 flown tracks from AeroAPI (FlightAware).
 
+### Adding a flight by email
+Forward any booking confirmation, itinerary, boarding pass or screenshot to
+**journia@akguo.com** and it is filed automatically on the next `watch-gmail` run.
+
+Cloudflare Email Routing delivers that address into the same mailbox `watch-gmail`
+already scans, so there is no separate inbound pipeline — one custom address rule on
+`akguo.com` pointing at the mailbox is the entire setup. Override the address with the
+`INGEST_EMAIL_ADDRESS` env var.
+
+Two things make forwarding behave differently from ordinary inbox mail:
+- The scan matches `to:<ingest address>` with no keyword filter, so a forward is picked
+  up whatever its subject says.
+- The passenger gate is skipped. Normally a booking is dropped unless Gemini can confirm
+  the account owner is travelling; a screenshot rarely names the passenger, and
+  forwarding it is itself the claim of ownership.
+
+PDF and image attachments (png/jpeg/webp/heic) are both passed to Gemini, up to three per
+message.
+
 `scripts/` holds build helpers (`cf-redirects.mjs`). One-off reconciliation/backfill
 utilities and scratch data live in `scratch/` (gitignored, local only).

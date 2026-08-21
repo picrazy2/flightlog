@@ -138,7 +138,7 @@ Do NOT guess:
 - Resolve every flight date against the email's received date (given below). The flight year is almost always the same as, or shortly after, the received date — never default to January 1 or a prior year.
 - If you cannot confidently determine a flight's date, flight number, or airports from the email body OR its PDF attachments, OMIT that flight. Never invent or place-hold a flight number (no "NULL"/"N/A"), date, or airport.
 - If no flight can be confidently extracted, set is_flight_booking = false.
-- The PDF attachments (when present) are the most authoritative source for flight numbers, times, dates, and cabin class — prefer them over the email body.`;
+- The attachments (when present) — PDFs or screenshots of an itinerary/boarding pass — are the most authoritative source for flight numbers, times, dates, and cabin class; prefer them over the email body.`;
 
 const OWNER_PROMPT = (owner: GeminiOwner) =>
   `\n\nThe account owner is "${owner.name ?? ""}"${
@@ -152,7 +152,7 @@ export async function parseEmailForFlights(
     from: string;
     body: string;
     date?: string;
-    attachments?: Array<{ filename: string; data: string }>;
+    attachments?: Array<{ filename: string; mimeType?: string; data: string }>;
   },
   owner?: GeminiOwner,
 ): Promise<GeminiParsedBookingEmail> {
@@ -166,8 +166,10 @@ export async function parseEmailForFlights(
   // deno-lint-ignore no-explicit-any
   const parts: any[] = [{ text: prompt }];
   for (const att of email.attachments ?? []) {
+    // A forwarded booking is as often a screenshot as a PDF; Gemini reads either, but
+    // only if it is told which one it is being handed.
     parts.push({
-      inlineData: { mimeType: "application/pdf", data: att.data },
+      inlineData: { mimeType: att.mimeType ?? "application/pdf", data: att.data },
     });
   }
 

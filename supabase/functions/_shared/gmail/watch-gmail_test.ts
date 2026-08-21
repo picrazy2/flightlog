@@ -264,6 +264,32 @@ Deno.test("watchGmail drops bookings where the owner is not a traveler", async (
   assertEquals(supabase.db.bookings.length, 0);
 });
 
+Deno.test("watchGmail imports mail forwarded to the ingest address even without a name match", async () => {
+  const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+
+  // A forwarded screenshot rarely names the passenger, so Gemini cannot confirm the owner
+  // is travelling. Forwarding it to the ingest address is the claim of ownership instead,
+  // so the passenger gate must not drop it the way it drops an ordinary inbox email.
+  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+    scanMessages: mockScanMessages(
+      [{
+        id: "m1",
+        subject: "Fwd: screenshot",
+        from: "alexanderguo99@gmail.com",
+        to: "journia@akguo.com",
+        date: "x",
+        body: "",
+      }],
+      "1",
+    ),
+    parseEmail: mockParseEmail({ ...SINGLE_BA_BOOKING, owner_is_traveler: false }),
+  });
+
+  assertEquals(result.not_flight, 0);
+  assertEquals(result.imported, 1);
+  assertEquals(supabase.db.flights.length, 1);
+});
+
 Deno.test("watchGmail cancels an existing flight on a refund/cancellation email", async () => {
   const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
 
