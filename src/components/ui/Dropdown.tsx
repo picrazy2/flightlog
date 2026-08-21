@@ -15,11 +15,13 @@ interface Props<T extends string> {
   size?: "sm" | "md";
   // accent (blue) styling when this represents a non-default / active selection
   active?: boolean;
+  // widen the menu for long labels (airline names); default suits short metric labels
+  menuWidth?: string;
   "aria-label"?: string;
 }
 
 // Compact themed dropdown (Popover-based) — used for the metric selector.
-export function Dropdown<T extends string>({ value, options, onChange, size = "sm", active, ...aria }: Props<T>) {
+export function Dropdown<T extends string>({ value, options, onChange, size = "sm", active, menuWidth, ...aria }: Props<T>) {
   const current = options.find((o) => o.value === value);
   const h = size === "sm" ? "h-7 text-caption" : "h-[34px] text-label";
   return (
@@ -44,7 +46,9 @@ export function Dropdown<T extends string>({ value, options, onChange, size = "s
       )}
     >
       {(close) => (
-        <div className="w-[130px]">
+        // capped and scrollable: a long option list (every airline flown) would otherwise
+        // render taller than the viewport with no way to reach the bottom
+        <div className={cn(menuWidth ?? "w-[130px]", "max-h-[min(60vh,340px)] overflow-y-auto")}>
           {options.map((o) => (
             <button
               key={o.value}

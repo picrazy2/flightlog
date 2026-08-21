@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { useStore } from "@/state/store";
 import { useFlights } from "@/data/useFlights";
 import { useBookings } from "@/data/useBookings";
@@ -150,6 +151,8 @@ export function DatabaseModal() {
   const canWrite = !!user; // writing requires a signed-in (allowed) Google account
   const [tab, setTab] = useState<Tab>("flights");
   const [q, setQ] = useState("");
+  const [year, setYear] = useState("all");
+  const [airline, setAirline] = useState("all");
   const [savingCabinId, setSavingCabinId] = useState<string | null>(null); // row mid-save → show spinner
   const [highlightBooking, setHighlightBooking] = useState<string | null>(null); // jump-to from flights tab
   const [editing, setEditing] = useState<(Partial<FlightFormValues> & { id?: string }) | null>(null);
@@ -169,22 +172,60 @@ export function DatabaseModal() {
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
     // newest flights first in the table
-    const data = [...(flights.data ?? [])].sort((a, b) => b.sched_dep.localeCompare(a.sched_dep));
-    if (!term) return data;
-    return data.filter((f) =>
-      `${f.flight_date} ${f.airline_iata}${f.flight_number} ${f.dep_iata} ${f.arr_iata}`.toLowerCase().includes(term),
-    );
-  }, [flights.data, q]);
+    let data = [...(flights.data ?? [])].sort((a, b) => b.sched_dep.localeCompare(a.sched_dep));
+    if (year !== "all") data = data.filter((f) => f.flight_date.slice(0, 4) === year);
+    if (airline !== "all") data = data.filter((f) => f.airline_iata === airline);
+    if (term) {
+      data = data.filter((f) =>
+        `${f.flight_date} ${f.airline_iata}${f.flight_number} ${f.dep_iata} ${f.arr_iata}`.toLowerCase().includes(term),
+      );
+    }
+    return data;
+  }, [flights.data, q, year, airline]);
+
+  // Options come from the whole log, not the filtered rows, so picking a year never
+  // empties the airline list (and vice versa) and leaves you unable to get back.
+  const yearOptions = useMemo(() => {
+    const years = [...new Set((flights.data ?? []).map((f) => f.flight_date.slice(0, 4)))]
+      .sort((a, b) => b.localeCompare(a));
+    return [{ value: "all", label: "All years" }, ...years.map((y) => ({ value: y, label: y }))];
+  }, [flights.data]);
+
+  const airlineOptions = useMemo(() => {
+    const seen = new Map<string, { name: string; n: number }>();
+    for (const f of flights.data ?? []) {
+      const e = seen.get(f.airline_iata) ?? { name: f.airline_name ?? f.airline_iata, n: 0 };
+      e.n += 1;
+      seen.set(f.airline_iata, e);
+    }
+    return [
+      { value: "all", label: "All airlines" },
+      ...[...seen.entries()]
+        .sort((a, b) => a[1].name.localeCompare(b[1].name))
+        .map(([iata, e]) => ({ value: iata, label: `${e.name} · ${e.n}` })),
+    ];
+  }, [flights.data]);
 
   // Upcoming first and separated: they're the few rows worth acting on, and a shared
   // list buried them above hundreds of flown legs with only a pill to tell them apart.
-  const groups = useMemo(
-    () => [
+  // Everything already flown then breaks into a table per year — a single 485-row list
+  // has no landmarks, and the year is how you actually remember a trip.
+  const groups = useMemo(() => {
+    const byYear = new Map<string, Flight[]>();
+    for (const f of rows) {
+      if (f.status === "scheduled") continue;
+      const y = f.flight_date.slice(0, 4);
+      const bucket = byYear.get(y);
+      if (bucket) bucket.push(f);
+      else byYear.set(y, [f]);
+    }
+    return [
       { key: "upcoming", label: "Upcoming", rows: rows.filter((f) => f.status === "scheduled") },
-      { key: "flown", label: "Flown", rows: rows.filter((f) => f.status !== "scheduled") },
-    ],
-    [rows],
-  );
+      ...[...byYear.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([y, rs]) => ({ key: y, label: y, rows: rs })),
+    ];
+  }, [rows]);
 
   const save = (v: FlightFormValues) => {
     const action = editing?.id ? updateM.mutateAsync({ id: editing.id, ...v }) : createM.mutateAsync(v);
@@ -275,14 +316,41 @@ export function DatabaseModal() {
 
       {tab === "flights" && (
         <div className="flex flex-col gap-3 p-5">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Filter flights…"
-              className="focus-ring w-64 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-label text-ink placeholder:text-ink-faint"
+              className="focus-ring w-full min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-label text-ink placeholder:text-ink-faint sm:w-64 sm:flex-none"
+            />
+            <Dropdown
+              aria-label="Filter by year"
+              value={year}
+              options={yearOptions}
+              onChange={setYear}
+              active={year !== "all"}
+            />
+            <Dropdown
+              aria-label="Filter by airline"
+              value={airline}
+              options={airlineOptions}
+              onChange={setAirline}
+              active={airline !== "all"}
+              menuWidth="w-[230px]"
             />
             <span className="text-caption text-ink-faint">{rows.length} rows</span>
+            {(year !== "all" || airline !== "all" || q) && (
+              <button
+                onClick={() => {
+                  setYear("all");
+                  setAirline("all");
+                  setQ("");
+                }}
+                className="focus-ring rounded text-caption text-accent hover:underline"
+              >
+                Clear
+              </button>
+            )}
             <div className="ml-auto">
               <Button
                 variant="primary"
