@@ -46,6 +46,21 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   --accent-press: #3d82f0;
   --accent-ink: #06101f; /* text on accent fill */
   --secondary: #ffc061;
+  --upcoming: #2dd4bf; /* not-yet-flown; matches color.upcoming in lib/palette */
+
+  /* Channel triplets for the same colours. Tailwind can only compose an alpha
+     modifier (bg-surface-2/60) onto `rgb(... / <alpha-value>)`; given a var
+     holding a full hex it emits no rule at all and the class silently does
+     nothing. The hex vars above stay for plain `var(--x)` use in raw CSS. */
+  --surface-1-rgb: 17 20 28;
+  --surface-2-rgb: 23 27 37;
+  --surface-3-rgb: 31 36 48;
+  --ink-rgb: 234 237 243;
+  --ink-muted-rgb: 152 162 179;
+  --ink-faint-rgb: 92 101 117;
+  --accent-rgb: 91 157 255;
+  --secondary-rgb: 255 192 97;
+  --upcoming-rgb: 45 212 191;
 
   /* semantic / map */
   --route-domestic: #34d399;

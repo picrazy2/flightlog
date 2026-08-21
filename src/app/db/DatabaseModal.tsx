@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -80,6 +81,10 @@ function FlightRow({
       <AirlineLogo iata={f.airline_iata} name={f.airline_name} />
 
       <div className="min-w-0 flex-1 basis-[55%] sm:basis-auto">
+        {/* Three rows on a phone — date, then route, then the details — because the one
+            wrapped meta line put the date and the fare on the same visual level as the
+            route. Wider screens keep the date inline; a row of its own is wasted space. */}
+        <div className="tnum text-caption leading-tight text-ink-faint sm:hidden">{f.flight_date}</div>
         <div className="flex items-baseline gap-2">
           <span className="truncate font-display text-title font-semibold text-ink">
             {f.dep_iata} <span className="text-ink-faint">→</span> {f.arr_iata}
@@ -90,8 +95,8 @@ function FlightRow({
           </span>
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-faint">
-          <span className="tnum">{f.flight_date}</span>
-          <span aria-hidden>·</span>
+          <span className="tnum hidden sm:inline">{f.flight_date}</span>
+          <span aria-hidden className="hidden sm:inline">·</span>
           {canWrite ? (
             <span className="inline-flex items-center gap-1">
               <select
@@ -130,16 +135,23 @@ function FlightRow({
         </div>
       </div>
 
-      <StatusPill status={f.status} />
+      {/* No status pill: the section a row sits in already says whether it's flown, and
+          a badge repeated on all 366 of them was pure noise. Cancelled is the exception —
+          it's the one status the grouping can't express. */}
+      {f.status === "cancelled" && <StatusPill status={f.status} />}
 
-      <div className="ml-auto flex shrink-0 items-center gap-1">
-        <Button variant="ghost" size="sm" disabled={!canWrite} onClick={onEdit}>
-          Edit
-        </Button>
-        <Button variant="danger" size="sm" disabled={!canWrite || deleting} onClick={onDelete}>
-          Delete
-        </Button>
-      </div>
+      {/* Signed out is read-only, so the controls are absent rather than present-and-
+          greyed: a row of dead buttons on every line reads as broken, not as locked. */}
+      {canWrite && (
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={onEdit}>
+            Edit
+          </Button>
+          <Button variant="danger" size="sm" disabled={deleting} onClick={onDelete}>
+            Delete
+          </Button>
+        </div>
+      )}
     </li>
   );
 }
@@ -384,10 +396,26 @@ export function DatabaseModal() {
               // they were previously indistinguishable from 480 flown rows above them.
               <section key={g.key} className="flex flex-col gap-1.5">
                 <div className="flex items-baseline gap-2 px-0.5">
-                  <h3 className="text-eyebrow tracking-[0.01em] text-ink-faint">{g.label}</h3>
+                  <h3
+                    className={cn(
+                      "text-eyebrow tracking-[0.01em]",
+                      g.key === "upcoming" ? "text-upcoming" : "text-ink-faint",
+                    )}
+                  >
+                    {g.label}
+                  </h3>
                   <span className="text-caption text-ink-faint">{g.rows.length}</span>
                 </div>
-                <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                {/* Upcoming is tinted as a whole rather than badging each row: the table
+                    is the signal, so the colour belongs to the container. */}
+                <ul
+                  className={cn(
+                    "divide-y overflow-hidden rounded-lg border",
+                    g.key === "upcoming"
+                      ? "divide-upcoming/20 border-upcoming/35 bg-upcoming/[0.07]"
+                      : "divide-border border-border",
+                  )}
+                >
                   {g.rows.map((f) => (
                     <FlightRow
                       key={f.id}

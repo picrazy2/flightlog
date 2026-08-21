@@ -9,25 +9,28 @@ export default {
     extend: {
       colors: {
         bg: "var(--bg)",
+        // rgb(var(--x-rgb) / <alpha-value>) rather than var(--x): Tailwind needs the
+        // channel form to build an alpha modifier, and silently emits nothing without it.
         surface: {
-          1: "var(--surface-1)",
-          2: "var(--surface-2)",
-          3: "var(--surface-3)",
+          1: "rgb(var(--surface-1-rgb) / <alpha-value>)",
+          2: "rgb(var(--surface-2-rgb) / <alpha-value>)",
+          3: "rgb(var(--surface-3-rgb) / <alpha-value>)",
         },
         border: {
           DEFAULT: "var(--border)",
           strong: "var(--border-strong)",
         },
         ink: {
-          DEFAULT: "var(--ink)",
-          muted: "var(--ink-muted)",
-          faint: "var(--ink-faint)",
+          DEFAULT: "rgb(var(--ink-rgb) / <alpha-value>)",
+          muted: "rgb(var(--ink-muted-rgb) / <alpha-value>)",
+          faint: "rgb(var(--ink-faint-rgb) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "var(--accent)",
+          DEFAULT: "rgb(var(--accent-rgb) / <alpha-value>)",
           press: "var(--accent-press)",
         },
-        secondary: "var(--secondary)",
+        secondary: "rgb(var(--secondary-rgb) / <alpha-value>)",
+        upcoming: "rgb(var(--upcoming-rgb) / <alpha-value>)",
         route: {
           domestic: "var(--route-domestic)",
           intl: "var(--route-intl)",
