@@ -343,7 +343,7 @@ export function DatabaseModal() {
       }
     >
       {mobile && (
-        <div className="border-b border-border px-4 py-2.5">
+        <div className="px-4 py-3">
           <Segmented
             aria-label="Table"
             size="sm"
@@ -372,7 +372,7 @@ export function DatabaseModal() {
       </div>
 
       {tab === "flights" && (
-        <div className="flex flex-col gap-3 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 px-4 pb-4 pt-0 sm:p-5">
           {/* One row on a desktop; on a phone the search and the filters split onto
               separate lines — crammed together the input collapsed to about "Filt".
               sm:contents dissolves the wrappers so both flow into one row again. */}
