@@ -9,12 +9,24 @@ const UPSERT_BATCH_SIZE = 1_000;
 // the dataset never updated. These corrected name/ICAO values are applied after the
 // OpenFlights merge so a reference refresh can't revert them (a wrong ICAO silently
 // breaks AeroAPI enrichment — see W9 → WUK). Add a row here whenever you fix one by hand.
+// OpenFlights stopped being maintained around 2014, so carriers that launched or were
+// renamed since simply are not in it under their code — no amount of ranking finds them.
+// The `active` flag handles reassignments where both carriers are listed (D7, HO, PC);
+// everything below is a code OpenFlights has no current entry for, or where both rows
+// are flagged active and file order picked the dead one (VY).
 const AIRLINE_OVERRIDES: Record<string, { name: string; icao: string }> = {
   A6: { name: "Air Travel Co. Ltd", icao: "OTC" }, // OpenFlights: Air Alps Aviation
-  CN: { name: "Grand China Air", icao: "WWD" }, // OpenFlights: Westward Airways (IATA reassigned)
+  CN: { name: "Grand China Air", icao: "GDC" }, // OpenFlights: Westward Airways (IATA reassigned)
   W4: { name: "Wizz Air Malta", icao: "WMT" }, // OpenFlights: Aero Services Executive
   W9: { name: "Wizz Air UK", icao: "WUK" }, // OpenFlights: Abelag Aviation
   XW: { name: "NokScoot", icao: "NCT" }, // OpenFlights: Sky Express
+  "9C": { name: "Spring Airlines", icao: "CQH" }, // OpenFlights: China SSS (defunct)
+  JD: { name: "Beijing Capital Airlines", icao: "CBJ" }, // OpenFlights: Japan Air System (defunct 2004)
+  LA: { name: "LATAM Airlines", icao: "LAN" }, // OpenFlights: LAN Airlines (renamed 2016)
+  VJ: { name: "VietJet Air", icao: "VJC" }, // OpenFlights: Jatayu / Royal Air Cambodge (both defunct)
+  VY: { name: "Vueling Airlines", icao: "VLG" }, // OpenFlights also lists Formosa Airlines as active
+  WW: { name: "WOW air", icao: "WOW" }, // OpenFlights: bmibaby (defunct 2012)
+  ZG: { name: "ZIPAIR Tokyo", icao: "TZP" }, // OpenFlights: Viva Macau (defunct 2010)
 };
 
 type AirlineRecord = {
@@ -65,6 +77,7 @@ export async function refreshAirlines(
       icao: cleanCode(row.icao, 3),
       name,
       country: cleanString(row.country),
+      active: cleanString(row.active)?.toUpperCase() === "Y",
     };
 
     const existing = airlinesByIata.get(iata);
@@ -85,7 +98,8 @@ export async function refreshAirlines(
     });
   }
 
-  const airlines = Array.from(airlinesByIata.values());
+  // `active` exists only to rank candidates; public.airlines has no such column.
+  const airlines = Array.from(airlinesByIata.values()).map(({ active: _active, ...row }) => row);
 
   await upsertInBatches(supabase, "airlines", airlines, "iata");
 
@@ -179,8 +193,13 @@ function isBetterAirlineRecord(
   return scoreAirlineRecord(candidate) > scoreAirlineRecord(existing);
 }
 
+// Ranks rows that share an IATA code. `active` dominates: codes get reassigned when a
+// carrier folds, and OpenFlights keeps the dead one, so scoring on ICAO/country alone
+// left ties broken by file order — which is roughly oldest-first. That is how Pegasus
+// showed up as Air Fiji and AirAsia X as Dinar.
 function scoreAirlineRecord(record: Record<string, unknown>): number {
   let score = 0;
+  if (record.active) score += 4; // outranks any combination below
   if (record.icao) score += 2;
   if (record.country) score += 1;
   return score;
