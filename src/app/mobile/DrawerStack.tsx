@@ -48,6 +48,7 @@ export function DrawerStack({ ctx, encoding }: { ctx: StatContext; encoding: Map
 
   const openId = drawers.some((d) => d.id === mobileOpen) ? mobileOpen : null;
   const [openContentH, setOpenContentH] = useState(0);
+  const [drag, setDrag] = useState<{ id: DrawerId; dy: number } | null>(null);
   useEffect(() => setOpenContentH(0), [openId]); // remeasure when the open drawer changes
   if (drawers.length === 0) return null;
 
@@ -57,21 +58,57 @@ export function DrawerStack({ ctx, encoding }: { ctx: StatContext; encoding: Map
   // it's measured, fall back to the collapsed handle height
   const openTotal = openContentH ? Math.min(cap, openContentH) : COLLAPSED;
 
+  // How far a drag has carried the sheet, 0 = collapsed, 1 = fully open. A drag on the
+  // open drawer starts at 1 and falls as you pull down; a drag on a collapsed handle
+  // starts at 0 and rises as you pull up. A collapsed drawer's open height isn't measured
+  // yet, so the cap stands in as its travel — which is what it will open to for any panel
+  // taller than the cap, i.e. most of them.
+  const travelFor = (id: DrawerId) => (id === openId ? openTotal : cap) - COLLAPSED;
+  const progress = (id: DrawerId, dy: number) =>
+    Math.max(0, Math.min(1, (id === openId ? 1 : 0) + -dy / Math.max(1, travelFor(id))));
+  const p = drag ? progress(drag.id, drag.dy) : null;
+
+  const lerp = (to: number, t: number) => COLLAPSED + (to - COLLAPSED) * t;
+
   // cumulative top of each drawer (its visible handle/content sits in the top `vis`px;
   // the container itself extends from that top down to the screen bottom)
   let top = 0;
   const n = drawers.length;
   const positioned = drawers.map((d, i) => {
     const open = d.id === openId;
-    const vis = open ? openTotal : COLLAPSED;
+    let vis = open ? openTotal : COLLAPSED;
+    if (drag && p != null) {
+      if (d.id === drag.id) vis = lerp(d.id === openId ? openTotal : cap, p);
+      // dragging a collapsed handle open steals the height from whichever drawer is open,
+      // so the stack keeps its total and nothing is pushed off-screen mid-drag
+      else if (open) vis = lerp(openTotal, 1 - p);
+    }
     top += vis;
     return { ...d, open, vis, top, z: 30 + (n - 1 - i) };
   });
 
+  // dy === null means the pointer never travelled far enough to be a drag — treat as a tap.
+  const endDrag = (id: DrawerId, dy: number | null) => {
+    setDrag(null);
+    if (dy === null) return setMobileOpen(openId === id ? null : id);
+    const settled = progress(id, dy);
+    // asymmetric on purpose: a quarter of the travel commits in either direction, so
+    // neither opening nor closing demands a half-screen pull
+    if (id === openId) setMobileOpen(settled < 0.75 ? null : id);
+    else setMobileOpen(settled > 0.25 ? id : openId);
+  };
+
   return (
     <>
       {positioned.map((d) => (
-        <Drawer key={d.id} {...d} onToggle={() => setMobileOpen(d.open ? null : d.id)} onMeasure={d.open ? setOpenContentH : undefined} />
+        <Drawer
+          key={d.id}
+          {...d}
+          dragging={drag != null}
+          onDragMove={(dy) => setDrag({ id: d.id, dy })}
+          onDragEnd={(dy) => endDrag(d.id, dy)}
+          onMeasure={d.open ? setOpenContentH : undefined}
+        />
       ))}
     </>
   );
@@ -85,7 +122,9 @@ function Drawer({
   vis,
   top,
   z,
-  onToggle,
+  dragging,
+  onDragMove,
+  onDragEnd,
   onClose,
   onMeasure,
 }: {
@@ -96,7 +135,9 @@ function Drawer({
   vis: number;
   top: number;
   z: number;
-  onToggle: () => void;
+  dragging: boolean;
+  onDragMove: (dy: number) => void;
+  onDragEnd: (dy: number | null) => void;
   onClose?: () => void;
   onMeasure?: (h: number) => void;
 }) {
@@ -117,27 +158,30 @@ function Drawer({
   const onDown = (e: React.PointerEvent) => {
     startY.current = e.clientY;
     moved.current = false;
+    // capture so the sheet keeps following once the finger leaves the handle
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onMove = (e: React.PointerEvent) => {
-    if (startY.current != null && Math.abs(e.clientY - startY.current) > 6) moved.current = true;
+    if (startY.current == null) return;
+    const dy = e.clientY - startY.current;
+    if (!moved.current && Math.abs(dy) > 6) moved.current = true; // past the tap slop
+    if (moved.current) onDragMove(dy);
   };
   const onUp = (e: React.PointerEvent) => {
     if (startY.current == null) return;
     const dy = e.clientY - startY.current;
     startY.current = null;
-    if (!moved.current) return onToggle();
-    if (dy < -30 && !open) onToggle();
-    else if (dy > 30 && open) onToggle();
+    onDragEnd(moved.current ? dy : null);
   };
 
   return (
     <div
       className="glass fixed inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-border shadow-3"
-      style={{ height: top, zIndex: z, transition: `height .32s ${EASE}` }}
+      style={{ height: top, zIndex: z, transition: dragging ? "none" : `height .32s ${EASE}` }}
     >
       {/* visible handle + content occupies the top `vis`px; the rest is background fill */}
-      <div className="flex shrink-0 flex-col overflow-hidden" style={{ height: vis, transition: `height .32s ${EASE}` }}>
-        <div ref={handleRef} className="shrink-0 touch-none select-none px-4 pb-2 pt-2" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}>
+      <div className="flex shrink-0 flex-col overflow-hidden" style={{ height: vis, transition: dragging ? "none" : `height .32s ${EASE}` }}>
+        <div ref={handleRef} className="shrink-0 touch-none select-none px-4 pb-2 pt-2" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           <div className="mx-auto mb-2 h-1 w-9 rounded-full bg-border" />
           <div className="flex items-center justify-between gap-2">
             <span className="flex min-w-0 items-center gap-2 text-title text-ink">
