@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { useStore } from "@/state/store";
+import { useIsMobile } from "@/lib/useIsMobile";
 import { useFlights } from "@/data/useFlights";
 import { useBookings } from "@/data/useBookings";
 import { useCreateFlight, useUpdateFlight, usePatchFlight, useDeleteFlight, type FlightFormValues } from "@/data/mutations";
@@ -173,6 +174,7 @@ export function DatabaseModal() {
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  const mobile = useIsMobile();
   const flights = useFlights();
   const bookings = useBookings();
   const createM = useCreateFlight();
@@ -292,25 +294,54 @@ export function DatabaseModal() {
     }
   };
 
+  const tabOptions = [
+    { value: "flights" as Tab, label: "Flights" },
+    { value: "bookings" as Tab, label: "Bookings" },
+    { value: "import" as Tab, label: "Import" },
+  ];
+
   return (
     <Modal
       title="Database"
       onClose={() => setDbOpen(false)}
       actions={
-        <Segmented
-          aria-label="Table"
-          size="sm"
-          value={tab}
-          onChange={(t) => setTab(t)}
-          options={[
-            { value: "flights", label: "Flights" },
-            { value: "bookings", label: "Bookings" },
-            { value: "import", label: "Import" },
-          ]}
-        />
+        mobile ? (
+          // Phone header holds the title and one auth control, nothing else — the
+          // Segmented tabs squeezed "Database" down to "Da…".
+          canWrite ? (
+            <button onClick={() => signOut()} className="focus-ring shrink-0 rounded-md px-2 py-1 text-caption text-accent hover:bg-surface-2">
+              Sign out
+            </button>
+          ) : (
+            <button onClick={() => signInWithGoogle()} className="focus-ring shrink-0 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-caption text-ink">
+              Sign in
+            </button>
+          )
+        ) : (
+          <Segmented
+            aria-label="Table"
+            size="sm"
+            value={tab}
+            onChange={(t) => setTab(t)}
+            options={tabOptions}
+          />
+        )
       }
     >
-      <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-2/40 px-5 py-2 text-caption">
+      {mobile && (
+        <div className="border-b border-border px-4 py-2.5">
+          <Segmented
+            aria-label="Table"
+            size="sm"
+            value={tab}
+            onChange={(t) => setTab(t)}
+            options={tabOptions}
+            className="w-full"
+          />
+        </div>
+      )}
+
+      <div className="hidden items-center justify-between gap-3 border-b border-border bg-surface-2/40 px-5 py-2 text-caption sm:flex">
         {canWrite ? (
           <>
             <span className="text-ink-muted">Signed in as <span className="text-ink">{user!.email}</span></span>
@@ -327,51 +358,59 @@ export function DatabaseModal() {
       </div>
 
       {tab === "flights" && (
-        <div className="flex flex-col gap-3 p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Filter flights…"
-              className="focus-ring w-full min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-label text-ink placeholder:text-ink-faint sm:w-64 sm:flex-none"
-            />
-            <Dropdown
-              aria-label="Filter by year"
-              value={year}
-              options={yearOptions}
-              onChange={setYear}
-              active={year !== "all"}
-            />
-            <Dropdown
-              aria-label="Filter by airline"
-              value={airline}
-              options={airlineOptions}
-              onChange={setAirline}
-              active={airline !== "all"}
-              menuWidth="w-[230px]"
-            />
-            <span className="text-caption text-ink-faint">{rows.length} rows</span>
-            {(year !== "all" || airline !== "all" || q) && (
-              <button
-                onClick={() => {
-                  setYear("all");
-                  setAirline("all");
-                  setQ("");
-                }}
-                className="focus-ring rounded text-caption text-accent hover:underline"
-              >
-                Clear
-              </button>
-            )}
-            <div className="ml-auto">
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={!canWrite}
-                onClick={() => setEditing(editing && !editing.id ? null : {})}
-              >
-                ＋ Add flight
-              </Button>
+        <div className="flex flex-col gap-3 p-4 sm:p-5">
+          {/* One row on a desktop; on a phone the search and the filters split onto
+              separate lines — crammed together the input collapsed to about "Filt".
+              sm:contents dissolves the wrappers so both flow into one row again. */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex items-center gap-2 sm:contents">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Filter flights…"
+                className="focus-ring min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-label text-ink placeholder:text-ink-faint sm:w-64 sm:flex-none"
+              />
+              <span className="shrink-0 text-caption text-ink-faint">{rows.length} rows</span>
+              {(year !== "all" || airline !== "all" || q) && (
+                <button
+                  onClick={() => {
+                    setYear("all");
+                    setAirline("all");
+                    setQ("");
+                  }}
+                  className="focus-ring shrink-0 rounded text-caption text-accent hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2 sm:contents">
+              <Dropdown
+                aria-label="Filter by year"
+                value={year}
+                options={yearOptions}
+                onChange={setYear}
+                active={year !== "all"}
+              />
+              <Dropdown
+                aria-label="Filter by airline"
+                value={airline}
+                options={airlineOptions}
+                onChange={setAirline}
+                active={airline !== "all"}
+                menuWidth="w-[230px]"
+              />
+              {canWrite && (
+                <div className="ml-auto">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setEditing(editing && !editing.id ? null : {})}
+                  >
+                    ＋ Add flight
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
