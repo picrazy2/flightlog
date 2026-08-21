@@ -52,6 +52,97 @@ function toForm(f: Flight): Partial<FlightFormValues> & { id: string } {
   };
 }
 
+
+// One flight, as a row rather than a table line: the airline mark and route lead, and
+// everything identifying the leg sits under it in one muted line.
+function FlightRow({
+  f,
+  canWrite,
+  saving,
+  deleting,
+  onCabin,
+  onEdit,
+  onDelete,
+  onBooking,
+}: {
+  f: Flight;
+  canWrite: boolean;
+  saving: boolean;
+  deleting: boolean;
+  onCabin: (cabin: string | null) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onBooking: (bookingId: string) => void;
+}) {
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 hover:bg-surface-2/60 sm:flex-nowrap">
+      <AirlineLogo iata={f.airline_iata} name={f.airline_name} />
+
+      <div className="min-w-0 flex-1 basis-[55%] sm:basis-auto">
+        <div className="flex items-baseline gap-2">
+          <span className="truncate font-display text-title font-semibold text-ink">
+            {f.dep_iata} <span className="text-ink-faint">→</span> {f.arr_iata}
+          </span>
+          <span className="shrink-0 font-mono text-caption text-ink-muted">
+            {f.airline_iata}
+            {f.flight_number}
+          </span>
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-faint">
+          <span className="tnum">{f.flight_date}</span>
+          <span aria-hidden>·</span>
+          {canWrite ? (
+            <span className="inline-flex items-center gap-1">
+              <select
+                value={f.cabin_class ?? ""}
+                disabled={saving}
+                onChange={(e) => onCabin(e.target.value || null)}
+                className="focus-ring -my-0.5 rounded border border-border bg-surface-2 px-1 py-0.5 text-caption text-ink-muted"
+              >
+                {CABIN_OPTS.map((c) => (
+                  <option key={c} value={c}>
+                    {c ? CABIN_LABELS[c] ?? c : "— cabin —"}
+                  </option>
+                ))}
+              </select>
+              {saving && (
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border border-ink-faint border-t-transparent" />
+              )}
+            </span>
+          ) : (
+            <span>{CABIN_LABELS[f.cabin_class ?? ""] ?? f.cabin_class ?? "—"}</span>
+          )}
+          <span aria-hidden>·</span>
+          <span className="tnum whitespace-nowrap">{costLabel(f)}</span>
+          {f.booking_id && (
+            <>
+              <span aria-hidden>·</span>
+              <button
+                onClick={() => onBooking(f.booking_id!)}
+                className="focus-ring rounded text-accent hover:underline"
+                title="Show this flight's booking"
+              >
+                Booking ↗
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <StatusPill status={f.status} />
+
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <Button variant="ghost" size="sm" disabled={!canWrite} onClick={onEdit}>
+          Edit
+        </Button>
+        <Button variant="danger" size="sm" disabled={!canWrite || deleting} onClick={onDelete}>
+          Delete
+        </Button>
+      </div>
+    </li>
+  );
+}
+
 export function DatabaseModal() {
   const setDbOpen = useStore((s) => s.setDbOpen);
   const userId = useStore((s) => s.userId); // active log; new rows/imports file under it
@@ -84,6 +175,16 @@ export function DatabaseModal() {
       `${f.flight_date} ${f.airline_iata}${f.flight_number} ${f.dep_iata} ${f.arr_iata}`.toLowerCase().includes(term),
     );
   }, [flights.data, q]);
+
+  // Upcoming first and separated: they're the few rows worth acting on, and a shared
+  // list buried them above hundreds of flown legs with only a pill to tell them apart.
+  const groups = useMemo(
+    () => [
+      { key: "upcoming", label: "Upcoming", rows: rows.filter((f) => f.status === "scheduled") },
+      { key: "flown", label: "Flown", rows: rows.filter((f) => f.status !== "scheduled") },
+    ],
+    [rows],
+  );
 
   const save = (v: FlightFormValues) => {
     const action = editing?.id ? updateM.mutateAsync({ id: editing.id, ...v }) : createM.mutateAsync(v);
@@ -208,94 +309,46 @@ export function DatabaseModal() {
             </Modal>
           )}
 
-          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-            {rows.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 hover:bg-surface-2/60 sm:flex-nowrap">
-                <AirlineLogo iata={f.airline_iata} name={f.airline_name} />
-
-                {/* primary line is the route; everything identifying the leg sits under it
-                    in one muted row, so scanning reads route-first instead of column-first */}
-                <div className="min-w-0 flex-1 basis-[55%] sm:basis-auto">
-                  <div className="flex items-baseline gap-2">
-                    <span className="truncate font-display text-title font-semibold text-ink">
-                      {f.dep_iata} <span className="text-ink-faint">→</span> {f.arr_iata}
-                    </span>
-                    <span className="shrink-0 font-mono text-caption text-ink-muted">
-                      {f.airline_iata}
-                      {f.flight_number}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-faint">
-                    <span className="tnum">{f.flight_date}</span>
-                    <span aria-hidden>·</span>
-                    {canWrite ? (
-                      <span className="inline-flex items-center gap-1">
-                        <select
-                          value={f.cabin_class ?? ""}
-                          disabled={savingCabinId === f.id}
-                          onChange={(e) => {
-                            const cabin = e.target.value || null;
-                            setSavingCabinId(f.id);
-                            patchM
-                              .mutateAsync({ id: f.id, cabin_class: cabin })
-                              .finally(() => setSavingCabinId((cur) => (cur === f.id ? null : cur)));
-                          }}
-                          className="focus-ring -my-0.5 rounded border border-border bg-surface-2 px-1 py-0.5 text-caption text-ink-muted"
-                        >
-                          {CABIN_OPTS.map((c) => (
-                            <option key={c} value={c}>
-                              {c ? CABIN_LABELS[c] ?? c : "— cabin —"}
-                            </option>
-                          ))}
-                        </select>
-                        {savingCabinId === f.id && (
-                          <span className="inline-block h-3 w-3 animate-spin rounded-full border border-ink-faint border-t-transparent" />
-                        )}
-                      </span>
-                    ) : (
-                      <span>{CABIN_LABELS[f.cabin_class ?? ""] ?? f.cabin_class ?? "—"}</span>
-                    )}
-                    <span aria-hidden>·</span>
-                    <span className="tnum whitespace-nowrap">{costLabel(f)}</span>
-                    {f.booking_id && (
-                      <>
-                        <span aria-hidden>·</span>
-                        <button
-                          onClick={() => {
-                            setTab("bookings");
-                            setHighlightBooking(f.booking_id!);
-                          }}
-                          className="focus-ring rounded text-accent hover:underline"
-                          title="Show this flight's booking"
-                        >
-                          Booking ↗
-                        </button>
-                      </>
-                    )}
-                  </div>
+          <div className="flex flex-col gap-5">
+          {groups.map((g) =>
+            g.rows.length === 0 ? null : (
+              // Two lists rather than one: upcoming legs are the handful you act on, and
+              // they were previously indistinguishable from 480 flown rows above them.
+              <section key={g.key} className="flex flex-col gap-1.5">
+                <div className="flex items-baseline gap-2 px-0.5">
+                  <h3 className="text-eyebrow tracking-[0.01em] text-ink-faint">{g.label}</h3>
+                  <span className="text-caption text-ink-faint">{g.rows.length}</span>
                 </div>
-
-                <StatusPill status={f.status} />
-
-                <div className="ml-auto flex shrink-0 items-center gap-1">
-                  <Button variant="ghost" size="sm" disabled={!canWrite} onClick={() => setEditing(toForm(f))}>
-                    Edit
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    disabled={!canWrite || deleteM.isPending}
-                    onClick={() => {
-                      if (confirm(`Delete ${f.airline_iata}${f.flight_number} on ${f.flight_date}?`))
-                        deleteM.mutate(f.id);
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                  {g.rows.map((f) => (
+                    <FlightRow
+                      key={f.id}
+                      f={f}
+                      canWrite={canWrite}
+                      saving={savingCabinId === f.id}
+                      deleting={deleteM.isPending}
+                      onCabin={(cabin) => {
+                        setSavingCabinId(f.id);
+                        patchM
+                          .mutateAsync({ id: f.id, cabin_class: cabin })
+                          .finally(() => setSavingCabinId((cur) => (cur === f.id ? null : cur)));
+                      }}
+                      onEdit={() => setEditing(toForm(f))}
+                      onDelete={() => {
+                        if (confirm(`Delete ${f.airline_iata}${f.flight_number} on ${f.flight_date}?`))
+                          deleteM.mutate(f.id);
+                      }}
+                      onBooking={(id) => {
+                        setTab("bookings");
+                        setHighlightBooking(id);
+                      }}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ),
+          )}
+          </div>
         </div>
       )}
 
