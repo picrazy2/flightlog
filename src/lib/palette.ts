@@ -25,6 +25,11 @@ export const color = {
   border: "rgba(255,255,255,0.08)",
 } as const;
 
+// The "Other" bucket every top-N chart folds its tail into. Deliberately a desaturated
+// slate that reads as "not one of the named series" against the categorical palette.
+export const OTHER_KEY = "__other";
+export const OTHER_COLOR = "#475569";
+
 // Stable color for a categorical series by its rank index (year, country, airline…).
 export function categoricalFor(_key: string, index: number): string {
   return CATEGORICAL[index % CATEGORICAL.length];

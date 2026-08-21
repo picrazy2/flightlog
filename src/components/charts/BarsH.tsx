@@ -8,9 +8,7 @@ import { PieSlices, type Slice } from "./Pie";
 import { makeBarShape } from "./stackedBarShape";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { Modal } from "@/components/ui/Modal";
-import { CATEGORICAL } from "@/lib/palette";
-
-const OTHER_COLOR = "#475569";
+import { CATEGORICAL, OTHER_KEY, OTHER_COLOR } from "@/lib/palette";
 
 export interface BarRowData {
   id: string;
@@ -83,8 +81,8 @@ export function BarsH({ rows, series, percent, onPick, activeId, height, tickIco
     const lim = cap ?? 9;
     const slices: Slice[] = sorted.slice(0, lim).map((t, i) => ({ id: t.id, label: t.label, value: t.value, color: t.byColor ?? CATEGORICAL[i % CATEGORICAL.length] }));
     const otherSum = sorted.slice(lim).reduce((s, t) => s + t.value, 0);
-    if (otherSum > 0) slices.push({ id: "__other", label: "Other", value: otherSum, color: OTHER_COLOR });
-    return <PieSlices slices={slices} unit={unit} activeId={activeId} onPick={onPick ? (id) => id !== "__other" && onPick(id) : undefined} />;
+    if (otherSum > 0) slices.push({ id: OTHER_KEY, label: "Other", value: otherSum, color: OTHER_COLOR });
+    return <PieSlices slices={slices} unit={unit} activeId={activeId} onPick={onPick ? (id) => id !== OTHER_KEY && onPick(id) : undefined} />;
   }
 
   // bars coloured per-row (colorByRow) → the series-based legend + tooltip swatch would

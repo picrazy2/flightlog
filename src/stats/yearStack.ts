@@ -1,9 +1,7 @@
 import type { Flight } from "@/lib/types";
 import type { BarRowData } from "@/components/charts/BarsH";
 import type { Series } from "@/components/charts/chartTheme";
-
-const OTHER_KEY = "__other";
-const OTHER_COLOR = "#475569";
+import { OTHER_KEY, OTHER_COLOR } from "@/lib/palette";
 
 // Per-year vertical stacked bar: one bar per year, split by the top-N stack groups (+ "Other").
 //  - mode "sum":    value summed per (year, group) — visits, or flights/distance/time.
@@ -71,9 +69,14 @@ export function yearStack(opts: {
     return row;
   });
 
+  // Only carry Other when something actually falls outside the top N — otherwise every
+  // chart with fewer groups than topN shows a dead legend entry stuck at zero.
+  const hasOther = rows.some((r) => Number(r[OTHER_KEY]) !== 0);
+  if (!hasOther) for (const r of rows) delete r[OTHER_KEY];
+
   const series: Series[] = [
     ...top.map((g, i) => ({ key: g, name: label(g), color: color(g, i) })),
-    { key: OTHER_KEY, name: "Other", color: OTHER_COLOR },
+    ...(hasOther ? [{ key: OTHER_KEY, name: "Other", color: OTHER_COLOR }] : []),
   ];
   return { rows, series };
 }

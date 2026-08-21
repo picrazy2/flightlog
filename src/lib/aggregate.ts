@@ -1,6 +1,7 @@
 import type { Flight } from "./types";
 import { flightDistanceMi, flightMinutes, schedDep, schedArr } from "./format";
 import { routeKeyUndirected, routeKeyDirected } from "./geo";
+import { OTHER_KEY, OTHER_COLOR } from "./palette";
 
 export interface AirportAgg {
   iata: string;
@@ -99,25 +100,39 @@ export function visitsByKeyYear(
   return m;
 }
 
-// Build BarsV rows/series (top-N keys stacked) from a key→year→value map.
+// Build BarsV rows/series (top-N keys stacked, + "Other") from a key→year→value map.
+// Everything outside the top N folds into Other rather than being dropped: without it a
+// year's bar only totals its top few keys, so the chart silently under-reports the year.
+// Other is omitted entirely when the top N already covers every key.
 type YearBarRow = { id: string; label: string; [k: string]: string | number };
 export function topYearBars(
   byKeyYear: Map<string, Map<string, number>>,
   opts: { topN: number; label: (k: string) => string; color: (k: string, i: number) => string },
 ): { rows: YearBarRow[]; series: { key: string; name: string; color: string }[] } {
-  const top = [...byKeyYear.entries()]
+  const ranked = [...byKeyYear.entries()]
     .map(([k, ym]) => [k, [...ym.values()].reduce((s, v) => s + v, 0)] as const)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, opts.topN)
-    .map(([k]) => k);
+    .sort((a, b) => b[1] - a[1]);
+  const top = ranked.slice(0, opts.topN).map(([k]) => k);
+  const rest = ranked.slice(opts.topN).map(([k]) => k);
   const years = [...new Set([...byKeyYear.values()].flatMap((ym) => [...ym.keys()]))].sort();
+
+  const rows = years.map((y) => {
+    const row: YearBarRow = { id: y, label: y };
+    for (const k of top) row[k] = byKeyYear.get(k)?.get(y) ?? 0;
+    if (rest.length) {
+      row[OTHER_KEY] = rest.reduce((sum, k) => sum + (byKeyYear.get(k)?.get(y) ?? 0), 0);
+    }
+    return row;
+  });
+  const hasOther = rows.some((r) => Number(r[OTHER_KEY]) !== 0);
+  if (!hasOther) for (const r of rows) delete r[OTHER_KEY];
+
   return {
-    series: top.map((k, i) => ({ key: k, name: opts.label(k), color: opts.color(k, i) })),
-    rows: years.map((y) => {
-      const row: YearBarRow = { id: y, label: y };
-      for (const k of top) row[k] = byKeyYear.get(k)?.get(y) ?? 0;
-      return row;
-    }),
+    series: [
+      ...top.map((k, i) => ({ key: k, name: opts.label(k), color: opts.color(k, i) })),
+      ...(hasOther ? [{ key: OTHER_KEY, name: "Other", color: OTHER_COLOR }] : []),
+    ],
+    rows,
   };
 }
 

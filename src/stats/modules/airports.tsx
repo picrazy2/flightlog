@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { StatModule } from "../types";
 import type { Flight } from "@/lib/types";
-import { uniqueCount, airportsFrom } from "@/lib/aggregate";
+import { uniqueCount, airportsFrom, topYearBars } from "@/lib/aggregate";
 import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -200,22 +200,14 @@ export const airports: StatModule = {
         topN: 8,
       });
     } else {
-      // connection-deduped visits per airport per year (matches the rest of the app)
-      const vby = visitsByAirportYear(airportFlights);
-      const top = [...vby.entries()]
-        .map(([iata, ym]) => [iata, [...ym.values()].reduce((s, v) => s + v, 0)] as const)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([iata]) => iata);
-      const allYears = [...new Set([...vby.values()].flatMap((ym) => [...ym.keys()]))].sort();
-      yc = {
-        series: top.map((iata, i) => ({ key: iata, name: iata, color: categoricalFor(iata, i) })),
-        rows: allYears.map((y) => {
-          const row: BarRowData = { id: y, label: y };
-          for (const iata of top) row[iata] = vby.get(iata)?.get(y) ?? 0;
-          return row;
-        }),
-      };
+      // connection-deduped visits per airport per year (matches the rest of the app).
+      // topYearBars folds everything past the top 8 into "Other" so each year's bar
+      // still totals that year's visits.
+      yc = topYearBars(visitsByAirportYear(airportFlights), {
+        topN: 8,
+        label: (iata) => iata,
+        color: (iata, i) => categoricalFor(iata, i),
+      });
     }
 
     return (
