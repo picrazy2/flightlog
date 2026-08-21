@@ -1,0 +1,142 @@
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+
+import { HttpError, toHttpError } from "../_shared/flights/http.ts";
+import { parseEmailForFlights } from "../_shared/gmail/gemini-parser.ts";
+import { processMessage } from "../_shared/gmail/watch-gmail.ts";
+
+// Inbound endpoint for the Cloudflare Email Worker on journia@akguo.com. The worker
+// parses the MIME and posts it here; this files the flights and hands back a line of
+// prose the worker emails back to whoever forwarded it.
+//
+// Attribution comes from the envelope sender, matched against users.email — so Emily
+// forwarding lands in Emily's log and Alex's in his, off one shared address. An
+// unrecognised sender is refused rather than filed under a default: this address is
+// reachable by anyone who can send mail.
+
+interface IngestRequest {
+  message_id?: string;
+  from?: string;
+  subject?: string;
+  date?: string;
+  body?: string;
+  attachments?: Array<{ mimeType?: string; filename?: string; dataB64?: string }>;
+}
+
+// "Emily Zhai <emszhai98@gmail.com>" → "emszhai98@gmail.com"
+function bareAddress(from: string): string {
+  const angled = from.match(/<([^>]+)>/);
+  return (angled ? angled[1] : from).trim().toLowerCase();
+}
+
+async function resolveSender(supabase: SupabaseClient, from: string) {
+  const email = bareAddress(from);
+  if (!email) throw new HttpError(400, "Missing sender address");
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, name, email")
+    .ilike("email", email)
+    .maybeSingle();
+  if (error) throw new HttpError(500, `User lookup failed: ${error.message}`);
+  if (!data) {
+    throw new HttpError(403, `${email} isn't a known Journia user, so nothing was imported.`);
+  }
+  return data as { id: string; name: string | null; email: string | null };
+}
+
+// What the sender gets back. Terse on purpose — it's read on a phone, in a reply.
+function replyFor(
+  outcome: string,
+  flights: Array<{ airline_iata: string; flight_number: string; dep_iata: string; arr_iata: string; flight_date: string }>,
+  warnings: string[],
+  user: string,
+): string {
+  const legs = flights
+    .map((f) => `  ${f.flight_date}  ${f.airline_iata}${f.flight_number}  ${f.dep_iata} → ${f.arr_iata}`)
+    .join("\n");
+  const head = flights.length
+    ? `Added ${flights.length} flight${flights.length === 1 ? "" : "s"} to ${user}'s log:\n\n${legs}`
+    : outcome === "cancelled"
+    ? `Marked the matching flight${flights.length === 1 ? "" : "s"} cancelled in ${user}'s log.`
+    : outcome === "skipped"
+    ? `Already in ${user}'s log — nothing to add.`
+    : `Couldn't find a flight in that. Forward the confirmation email itself, or a screenshot showing the flight number, date and airports.`;
+  return warnings.length ? `${head}\n\nNotes:\n${warnings.map((w) => `  · ${w}`).join("\n")}` : head;
+}
+
+async function ingest(supabase: SupabaseClient, body: IngestRequest) {
+  const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!geminiApiKey) throw new HttpError(500, "Missing GEMINI_API_KEY");
+
+  const user = await resolveSender(supabase, body.from ?? "");
+
+  const message = {
+    id: body.message_id || `ingest-${Date.now()}`,
+    subject: body.subject ?? "",
+    from: body.from ?? "",
+    date: body.date ?? new Date().toISOString(),
+    body: body.body ?? "",
+    attachments: (body.attachments ?? [])
+      .filter((a) => a.dataB64)
+      .map((a) => ({
+        filename: a.filename || "attachment",
+        mimeType: a.mimeType || "application/pdf",
+        data: a.dataB64!,
+      })),
+  };
+
+  const owner = { name: user.name, email: user.email };
+  const result = await processMessage(
+    supabase,
+    message,
+    (email) => parseEmailForFlights(geminiApiKey, email, owner),
+    user.id,
+    // A forward is the claim of ownership; a screenshot rarely names its passenger.
+    { requireOwnerIsTraveler: false },
+  );
+
+  const { data: created } = result.flight_ids.length
+    ? await supabase
+      .from("flights")
+      .select("airline_iata, flight_number, dep_iata, arr_iata, flight_date")
+      .in("id", result.flight_ids)
+    : { data: [] };
+
+  return {
+    ok: true as const,
+    user_id: user.id,
+    outcome: result.outcome,
+    flight_ids: result.flight_ids,
+    reply: replyFor(result.outcome, (created ?? []) as never, result.warnings, user.name ?? user.id),
+  };
+}
+
+function createAdminClient() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceRoleKey) throw new HttpError(500, "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(url, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+export async function handleIngestEmailRequest(request: Request) {
+  try {
+    if (request.method !== "POST") throw new HttpError(405, "POST only");
+
+    const secret = Deno.env.get("INGEST_SECRET") ?? Deno.env.get("EDGE_FUNCTION_SECRET");
+    const auth = request.headers.get("Authorization") ?? "";
+    if (!secret || auth !== `Bearer ${secret}`) throw new HttpError(401, "Unauthorized");
+
+    const result = await ingest(createAdminClient(), await request.json() as IngestRequest);
+    return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
+  } catch (error) {
+    const httpError = toHttpError(error);
+    // The message is surfaced to the sender by the worker, so keep it human-readable.
+    return new Response(JSON.stringify({ ok: false, error: httpError.message }), {
+      status: httpError.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+if (import.meta.main) {
+  Deno.serve((request) => handleIngestEmailRequest(request));
+}

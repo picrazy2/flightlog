@@ -27,6 +27,11 @@ verify_jwt = false
 [functions.backfill-by-flight]
 verify_jwt = false
 
+# ingest-email is called by the Cloudflare Email Worker with its own bearer secret,
+# not a Supabase JWT, so the gateway check must stay off here too.
+[functions.ingest-email]
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.

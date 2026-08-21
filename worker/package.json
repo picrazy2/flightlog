@@ -1,0 +1,15 @@
+{
+  "name": "journia-email-ingest-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "mimetext": "^3.0.24",
+    "postal-mime": "^2.4.3"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

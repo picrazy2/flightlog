@@ -1,4 +1,4 @@
-import { watchGmail } from "./watch-gmail.ts";
+import { processMessage, watchGmail } from "./watch-gmail.ts";
 import {
   assert,
   assertEquals,
@@ -264,29 +264,26 @@ Deno.test("watchGmail drops bookings where the owner is not a traveler", async (
   assertEquals(supabase.db.bookings.length, 0);
 });
 
-Deno.test("watchGmail imports mail forwarded to the ingest address even without a name match", async () => {
+Deno.test("processMessage can waive the passenger gate for a deliberate forward", async () => {
   const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+  const message = { id: "m1", subject: "Fwd: screenshot", from: "a@b.com", date: "x", body: "" };
+  const parsed = { ...SINGLE_BA_BOOKING, owner_is_traveler: false };
 
-  // A forwarded screenshot rarely names the passenger, so Gemini cannot confirm the owner
-  // is travelling. Forwarding it to the ingest address is the claim of ownership instead,
-  // so the passenger gate must not drop it the way it drops an ordinary inbox email.
-  const result = await watchGmail(supabase as never, MOCK_CONFIG, {
-    scanMessages: mockScanMessages(
-      [{
-        id: "m1",
-        subject: "Fwd: screenshot",
-        from: "alexanderguo99@gmail.com",
-        to: "journia@akguo.com",
-        date: "x",
-        body: "",
-      }],
-      "1",
-    ),
-    parseEmail: mockParseEmail({ ...SINGLE_BA_BOOKING, owner_is_traveler: false }),
-  });
+  // The inbox scan keeps the gate: an email naming other travellers isn't yours.
+  const gated = await processMessage(supabase as never, message, () => Promise.resolve(parsed), USER_ID);
+  assertEquals(gated.outcome, "not_flight");
+  assertEquals(supabase.db.flights.length, 0);
 
-  assertEquals(result.not_flight, 0);
-  assertEquals(result.imported, 1);
+  // ingest-email waives it: a screenshot rarely names its passenger, and forwarding it
+  // in is itself the claim of ownership, so the same email must import.
+  const forwarded = await processMessage(
+    supabase as never,
+    { ...message, id: "m2" },
+    () => Promise.resolve(parsed),
+    USER_ID,
+    { requireOwnerIsTraveler: false },
+  );
+  assertEquals(forwarded.outcome, "imported");
   assertEquals(supabase.db.flights.length, 1);
 });
 

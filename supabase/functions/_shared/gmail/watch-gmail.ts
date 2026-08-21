@@ -15,7 +15,6 @@ import type {
 } from "../flights/types.ts";
 import type { GmailMessage, GmailScanResult } from "./gmail-client.ts";
 import {
-  INGEST_ADDRESS,
   refreshGmailAccessToken,
   scanNewMessages as defaultScanMessages,
   sendEmail,
@@ -375,11 +374,12 @@ function formatWhen(value: unknown, timezone: unknown): string | null {
   }
 }
 
-async function processMessage(
+export async function processMessage(
   supabase: SupabaseClient,
   message: GmailMessage,
   parseFn: (email: GmailMessage) => Promise<GeminiParsedBookingEmail>,
   userId: string | null,
+  opts?: { requireOwnerIsTraveler?: boolean },
 ): Promise<WatchGmailMessageResult> {
   try {
     const parsed = await parseFn(message);
@@ -403,12 +403,11 @@ async function processMessage(
     }
 
     // Passenger gate: drop bookings where the account owner isn't a traveler.
-    // owner_is_traveler is only set when an owner is configured. Mail sent to the ingest
-    // address is exempt: forwarding a booking there is itself the claim that it is yours,
+    // owner_is_traveler is only set when an owner is configured. Deliberate forwards
+    // (ingest-email) opt out: sending a booking in is itself the claim that it is yours,
     // and a screenshot of an itinerary usually carries no passenger name for Gemini to
     // match against, so the gate would otherwise drop exactly what was asked for.
-    const viaIngest = message.to?.toLowerCase().includes(INGEST_ADDRESS.toLowerCase()) ?? false;
-    if (parsed.owner_is_traveler === false && !viaIngest) {
+    if (parsed.owner_is_traveler === false && opts?.requireOwnerIsTraveler !== false) {
       return {
         message_id: message.id,
         outcome: "not_flight",

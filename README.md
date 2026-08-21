@@ -53,22 +53,28 @@ flown tracks from AeroAPI (FlightAware).
 
 ### Adding a flight by email
 Forward any booking confirmation, itinerary, boarding pass or screenshot to
-**journia@akguo.com** and it is filed automatically on the next `watch-gmail` run.
+**journia@akguo.com** and it is filed within seconds, with a reply telling you what was
+added.
 
-Cloudflare Email Routing delivers that address into the same mailbox `watch-gmail`
-already scans, so there is no separate inbound pipeline — one custom address rule on
-`akguo.com` pointing at the mailbox is the entire setup. Override the address with the
-`INGEST_EMAIL_ADDRESS` env var.
+`worker/` is a Cloudflare Email Worker (same shape as the budget one): Email Routing
+hands it the message, it parses the MIME with postal-mime, posts the body plus any
+PDF/image attachments to the `ingest-email` Edge Function, and replies to the sender
+with the result.
 
-Two things make forwarding behave differently from ordinary inbox mail:
-- The scan matches `to:<ingest address>` with no keyword filter, so a forward is picked
-  up whatever its subject says.
-- The passenger gate is skipped. Normally a booking is dropped unless Gemini can confirm
-  the account owner is travelling; a screenshot rarely names the passenger, and
-  forwarding it is itself the claim of ownership.
+Whose log a flight lands in comes from the **envelope sender**, matched against
+`users.email` — so one shared address works for everyone, and a forward from Emily files
+under Emily. A sender that isn't a known user is refused rather than filed under a
+default, because anyone can send mail to that address.
 
-PDF and image attachments (png/jpeg/webp/heic) are both passed to Gemini, up to three per
-message.
+The passenger gate is waived on this path. The inbox scan drops a booking unless Gemini
+can confirm the account owner is travelling; a screenshot rarely names the passenger, and
+forwarding it in is itself the claim of ownership.
+
+Setup: deploy with `cd worker && npm i && npx wrangler deploy`, set `INGEST_SECRET`
+(must equal the Edge Function's `EDGE_FUNCTION_SECRET`) with `npx wrangler secret put`,
+then point Cloudflare → Email → Routing at the worker. `account_id` is pinned in
+`wrangler.toml` on purpose — without it wrangler follows `CLOUDFLARE_ACCOUNT_ID` from the
+shell, which on this machine is the work account.
 
 `scripts/` holds build helpers (`cf-redirects.mjs`). One-off reconciliation/backfill
 utilities and scratch data live in `scratch/` (gitignored, local only).

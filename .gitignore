@@ -20,3 +20,6 @@ __pycache__/
 
 # local scratch: one-off scripts, reconciliation data, screenshots (not part of the app)
 scratch/
+
+# Cloudflare Email Worker build/state
+worker/.wrangler/

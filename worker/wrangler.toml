@@ -1,0 +1,17 @@
+name = "journia-email-ingest"
+# Pinned deliberately: without it wrangler falls back to whatever CLOUDFLARE_ACCOUNT_ID
+# is in the shell, which is the work account on this machine. akguo.com lives here.
+account_id = "d147a8ba11789f7ec3c30e10cb263373"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Persistent Workers Logs (Cloudflare dashboard → this worker → Logs), so an ingest
+# failure is debuggable after the fact. Low volume → sample 100%.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# INGEST_URL is public; INGEST_SECRET is set with `wrangler secret put INGEST_SECRET`.
+[vars]
+INGEST_URL = "https://ihkybryikwlkppqpfnly.supabase.co/functions/v1/ingest-email"

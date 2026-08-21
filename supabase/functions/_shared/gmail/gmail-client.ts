@@ -14,16 +14,10 @@ export type GmailMessage = {
   id: string;
   subject: string;
   from: string;
-  to?: string; // recipients, so the ingest address can be recognised
   date: string;
   body: string;
   attachments?: MessageAttachment[];
 };
-
-// Forwarding anything here files it as a flight. Cloudflare Email Routing delivers the
-// address into the same mailbox, so it rides the existing scan rather than needing its
-// own inbound pipeline.
-export const INGEST_ADDRESS = Deno.env.get("INGEST_EMAIL_ADDRESS") ?? "journia@akguo.com";
 
 // Itinerary PDFs stay capped at one (a second is usually a redundant e-receipt and
 // doubles memory), but screenshots come in small and often in pairs, so a few are fine.
@@ -106,9 +100,6 @@ function b64url(s: string): string {
 // Each clause is an independent Gmail search; results are unioned. Keeping them
 // separate is clearer (and avoids fragile precedence) than one mega-query.
 export const FLIGHT_SEARCH_QUERIES = [
-  // Anything forwarded to the ingest address, whatever the subject — forwarding it is
-  // itself the signal, so this clause deliberately carries no keyword filter.
-  `to:${INGEST_ADDRESS}`,
   // English: bookings / itineraries / tickets ("Ticket Details", e-ticket, etc.)
   'subject:(confirmation OR itinerary OR "e-ticket" OR ticket OR booking OR reservation) (flight OR airline)',
   // English: boarding passes & check-ins — flights actually flown
@@ -323,12 +314,6 @@ async function fetchMessage(
     id: raw.id,
     subject: extractHeader(raw.payload?.headers ?? [], "Subject") ?? "",
     from: extractHeader(raw.payload?.headers ?? [], "From") ?? "",
-    to: [
-      extractHeader(raw.payload?.headers ?? [], "To"),
-      extractHeader(raw.payload?.headers ?? [], "Cc"),
-      extractHeader(raw.payload?.headers ?? [], "Delivered-To"),
-      extractHeader(raw.payload?.headers ?? [], "X-Forwarded-To"),
-    ].filter(Boolean).join(", "),
     date: extractHeader(raw.payload?.headers ?? [], "Date") ?? "",
     body: extractBody(raw.payload),
     attachments: await fetchAttachments(accessToken, messageId, raw.payload),
