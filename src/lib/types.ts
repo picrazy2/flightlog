@@ -83,6 +83,7 @@ export interface Flight {
   // airline / aircraft
   airline_name: string | null;
   alliance: string | null;
+  airline_logo_treatment: string | null; // "color" | "lighten" | "none" — see AirlineLogo
   aircraft_type_name: string | null;
   aircraft_type_body_class: "narrowbody" | "widebody" | null;
   aircraft_type_deck_count: number | null;

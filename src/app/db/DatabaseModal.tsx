@@ -78,7 +78,7 @@ function FlightRow({
 }) {
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 hover:bg-surface-2/60 sm:flex-nowrap">
-      <AirlineLogo iata={f.airline_iata} name={f.airline_name} />
+      <AirlineLogo iata={f.airline_iata} name={f.airline_name} treatment={f.airline_logo_treatment} />
 
       <div className="min-w-0 flex-1 basis-[55%] sm:basis-auto">
         {/* Three rows on a phone — date, then route, then the details — because the one

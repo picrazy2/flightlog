@@ -2,6 +2,9 @@
 import { supabase } from "./auth";
 
 const URL = import.meta.env.VITE_SUPABASE_URL as string;
+
+// Base for public storage objects (airline logos).
+export const SUPABASE_URL = URL;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 if (!URL || !ANON) {

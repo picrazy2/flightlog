@@ -9,6 +9,7 @@ import {
   refreshAirlines,
   type AirlineRefreshStats,
 } from "../_shared/reference/airlines.ts";
+import { syncAirlineLogos } from "../_shared/reference/airline-logos.ts";
 import {
   refreshAirlineAlliances,
   type AllianceRefreshStats,
@@ -36,6 +37,7 @@ type RefreshScope =
   | "countries"
   | "airports"
   | "airlines"
+  | "airline_logos"
   | "alliances"
   | "aircraft_types"
   | "airport_boundaries";
@@ -48,6 +50,8 @@ type RefreshRequest = {
   country_iso2?: string;
   airport_iata?: string;
   airline_iata?: string;
+  force_logos?: boolean;
+  logo_limit?: number;
 };
 
 type StepStats =
@@ -154,6 +158,20 @@ async function refreshReferenceData(
       steps.push(await runStep("alliances", () =>
         refreshAirlineAlliances(supabase, { airlineIata: request.airline_iata })
       ));
+      // Only touches airlines with no treatment recorded, so a newly added carrier gets
+      // its mark on the next refresh and the rest cost nothing.
+      steps.push(await runStep("airline_logos", () =>
+        syncAirlineLogos(supabase, { airlineIata: request.airline_iata })
+      ));
+      break;
+    case "airline_logos":
+      steps.push(await runStep("airline_logos", () =>
+        syncAirlineLogos(supabase, {
+          airlineIata: request.airline_iata,
+          force: request.force_logos,
+          limit: request.logo_limit,
+        })
+      ));
       break;
     case "alliances":
       steps.push(await runStep("alliances", () =>
@@ -189,6 +207,7 @@ async function refreshReferenceData(
       steps.push(await runStep("alliances", () =>
         refreshAirlineAlliances(supabase)
       ));
+      steps.push(await runStep("airline_logos", () => syncAirlineLogos(supabase)));
       break;
     default:
       throw new Error(`Unsupported scope: ${scope}`);

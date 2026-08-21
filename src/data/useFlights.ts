@@ -10,7 +10,7 @@ const COLUMNS = [
   "cost_cash_segment,cost_points_segment,cost_cash_segment_usd,trip_type",
   "dep_name,dep_city,dep_country,dep_country_name,dep_continent,dep_lat,dep_lng,dep_timezone",
   "arr_name,arr_city,arr_country,arr_country_name,arr_continent,arr_lat,arr_lng,arr_timezone",
-  "airline_name,alliance,aircraft_type_name,aircraft_type_body_class,aircraft_type_deck_count",
+  "airline_name,alliance,airline_logo_treatment,aircraft_type_name,aircraft_type_body_class,aircraft_type_deck_count",
   "booking_refs_airline,booking_ref_platform,cost_cash,cost_currency,cost_cash_usd,cost_points,points_program,emails",
 ].join(",");
 
