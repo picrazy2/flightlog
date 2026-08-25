@@ -24,6 +24,7 @@ import type {
   GeminiParsedBookingEmail,
   GeminiParsedFlight,
 } from "./gemini-parser.ts";
+import { buildFlightDetail } from "./flight-detail.ts";
 import { parseEmailForFlights as defaultParseEmail } from "./gemini-parser.ts";
 
 const HISTORY_ID_KEY = "gmail_last_history_id";
@@ -167,101 +168,8 @@ async function sendRunNotification(
     .flatMap((r) => r.flight_ids);
   if (ids.length === 0) return;
 
-  // The view carries denormalized airline / airport / aircraft / cost so one query has
-  // everything. Selected wide on purpose: the point of this email is to expose exactly
-  // what was recorded, so a wrong classification is caught now rather than months later.
-  const { data } = await supabase
-    .from("v_flights_with_airports")
-    .select(
-      "id, booking_id, flight_date, airline_iata, flight_number, dep_iata, arr_iata, status, " +
-        "cabin_class, aircraft_type_name, cost_cash, cost_currency, cost_points, points_program, " +
-        "airline_name, alliance, sched_dep, sched_arr, dep_timezone, arr_timezone, " +
-        "dep_name, dep_city, dep_country_name, arr_name, arr_city, arr_country_name, " +
-        "distance_mi, aircraft_type_code, aircraft_type_manufacturer, registration, " +
-        "cost_cash_usd, booking_platform, trip_type, source, " +
-        "terminal_origin, terminal_destination",
-    )
-    .in("id", ids);
-  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
-
-  // Pull the booking rows to add PNR, platform, and a link to the source email
-  // so each line can be sanity-checked against Gmail.
-  const bookingIds = [...new Set(rows.map((r) => r.booking_id).filter(Boolean))];
-  const bookingById = new Map<string, Record<string, unknown>>();
-  if (bookingIds.length) {
-    const { data: bks } = await supabase
-      .from("bookings")
-      .select("id, booking_refs_airline, booking_ref_platform, emails")
-      .in("id", bookingIds as string[]);
-    for (const b of (bks ?? []) as Array<Record<string, unknown>>) {
-      bookingById.set(String(b.id), b);
-    }
-  }
-
-  const lines = rows
-    .sort((a, b) =>
-      String(a.flight_date).localeCompare(String(b.flight_date))
-    )
-    .map((f) => {
-      const head =
-        `  ${f.flight_date}  ${f.airline_iata}${f.flight_number}  ` +
-        `${f.dep_iata} → ${f.arr_iata}`;
-      const b = f.booking_id ? bookingById.get(String(f.booking_id)) : undefined;
-      const refs = (b?.booking_refs_airline ?? []) as Array<{ pnr?: string }>;
-      const pnr = refs.map((x) => x?.pnr).filter(Boolean).join(",") ||
-        (b?.booking_ref_platform as string | undefined) || "";
-      const emails = (b?.emails ?? []) as Array<
-        { message_id?: string; kind?: string }
-      >;
-      // Link to the most relevant email: the cancellation for a cancelled leg,
-      // otherwise the original booking, falling back to whatever is recorded.
-      const preferKind = f.status === "cancelled" ? "cancellation" : "booking";
-      const mid = (emails.find((e) => e.kind === preferKind) ??
-        emails.find((e) => e.kind === "booking") ?? emails[0])?.message_id;
-      const link = mid ? `https://mail.google.com/mail/u/0/#all/${mid}` : "";
-      if (f.status === "cancelled") {
-        return `${head}  (CANCELLED)${pnr ? `  PNR ${pnr}` : ""}${link ? `\n      ↳ ${link}` : ""}`;
-      }
-
-      // Every derived field is shown, including the ones that came back empty, so a
-      // silently-missed airline match or a missing fare is visible at a glance rather
-      // than looking like it was never part of the booking.
-      const field = (label: string, value: unknown) =>
-        `      ${label.padEnd(11)} ${value == null || value === "" ? MISSING : value}`;
-
-      const airline = f.airline_name
-        ? `${f.airline_name} (${f.airline_iata})${f.alliance ? ` · ${f.alliance}` : ""}`
-        : null;
-      const aircraft = f.aircraft_type_name
-        ? [f.aircraft_type_manufacturer, f.aircraft_type_name].filter(Boolean)
-          .join(" ") +
-          (f.aircraft_type_code ? ` (${f.aircraft_type_code})` : "") +
-          (f.registration ? ` · ${f.registration}` : "")
-        : null;
-      const from = `${f.dep_iata} ${f.dep_name ?? ""}`.trim() +
-        (f.dep_city ? ` — ${f.dep_city}, ${f.dep_country_name ?? ""}`.trimEnd() : "") +
-        (f.terminal_origin ? ` · T${f.terminal_origin}` : "");
-      const to_ = `${f.arr_iata} ${f.arr_name ?? ""}`.trim() +
-        (f.arr_city ? ` — ${f.arr_city}, ${f.arr_country_name ?? ""}`.trimEnd() : "") +
-        (f.terminal_destination ? ` · T${f.terminal_destination}` : "");
-
-      return [
-        head,
-        field("airline", airline),
-        field("aircraft", aircraft),
-        field("from", from),
-        field("to", to_),
-        field("departs", formatWhen(f.sched_dep, f.dep_timezone)),
-        field("arrives", formatWhen(f.sched_arr, f.arr_timezone)),
-        field("distance", f.distance_mi == null ? null : `${Math.round(Number(f.distance_mi))} mi`),
-        field("cabin", f.cabin_class ? formatCabin(String(f.cabin_class)) : null),
-        field("cost", formatFullCost(f)),
-        field("booking", [pnr ? `PNR ${pnr}` : null, f.booking_platform, f.trip_type]
-          .filter(Boolean).join(" · ") || null),
-        field("source", f.source),
-        link ? `      ↳ verify:    ${link}` : null,
-      ].filter(Boolean).join("\n");
-    });
+  const { blocks, gaps } = await buildFlightDetail(supabase, ids);
+  if (blocks.length === 0) return;
 
   const parts: string[] = [];
   if (result.imported > 0) parts.push(`${result.imported} added`);
@@ -269,31 +177,12 @@ async function sendRunNotification(
   if (result.cancelled > 0) parts.push(`${result.cancelled} cancelled`);
   const summary = parts.join(", ");
 
-  // Roll the per-flight gaps up into one list, so a partial import is actionable
-  // rather than only visible to someone reading every block closely.
-  const gaps = rows
-    .filter((f) => f.status !== "cancelled")
-    .map((f) => {
-      const missing = [
-        f.airline_name ? null : "airline",
-        f.aircraft_type_name ? null : "aircraft",
-        f.distance_mi == null ? "distance" : null,
-        f.cabin_class ? null : "cabin",
-        formatFullCost(f) ? null : "cost",
-      ].filter(Boolean);
-      return missing.length
-        ? `  ${f.airline_iata}${f.flight_number} ${f.dep_iata}→${f.arr_iata}: ` +
-          `${missing.join(", ")}`
-        : null;
-    })
-    .filter(Boolean) as string[];
-
   const subject = `✈️ Journia: ${summary} from your inbox`;
   const body = [
     `Journia processed your inbox and made changes.`,
     `Every field recorded is listed below — check it against the source email.`,
     ``,
-    lines.join("\n\n"),
+    blocks.join("\n\n"),
     ``,
     ...(gaps.length
       ? [
@@ -322,56 +211,6 @@ function describeWindow(config: {
   }
   if (config.lookbackDays === null) return "entire inbox";
   return `last ${config.lookbackDays ?? 7} days`;
-}
-
-function formatCabin(value: string): string {
-  return value
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-// Shown in place of an empty field. Deliberately conspicuous: a blank would read as
-// "not applicable", but every one of these fields should normally resolve.
-const MISSING = "— not set —";
-
-// Cash and points are not exclusive (a points booking still carries cash taxes), so
-// this reports both, plus the USD conversion actually stored.
-function formatFullCost(f: Record<string, unknown>): string | null {
-  const parts: string[] = [];
-  if (f.cost_cash != null) {
-    const usd = f.cost_cash_usd != null && f.cost_currency !== "USD"
-      ? ` (≈ ${Number(f.cost_cash_usd).toFixed(2)} USD)`
-      : "";
-    parts.push(`${f.cost_cash} ${f.cost_currency ?? ""}`.trim() + usd);
-  }
-  if (f.cost_points != null) {
-    parts.push(`${f.cost_points} ${f.points_program ?? "pts"}`.trim());
-  }
-  return parts.length ? parts.join(" + ") : null;
-}
-
-// Scheduled times are stored as timestamptz but only mean anything to a traveller in
-// the airport's own local time, so render each end in its own zone and name the zone.
-function formatWhen(value: unknown, timezone: unknown): string | null {
-  if (!value) return null;
-  const at = new Date(String(value));
-  if (Number.isNaN(at.getTime())) return null;
-  const tz = typeof timezone === "string" && timezone ? timezone : "UTC";
-  try {
-    const formatted = new Intl.DateTimeFormat("en-GB", {
-      timeZone: tz,
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(at);
-    return `${formatted} (${tz})`;
-  } catch {
-    return `${at.toISOString().replace("T", " ").slice(0, 16)} (UTC)`;
-  }
 }
 
 export async function processMessage(

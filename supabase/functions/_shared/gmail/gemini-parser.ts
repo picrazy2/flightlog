@@ -145,6 +145,25 @@ const OWNER_PROMPT = (owner: GeminiOwner) =>
     owner.email ? ` (${owner.email})` : ""
   }. Set owner_is_traveler = true ONLY if you can positively confirm the owner is one of the travelers/passengers on this flight, matching by name (allowing minor spelling, ordering, or transliteration differences, e.g. "GUO/ALEXANDER", "Alexander K Guo"). Set it false if the booking is for other people, OR if the passenger names are not stated anywhere in the email or its attachments. Do not assume the owner is a traveler just because the email was sent to them — people book flights for others.`;
 
+// Appended only on the forward-to-inbox path. Forwarding to the log's private import
+// address IS the request to file it, so the shopping exclusions that protect the inbox
+// scan (price alerts, fare sales, search results) must not apply — the owner deliberately
+// sent this one. The flight-number requirement still stands: it is what keeps a
+// half-legible screenshot from becoming a junk row.
+const FORWARD_PROMPT = `
+
+THIS EMAIL WAS FORWARDED BY THE ACCOUNT OWNER to their private import address.
+Forwarding is an explicit instruction to file whatever flights the message shows, so:
+- Set is_flight_booking = true whenever the message carries concrete flight details,
+  even if it is a search result, fare quote, price comparison, screenshot of a booking
+  page, or an itinerary that was never actually purchased.
+- The exclusion list for price alerts / fare sales / marketing does NOT apply here.
+- Still NEVER invent a flight number, date, or airport. Omit any leg whose flight number
+  you cannot actually read — a forwarded screenshot showing only "Korean Air" with no
+  flight number is still not importable.
+- If a shown price is a market estimate ("typical", "from", "usually") rather than a
+  fare paid, leave cost_cash null instead of recording the estimate.`;
+
 export async function parseEmailForFlights(
   geminiApiKey: string,
   email: {
@@ -155,10 +174,10 @@ export async function parseEmailForFlights(
     attachments?: Array<{ filename: string; mimeType?: string; data: string }>;
   },
   owner?: GeminiOwner,
+  opts?: { forwarded?: boolean },
 ): Promise<GeminiParsedBookingEmail> {
-  const systemPrompt = owner?.name
-    ? SYSTEM_PROMPT + OWNER_PROMPT(owner)
-    : SYSTEM_PROMPT;
+  const systemPrompt = (owner?.name ? SYSTEM_PROMPT + OWNER_PROMPT(owner) : SYSTEM_PROMPT) +
+    (opts?.forwarded ? FORWARD_PROMPT : "");
   const prompt =
     `Email received on: ${email.date ?? "unknown"}\nSubject: ${email.subject}\n` +
     `From: ${email.from}\n\n${email.body}`;

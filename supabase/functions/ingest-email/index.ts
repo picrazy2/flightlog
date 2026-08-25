@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import { HttpError, toHttpError } from "../_shared/flights/http.ts";
 import { parseEmailForFlights } from "../_shared/gmail/gemini-parser.ts";
+import { buildFlightDetail, type FlightDetail } from "../_shared/gmail/flight-detail.ts";
 import { processMessage } from "../_shared/gmail/watch-gmail.ts";
 
 // Inbound endpoint for the Cloudflare Email Worker on journia@akguo.com. The worker
@@ -43,24 +44,43 @@ async function resolveSender(supabase: SupabaseClient, from: string) {
   return data as { id: string; name: string | null; email: string | null };
 }
 
-// What the sender gets back. Terse on purpose — it's read on a phone, in a reply.
+// What the sender gets back. Same template as the inbox-scan notification — a forward is
+// filed exactly like a scanned booking, so it is reported exactly like one, with every
+// resolved field shown and the unresolved ones called out. The wording differs only
+// where the two paths genuinely differ (a forward is one message, not a run).
 function replyFor(
   outcome: string,
-  flights: Array<{ airline_iata: string; flight_number: string; dep_iata: string; arr_iata: string; flight_date: string }>,
+  detail: FlightDetail,
+  count: number,
   warnings: string[],
   user: string,
 ): string {
-  const legs = flights
-    .map((f) => `  ${f.flight_date}  ${f.airline_iata}${f.flight_number}  ${f.dep_iata} → ${f.arr_iata}`)
-    .join("\n");
-  const head = flights.length
-    ? `Added ${flights.length} flight${flights.length === 1 ? "" : "s"} to ${user}'s log:\n\n${legs}`
-    : outcome === "cancelled"
-    ? `Marked the matching flight${flights.length === 1 ? "" : "s"} cancelled in ${user}'s log.`
-    : outcome === "skipped"
-    ? `Already in ${user}'s log — nothing to add.`
-    : `Couldn't find a flight in that. Forward the confirmation email itself, or a screenshot showing the flight number, date and airports.`;
-  return warnings.length ? `${head}\n\nNotes:\n${warnings.map((w) => `  · ${w}`).join("\n")}` : head;
+  if (count === 0) {
+    const head = outcome === "cancelled"
+      ? `Marked the matching flight(s) cancelled in ${user}'s log.`
+      : outcome === "skipped"
+      ? `Already in ${user}'s log — nothing to add.`
+      : `Couldn't find a flight in that. Forward the confirmation email itself, or a ` +
+        `screenshot showing the flight number, date and airports.`;
+    return warnings.length
+      ? `${head}\n\nNotes:\n${warnings.map((w) => `  · ${w}`).join("\n")}`
+      : head;
+  }
+
+  const verb = outcome === "updated" ? "Updated" : "Added";
+  return [
+    `${verb} ${count} flight${count === 1 ? "" : "s"} in ${user}'s log.`,
+    `Every field recorded is listed below — check it against what you forwarded.`,
+    ``,
+    detail.blocks.join("\n\n"),
+    ``,
+    ...(detail.gaps.length
+      ? [`⚠ Did not resolve — worth a look:`, ...detail.gaps, ``]
+      : []),
+    ...(warnings.length
+      ? [`Notes:`, ...warnings.map((w) => `  · ${w}`), ``]
+      : []),
+  ].join("\n").trimEnd();
 }
 
 async function ingest(supabase: SupabaseClient, body: IngestRequest) {
@@ -88,25 +108,20 @@ async function ingest(supabase: SupabaseClient, body: IngestRequest) {
   const result = await processMessage(
     supabase,
     message,
-    (email) => parseEmailForFlights(geminiApiKey, email, owner),
+    (email) => parseEmailForFlights(geminiApiKey, email, owner, { forwarded: true }),
     user.id,
     // A forward is the claim of ownership; a screenshot rarely names its passenger.
     { requireOwnerIsTraveler: false },
   );
 
-  const { data: created } = result.flight_ids.length
-    ? await supabase
-      .from("flights")
-      .select("airline_iata, flight_number, dep_iata, arr_iata, flight_date")
-      .in("id", result.flight_ids)
-    : { data: [] };
+  const detail = await buildFlightDetail(supabase, result.flight_ids);
 
   return {
     ok: true as const,
     user_id: user.id,
     outcome: result.outcome,
     flight_ids: result.flight_ids,
-    reply: replyFor(result.outcome, (created ?? []) as never, result.warnings, user.name ?? user.id),
+    reply: replyFor(result.outcome, detail, result.flight_ids.length, result.warnings, user.name ?? user.id),
   };
 }
 
