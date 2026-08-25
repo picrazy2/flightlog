@@ -435,9 +435,15 @@ function extractBody(payload: GmailPart | undefined): string {
   // to text also keeps CSS/markup from eating the char budget.
   const plainPart = findPartByMimeType(payload, "text/plain");
   const htmlPart = findPartByMimeType(payload, "text/html");
-  const plain = plainPart?.body?.data
+  const plainRaw = plainPart?.body?.data
     ? decodeBase64Url(plainPart.body.data)
     : "";
+  // Some senders (Ryanair) put the entire HTML document in the text/plain part, so
+  // "plain" is not necessarily text. Convert it too, or the comparison below picks
+  // 97k of markup over 3k of real content and MAX_BODY_CHARS truncates away
+  // everything past the header — including the fare total, which sits near the end
+  // of an itinerary.
+  const plain = looksLikeMarkup(plainRaw) ? htmlToText(plainRaw) : plainRaw;
   const html = htmlPart?.body?.data
     ? htmlToText(decodeBase64Url(htmlPart.body.data))
     : "";
@@ -451,6 +457,13 @@ function extractBody(payload: GmailPart | undefined): string {
   }
 
   return "";
+}
+
+// A text/plain part that opens with a doctype or top-level HTML tag is really markup.
+// Checked against the head of the part so a plain-text mail that merely quotes a tag
+// further down isn't misread as a document.
+function looksLikeMarkup(s: string): boolean {
+  return /<\s*(?:!doctype\s+html|html\b|body\b|table\b)/i.test(s.slice(0, 2000));
 }
 
 // Strip HTML to readable text: drop style/script/head/comments, turn block-level

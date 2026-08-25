@@ -26,6 +26,31 @@ const isSupported = (a) => {
   return m === "application/pdf" || /^image\/(png|jpe?g|webp|heic|heif)$/.test(m);
 };
 
+// Ryanair and friends put the entire HTML document in the text/plain part, so
+// parsed.text is not necessarily text. Strip markup from whichever candidate carries
+// it and keep the longer real-text result; otherwise the 20k slice keeps 20k of CSS
+// and cuts off the fare total, which sits near the end of an itinerary.
+const looksLikeMarkup = (s) => /<\s*(?:!doctype\s+html|html\b|body\b|table\b)/i.test((s || "").slice(0, 2000));
+
+const stripTags = (s) =>
+  (s || "")
+    .replace(/<(style|script|head)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<\/(p|div|tr|td|li|h[1-6]|table)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/[ \t\u00a0]+/g, " ")
+    .replace(/\n\s*\n+/g, "\n")
+    .trim();
+
+// Matches the 20k the Gmail scan feeds Gemini, so both paths see the same budget.
+function bodyText(parsed) {
+  const text = looksLikeMarkup(parsed.text) ? stripTags(parsed.text) : (parsed.text || "");
+  const html = stripTags(parsed.html);
+  return (html.length > text.length ? html : text).slice(0, 20000);
+}
+
 export default {
   async email(message, env) {
     const parsed = await new PostalMime().parse(message.raw);
@@ -47,8 +72,7 @@ export default {
       from: message.from,
       subject,
       date: parsed.date || new Date().toISOString(),
-      // Matches the 20k the Gmail scan feeds Gemini, so both paths see the same budget.
-      body: (parsed.text || (parsed.html || "").replace(/<[^>]+>/g, " ")).slice(0, 20000),
+      body: bodyText(parsed),
       attachments,
     };
 
@@ -73,8 +97,17 @@ export default {
         msg.setSender({ name: "Journia", addr: message.to });
         msg.setRecipient(message.from);
         msg.setSubject(subject.startsWith("Re:") ? subject : `Re: ${subject || "Journia import"}`);
+        // Cloudflare validates the reply's References against the original: it must be
+        // the incoming chain PLUS that message's own Message-ID. Sending only the
+        // Message-ID is rejected outright ("provided References header is invalid"),
+        // which silently killed every reply to a threaded forward — the common case,
+        // since people forward from an existing conversation.
         const mid = message.headers.get("Message-ID");
-        if (mid) { msg.setHeader("In-Reply-To", mid); msg.setHeader("References", mid); }
+        const refs = message.headers.get("References");
+        if (mid) {
+          msg.setHeader("In-Reply-To", mid);
+          msg.setHeader("References", refs ? `${refs} ${mid}` : mid);
+        }
         msg.addMessage({ contentType: "text/plain", data: reply });
         await message.reply(new EmailMessage(message.to, message.from, msg.asRaw()));
         console.log("reply sent to", message.from);
