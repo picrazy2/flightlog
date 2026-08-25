@@ -11,11 +11,12 @@ import { useBookings } from "@/data/useBookings";
 import { useCreateFlight, useUpdateFlight, usePatchFlight, useDeleteFlight, type FlightFormValues } from "@/data/mutations";
 import { invokeFunction } from "@/lib/supabase";
 import { useAuth, signInWithGoogle, signOut } from "@/lib/auth";
-import type { Flight } from "@/lib/types";
+import type { Flight, Settings } from "@/lib/types";
 import { compact } from "@/lib/format";
 import { currencySymbol } from "@/lib/fx";
 import { AirlineLogo } from "@/components/ui/AirlineLogo";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { FlightPopup } from "@/app/FlightPopup";
 import { FlightForm } from "./FlightForm";
 import { BookingsTab } from "./BookingsTab";
 
@@ -67,6 +68,9 @@ function FlightRow({
   onEdit,
   onDelete,
   onBooking,
+  settings,
+  expanded,
+  onToggle,
 }: {
   f: Flight;
   canWrite: boolean;
@@ -76,34 +80,34 @@ function FlightRow({
   onEdit: () => void;
   onDelete: () => void;
   onBooking: (bookingId: string) => void;
+  settings: Settings;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const hasBooking = Boolean(f.booking_id);
   // Controls inside the row must not also trigger the row's own navigation.
   const stop = (e: React.MouseEvent) => e.stopPropagation();
   return (
-    <li
-      // The row itself opens the booking, so the per-row "Booking ↗" link is gone —
-      // it repeated on almost every line to say what the row already points at.
-      // Rows with no booking stay inert rather than looking clickable and doing nothing.
-      {...(hasBooking
-        ? {
-          role: "button" as const,
-          tabIndex: 0,
-          title: "Show this flight's booking",
-          onClick: () => onBooking(f.booking_id!),
-          onKeyDown: (e: React.KeyboardEvent) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onBooking(f.booking_id!);
-            }
-          },
-        }
-        : {})}
-      className={cn(
-        "flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:flex-nowrap",
-        hasBooking && "focus-ring cursor-pointer hover:bg-surface-2/60",
-      )}
-    >
+    <li>
+      {/* Every row opens its flight, not just the ones with a booking — the flight is
+          what the row is, so none of them are inert any more. */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        title="Show this flight"
+        onClick={onToggle}
+        onKeyDown={(e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        className={cn(
+          "focus-ring flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 hover:bg-surface-2/60 sm:flex-nowrap",
+          expanded && "bg-surface-2/60",
+        )}
+      >
       <AirlineLogo iata={f.airline_iata} name={f.airline_name} treatment={f.airline_logo_treatment} />
 
       <div className="min-w-0 flex-1 basis-[55%] sm:basis-auto">
@@ -167,6 +171,25 @@ function FlightRow({
           </Button>
         </div>
       )}
+      </div>
+
+      {/* The same FlightPopup the map shows for a single flight, so tapping a row and
+          tapping the route on the map land on the same thing. On a phone it renders
+          full-bleed exactly as the map's popup drawer does; on a desktop it opens as an
+          accordion under the row rather than stacking a second modal over this one.
+          The booking the row used to jump to is still one click away, inside. */}
+      {expanded && (
+        <div className="border-t border-border bg-surface-1 px-3 py-3">
+          <FlightPopup flight={f} settings={settings} fluid hideHeader />
+          {hasBooking && (
+            <div className="mt-2 flex justify-end" onClick={stop}>
+              <Button variant="ghost" size="sm" onClick={() => onBooking(f.booking_id!)}>
+                Show booking ↗
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -174,6 +197,7 @@ function FlightRow({
 export function DatabaseModal() {
   const setDbOpen = useStore((s) => s.setDbOpen);
   const userId = useStore((s) => s.userId); // active log; new rows/imports file under it
+  const settings = useStore((s) => s.settings); // units/currency for the expanded FlightPopup
   const { user } = useAuth();
   const canWrite = !!user; // writing requires a signed-in (allowed) Google account
   const [tab, setTab] = useState<Tab>("flights");
@@ -181,6 +205,9 @@ export function DatabaseModal() {
   const [year, setYear] = useState("all");
   const [airline, setAirline] = useState("all");
   const [savingCabinId, setSavingCabinId] = useState<string | null>(null); // row mid-save → show spinner
+  // One open row at a time: the panel is tall, and two of them expanded pushes the rest
+  // of the table off screen on a phone.
+  const [expandedFlightId, setExpandedFlightId] = useState<string | null>(null);
   const [highlightBooking, setHighlightBooking] = useState<string | null>(null); // jump-to from flights tab
   const [editing, setEditing] = useState<(Partial<FlightFormValues> & { id?: string }) | null>(null);
   const [csv, setCsv] = useState("");
@@ -491,6 +518,9 @@ export function DatabaseModal() {
                         setTab("bookings");
                         setHighlightBooking(id);
                       }}
+                      settings={settings}
+                      expanded={expandedFlightId === f.id}
+                      onToggle={() => setExpandedFlightId((cur) => (cur === f.id ? null : f.id))}
                     />
                   ))}
                 </ul>
