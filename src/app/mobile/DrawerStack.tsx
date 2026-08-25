@@ -4,6 +4,7 @@ import { useStore, type DrawerId, type MapSelection } from "@/state/store";
 import { Legend } from "@/components/ui/Legend";
 import { Chevron, Icon } from "@/components/ui/Icon";
 import { color } from "@/lib/palette";
+import { legendFor } from "@/map/features";
 import { FlightPopup } from "../FlightPopup";
 import { RouteAggPopup } from "../RouteAggPopup";
 import { AirportPopupChart } from "../AirportPopupChart";
@@ -20,7 +21,8 @@ const EASE = "cubic-bezier(.4,0,.2,1)";
 // peeks between drawers. The bottom-most drawer is drawn in front.
 export function DrawerStack({ ctx, encoding }: { ctx: StatContext; encoding: MapEncoding | undefined }) {
   const { activeModuleId, setActiveModule, mapSelection, setMapSelection, mobileOpen, setMobileOpen } = useStore();
-  const legend = encoding?.legend?.(ctx);
+  const showTracks = useStore((s) => s.settings.showTracks);
+  const legend = legendFor(encoding, ctx, !showTracks);
   const mod = moduleById(activeModuleId);
 
   const drawers: { id: DrawerId; title: string; icon?: ReactNode; onClose?: () => void; content: ReactNode }[] = [];

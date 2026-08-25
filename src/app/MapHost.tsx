@@ -554,7 +554,7 @@ export function MapHost({ ctx, encoding, isMobile }: Props) {
   function pushData() {
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
-    const { routes, airports } = buildFeatures(ctx, encoding, { showTracks, tracks, dimTrackless });
+    const { routes, airports } = buildFeatures(ctx, encoding, { showTracks, tracks, dimTrackless, mixedCategory: !showTracks });
     (map.getSource("routes") as maplibregl.GeoJSONSource | undefined)?.setData(routes);
     (map.getSource("airports") as maplibregl.GeoJSONSource | undefined)?.setData(airports);
     if (boundaries.data) {
