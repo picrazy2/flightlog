@@ -27,6 +27,8 @@ const AIRPORT_CITY_OVERRIDES: Record<string, string> = {
   SAW: "Istanbul",
   LYN: "Lyon",
   DPS: "Denpasar", // "Kuta, Badung" — neither half names the metro
+  NRT: "Tokyo", // Narita is its own municipality; groups with HND
+  KUL: "Kuala Lumpur", // sits in Sepang, Selangor
 };
 
 // OurAirports municipalities carry two kinds of noise that split multi-airport cities:
