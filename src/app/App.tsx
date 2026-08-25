@@ -1,6 +1,6 @@
 import { useStatContext } from "@/stats/context";
-import { moduleById, defaultEncodingModule } from "@/stats/registry";
-import { yearMapEncoding } from "@/stats/yearEncoding";
+import { moduleById } from "@/stats/registry";
+import { yearMapEncoding, routeFirstYearMapEncoding } from "@/stats/yearEncoding";
 import { useStore } from "@/state/store";
 import { MapHost } from "./MapHost";
 import { ControlBar } from "./ControlBar";
@@ -78,7 +78,12 @@ export function App() {
   if (!ctx) return <div className="grid h-full place-items-center text-ink-muted">No data</div>;
 
   // no active stat panel: colour by year when tracks are on, else dom/intl binary
-  const encoding = moduleById(activeId)?.map ?? (showTracks ? yearMapEncoding : defaultEncodingModule.map);
+  // No module active: colour by year either way, so toggling tracks changes the geometry
+  // and not the meaning of the colours. Tracks on colours each flight by its own year;
+  // tracks off colours each route by the year it was first flown, since the flights on a
+  // route collapse onto one line. Domestic/international is still available as its own
+  // stat module.
+  const encoding = moduleById(activeId)?.map ?? (showTracks ? yearMapEncoding : routeFirstYearMapEncoding);
   const legend = encoding?.legend?.(ctx);
 
   const onFullscreen = () => {
