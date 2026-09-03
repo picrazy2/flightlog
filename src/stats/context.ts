@@ -44,7 +44,11 @@ export function useStatContext(): { ctx: StatContext | null; isLoading: boolean;
     }
     const groups = [...facetGroups.values()];
     const passesCross = (f: (typeof data)[number]) => groups.every((g) => g.some((c) => c.test(f)));
-    const flights = data.filter((f) => inRange(f, range) && passesTemporal(f) && passesCross(f));
+    // Cancelled flights never happened, so they are not part of the map or any stat --
+    // they were counting toward distance, airports visited and cost. They remain in the
+    // Flights table (which reads useFlights directly), because that is the record.
+    const flown = data.filter((f) => f.status !== "cancelled");
+    const flights = flown.filter((f) => inRange(f, range) && passesTemporal(f) && passesCross(f));
 
     // Comparison deltas:
     //  • future view → vs everything already flown (the upcoming totals vs the past)
@@ -52,7 +56,7 @@ export function useStatContext(): { ctx: StatContext | null; isLoading: boolean;
     //  • a bounded range → vs the immediately-preceding equal-length window
     let compareFlights: Flight[] | null = null;
     let compareMode: "delta" | "recent" | null = null;
-    const pastAll = () => data.filter((f) => f.flight_date <= today && passesCross(f));
+    const pastAll = () => flown.filter((f) => f.flight_date <= today && passesCross(f));
     if (compare) {
       if (temporal === "future") {
         compareFlights = pastAll();
@@ -60,7 +64,7 @@ export function useStatContext(): { ctx: StatContext | null; isLoading: boolean;
       } else if (range.start || range.end) {
         const prev = previousRange(range);
         if (prev) {
-          compareFlights = data.filter((f) => inRange(f, prev) && passesTemporal(f) && passesCross(f));
+          compareFlights = flown.filter((f) => inRange(f, prev) && passesTemporal(f) && passesCross(f));
           compareMode = "delta";
         }
       } else if (temporal === "all") {

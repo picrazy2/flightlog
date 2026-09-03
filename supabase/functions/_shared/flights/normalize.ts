@@ -336,11 +336,16 @@ function normalizeBookingRefsAirline(value: unknown) {
       );
     }
 
-    const airlineIata = requireCode(
+    // The airline code on a booking reference is decorative — everything downstream
+    // (cancellation matching, the import reports) keys off the PNR. Rejecting the whole
+    // email over it meant one easyJet confirmation whose code came back as the ICAO
+    // "EZY" rather than IATA "U2" failed every run, and because failures are never
+    // marked processed it retried and failed every 15 minutes indefinitely. Keep a
+    // valid code, drop an unusable one, never throw.
+    const rawIata = cleanString(
       Reflect.get(item, "airline_iata") as string | undefined,
-      `booking.booking_refs_airline[${index}].airline_iata`,
-      2,
-    );
+    )?.toUpperCase();
+    const airlineIata = rawIata && /^[A-Z0-9]{2}$/.test(rawIata) ? rawIata : null;
     const pnr = cleanString(Reflect.get(item, "pnr") as string | undefined);
     if (!pnr) {
       throw new HttpError(
