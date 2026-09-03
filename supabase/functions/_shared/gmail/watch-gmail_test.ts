@@ -574,3 +574,32 @@ Deno.test("watchGmail saves historyId and processed IDs to sync_state", async ()
   const ids = JSON.parse(processedRow?.["value"] as string) as string[];
   assertEquals(ids.includes("msg42"), true);
 });
+
+Deno.test("watchGmail retries a transient failure but not a permanent one", async () => {
+  // A permanent failure (a validation error) is marked processed so it cannot fail on
+  // every run forever; a transient one (rate limit) stays unprocessed so it is retried.
+  // Regression: an easyJet confirmation whose airline code failed validation was retried
+  // and re-sent to Gemini every 15 minutes for half a day, and never imported.
+  const cases: Array<{ error: string; processed: boolean }> = [
+    { error: "booking.booking_refs_airline[0].airline_iata must be a 2-character code", processed: true },
+    { error: "Gemini API error 429: resource_exhausted", processed: false },
+  ];
+
+  for (const { error, processed } of cases) {
+    const supabase = createMockSupabaseClient({ airports: AIRPORTS, airlines: AIRLINES });
+    const result = await watchGmail(supabase as never, MOCK_CONFIG, {
+      scanMessages: mockScanMessages(
+        [{ id: "msgFail", subject: "Booking", from: "x@y.com", date: "Mon, 1 Jun 2026", body: "" }],
+        "777",
+      ),
+      parseEmail: () => Promise.reject(new Error(error)),
+    });
+
+    assertEquals(result.failed, 1);
+    const row = supabase.db.sync_state.find(
+      (r) => (r as Record<string, unknown>)["key"] === "gmail_processed_ids",
+    ) as Record<string, unknown> | undefined;
+    const ids = JSON.parse((row?.["value"] as string) ?? "[]") as string[];
+    assertEquals(ids.includes("msgFail"), processed, `for error: ${error}`);
+  }
+});

@@ -31,6 +31,23 @@ const HISTORY_ID_KEY = "gmail_last_history_id";
 const PROCESSED_IDS_KEY = "gmail_processed_ids";
 const MAX_PROCESSED_IDS = 1000;
 
+// Gemini is rate-limited or over its spending cap: every remaining message this run will
+// fail the same way, so stop rather than grinding through them.
+const OVER_QUOTA = /quota|spending cap|resource_exhausted|\b429\b/i;
+
+// Failures worth another run: the provider was rate-limited, briefly down, or the network
+// blipped. Anything unrecognised is treated as permanent so it cannot loop forever —
+// the bias is deliberate, and a misclassified transient error still gets reported.
+const TRANSIENT = new RegExp(
+  [
+    "quota", "spending cap", "resource_exhausted", "\\b429\\b",
+    "\\b(500|502|503|504)\\b", "timeout", "timed out", "unavailable",
+    "network", "fetch failed", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN",
+  ].join("|"),
+  "i",
+);
+const isTransient = (error: string | undefined) => TRANSIENT.test(error ?? "");
+
 export async function watchGmail(
   supabase: SupabaseClient,
   config: {
@@ -95,19 +112,19 @@ export async function watchGmail(
     results.push(result);
     // Stop immediately if Gemini is rate-limited / over its spending cap —
     // continuing would just fail every remaining message for no reason.
-    if (
-      result.outcome === "failed" &&
-      /quota|spending cap|resource_exhausted|\b429\b/i.test(result.error ?? "")
-    ) {
+    if (result.outcome === "failed" && OVER_QUOTA.test(result.error ?? "")) {
       break;
     }
   }
 
-  // Only mark successfully-handled messages as processed. Failed ones (e.g. a
-  // transient Gemini 429 / quota cap) stay unprocessed so a later run retries
-  // them instead of permanently skipping a real flight.
+  // A TRANSIENT failure (rate limit, quota, provider blip) stays unprocessed so a later
+  // run retries it rather than permanently skipping a real flight. A permanent one — a
+  // validation error, a malformed booking — will fail identically forever, so retrying it
+  // burns a Gemini call every 15 minutes and never succeeds. One easyJet confirmation did
+  // exactly that for half a day. Permanent failures are marked processed and reported in
+  // the run email instead, so they surface once rather than looping in silence.
   const handledIds = results
-    .filter((r) => r.outcome !== "failed")
+    .filter((r) => r.outcome !== "failed" || !isTransient(r.error))
     .map((r) => r.message_id);
   const newProcessedIds = new Set([...processedIds, ...handledIds]);
   await saveSyncState(supabase, userId, newHistoryId, newProcessedIds);
@@ -127,7 +144,8 @@ export async function watchGmail(
   // notification failure break the import.
   if (
     accessToken && config.owner?.email && config.notify !== false &&
-    (result.imported > 0 || result.updated > 0 || result.cancelled > 0)
+    (result.imported > 0 || result.updated > 0 || result.cancelled > 0 ||
+      result.failed > 0)
   ) {
     try {
       await sendRunNotification(
@@ -166,34 +184,51 @@ async function sendRunNotification(
       r.outcome === "cancelled"
     )
     .flatMap((r) => r.flight_ids);
-  if (ids.length === 0) return;
+  // Messages that errored. Reported even when the run changed nothing: a run that failed
+  // everything used to look identical to a quiet inbox, which is how one unimportable
+  // booking sat unnoticed for half a day.
+  const failures = result.results.filter((r) => r.outcome === "failed");
+  if (ids.length === 0 && failures.length === 0) return;
 
-  const { blocks, gaps } = await buildFlightDetail(supabase, ids);
-  if (blocks.length === 0) return;
+  const { blocks, gaps } = ids.length
+    ? await buildFlightDetail(supabase, ids)
+    : { blocks: [] as string[], gaps: [] as string[] };
+  if (blocks.length === 0 && failures.length === 0) return;
 
   const parts: string[] = [];
   if (result.imported > 0) parts.push(`${result.imported} added`);
   if (result.updated > 0) parts.push(`${result.updated} updated`);
   if (result.cancelled > 0) parts.push(`${result.cancelled} cancelled`);
+  if (failures.length > 0) parts.push(`${failures.length} failed`);
   const summary = parts.join(", ");
 
-  const subject = `✈️ Journia: ${summary} from your inbox`;
+  // Each failure links back to the Gmail message and says whether it will be tried again,
+  // so a permanent one is actionable rather than just alarming.
+  const failureLines = failures.flatMap((r) => [
+    `  ${r.error ?? "unknown error"}`,
+    `      ${isTransient(r.error) ? "will retry next run" : "will NOT retry — needs a look"}` +
+    `  ·  https://mail.google.com/mail/u/0/#all/${r.message_id}`,
+  ]);
+
+  const changed = blocks.length > 0;
+  const subject = changed
+    ? `✈️ Journia: ${summary} from your inbox`
+    : `⚠️ Journia: ${failures.length} email${failures.length === 1 ? "" : "s"} could not be imported`;
+
   const body = [
-    `Journia processed your inbox and made changes.`,
-    `Every field recorded is listed below — check it against the source email.`,
-    ``,
-    blocks.join("\n\n"),
-    ``,
-    ...(gaps.length
-      ? [
-        `⚠ Did not resolve — worth a look:`,
-        ...gaps,
-        ``,
-      ]
+    changed
+      ? `Journia processed your inbox and made changes.`
+      : `Journia processed your inbox and could not import everything.`,
+    ...(changed
+      ? [`Every field recorded is listed below — check it against the source email.`]
       : []),
+    ``,
+    ...(changed ? [blocks.join("\n\n"), ``] : []),
+    ...(gaps.length ? [`⚠ Did not resolve — worth a look:`, ...gaps, ``] : []),
+    ...(failureLines.length ? [`✖ Could not be imported:`, ...failureLines, ``] : []),
     `Imported: ${result.imported}  Updated: ${result.updated}  ` +
     `Cancelled: ${result.cancelled}  Skipped: ${result.skipped}  ` +
-    `Not a flight: ${result.not_flight}`,
+    `Not a flight: ${result.not_flight}  Failed: ${result.failed}`,
     ``,
     `Scanned emails: ${scanWindow}`,
   ].join("\n");
